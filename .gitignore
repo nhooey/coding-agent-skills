@@ -1,0 +1,5 @@
+# Nix build outputs
+/result
+/result-*
+/skills/*/result
+/skills/*/result-*
