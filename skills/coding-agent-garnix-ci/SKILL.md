@@ -1,9 +1,9 @@
 ---
-name: claude-code-garnix-ci
-description: When Claude Code pushes a commit to a GitHub remote whose repo is wired up to Garnix CI, start a Monitor against the Garnix check-runs for the pushed SHA so failures surface as a notification instead of being noticed only when the user asks. Trigger any time the assistant runs `git push` (or causes a push via `gh pr create`, etc.) against a remote on a Garnix-enabled repo. Skip on repos with no Garnix wiring.
+name: coding-agent-garnix-ci
+description: When a coding agent pushes a commit to a GitHub remote whose repo is wired up to Garnix CI, start a Monitor against the Garnix check-runs for the pushed SHA so failures surface as a notification instead of being noticed only when the user asks. Trigger any time the assistant runs `git push` (or causes a push via `gh pr create`, etc.) against a remote on a Garnix-enabled repo. Skip on repos with no Garnix wiring.
 ---
 
-# Watch Garnix CI after Claude Code pushes
+# Watch Garnix CI after a coding-agent push
 
 When this assistant pushes a commit to a remote GitHub repo, it usually moves
 on to the next task. If that repo runs **Garnix CI**, the build outcome lands
@@ -18,7 +18,7 @@ the suite resolves.** No polling, no "let me check back in 5 minutes".
 For everything about Garnix itself — `garnix.yaml`, the `cache.garnix.io`
 substituter, the badge wrapper, sandbox-check vs Action distinction, runner
 constraints — see the companion `garnix-ci` skill. This skill is only about
-the **post-push watch loop** that Claude Code should attach.
+the **post-push watch loop** that the coding agent should attach.
 
 ## When this skill applies
 
@@ -161,9 +161,10 @@ if the GitHub status page doesn't show the diagnostic dump (see the
 - **Force-pushes invalidate the prior monitor.** If a force-push lands
   while a Monitor is still attached to the old tip, kill it and start a new
   one against the new SHA — the old SHA's check-runs are now orphaned.
-- **Don't double-monitor.** If the user runs `/loop` or another mechanism
-  that already polls CI for them, skip starting a parallel Monitor — that
-  just spams notifications.
+- **Don't double-monitor.** If the user runs a parallel watch primitive
+  (e.g. `/loop` in Claude Code, or the equivalent in another agent) that
+  already polls CI for them, skip starting a parallel Monitor — that just
+  spams notifications.
 
 ## Cross-references
 

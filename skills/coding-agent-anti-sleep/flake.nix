@@ -1,5 +1,5 @@
 {
-  description = "claude-code-garnix-ci: Claude Code skill — after Claude Code pushes, monitor Garnix CI";
+  description = "coding-agent-anti-sleep: Coding-agent skill — start claffeinate at the start of every prompt to keep macOS awake during processing";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -10,7 +10,7 @@
   outputs = { nixpkgs, flake-skills, ... }:
     flake-skills.lib.mkSkillFlake {
       inherit nixpkgs;
-      skillName = "claude-code-garnix-ci";
+      skillName = "coding-agent-anti-sleep";
       src = ./.;
     };
 }

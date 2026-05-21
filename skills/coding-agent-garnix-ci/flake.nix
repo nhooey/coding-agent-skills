@@ -1,5 +1,5 @@
 {
-  description = "claude-code-session-recap: Claude Code skill — render the current conversation as an alternating 🗣 / 🤖 dialogue script when the user asks for a session recap";
+  description = "coding-agent-garnix-ci: Coding-agent skill — after the agent pushes, monitor Garnix CI";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -10,7 +10,7 @@
   outputs = { nixpkgs, flake-skills, ... }:
     flake-skills.lib.mkSkillFlake {
       inherit nixpkgs;
-      skillName = "claude-code-session-recap";
+      skillName = "coding-agent-garnix-ci";
       src = ./.;
     };
 }

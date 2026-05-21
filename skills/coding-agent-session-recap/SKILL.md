@@ -1,5 +1,5 @@
 ---
-name: claude-code-session-recap
+name: coding-agent-session-recap
 description: When the user asks to summarize, recap, or read back the current conversation, render the back-and-forth as alternating one-line entries prefixed with 🗣 (U+1F5E3 speaking head) for the user and 🤖 (U+1F916 robot face) for the assistant. One sentence per turn, intent + outcome, chronological order, no tool-call mechanics or monitor noise. Triggers on phrasings like "summarize the session," "recap our conversation," "what did we do," "transcript of the back-and-forth," or any explicit request for an emoji-prefixed dialogue readback.
 ---
 
