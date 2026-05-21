@@ -1,9 +1,9 @@
 ---
-name: coding-agent-anti-sleep
-description: When a coding agent begins handling a user prompt on macOS, start a tagged `claffeinate` instance so the laptop cannot sleep, idle, or dim its display while the prompt is being processed. macOS-only — skip silently on Linux/WSL where the host already stays awake. Trigger at the start of *every* user-prompt turn (not just long-running ones); the call is idempotent and ~free after the first time. Also handle reaping when the user closes the tab.
+name: keep-computer-awake-macos
+description: Keep the computer awake / prevent the Mac from sleeping while a coding agent processes a user prompt — start a tagged `claffeinate` instance so the laptop cannot sleep, idle, or dim its display. macOS implementation; a sibling `keep-computer-awake-linux` skill (planned) will cover `systemd-inhibit`. Skip silently on non-Darwin hosts. Trigger at the start of *every* user-prompt turn (not just long-running ones); the call is idempotent and ~free after the first time. Also handle reaping when the user closes the tab.
 ---
 
-# Keep macOS awake during coding-agent prompts
+# Keep the computer awake during coding-agent prompts (macOS)
 
 When a coding agent is mid-prompt — running tests, waiting on a sub-agent,
 building a flake, monitoring CI — macOS will happily sleep, idle, or dim
@@ -28,8 +28,10 @@ Trigger at the very start of handling **every** user prompt, before any
 substantive tool use. Specifically:
 
 - macOS only. Probe with `[ "$(uname -s)" = "Darwin" ]`. Skip silently on
-  Linux, WSL, and any non-Darwin host — those don't have `caffeinate(1)`,
-  and the host's own systems handle sleep prevention differently.
+  non-Darwin hosts — those don't have `caffeinate(1)`. A Linux equivalent
+  using `systemd-inhibit` is planned as a sibling `keep-computer-awake-linux`
+  skill; until that exists, Linux/WSL laptops are not covered by this
+  marketplace.
 - Skip when the user has explicitly said "let it sleep" or "don't caffeinate"
   for the rest of the session.
 - Don't re-trigger mid-prompt. Once per turn at the start is enough;
