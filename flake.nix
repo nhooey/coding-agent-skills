@@ -1,5 +1,5 @@
 {
-  description = "claude-code-skills: Claude Code skills marketplace as a Nix flake";
+  description = "coding-agent-skills: Coding agent skills marketplace as a Nix flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
