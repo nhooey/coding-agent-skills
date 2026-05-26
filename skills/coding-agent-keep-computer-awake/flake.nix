@@ -1,5 +1,5 @@
 {
-  description = "keep-computer-awake-macos: Coding-agent skill — start claffeinate at the start of every prompt to keep the Mac awake during processing";
+  description = "coding-agent-keep-computer-awake: Coding-agent skill — start claffeinate at the start of every prompt to keep the Mac awake during processing";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -10,7 +10,7 @@
   outputs = { nixpkgs, flake-skills, ... }:
     flake-skills.lib.mkSkillFlake {
       inherit nixpkgs;
-      skillName = "keep-computer-awake-macos";
+      skillName = "coding-agent-keep-computer-awake";
       src = ./.;
     };
 }
