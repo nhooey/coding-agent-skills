@@ -1,6 +1,6 @@
 ---
-name: keep-computer-awake-macos
-description: Keep the computer awake / prevent the Mac from sleeping while a coding agent processes a user prompt — start a tagged `claffeinate` instance so the laptop cannot sleep, idle, or dim its display. macOS implementation; a sibling `keep-computer-awake-linux` skill (planned) will cover `systemd-inhibit`. Skip silently on non-Darwin hosts. Trigger at the start of *every* user-prompt turn (not just long-running ones); the call is idempotent and ~free after the first time. Also handle reaping when the user closes the tab.
+name: coding-agent-keep-computer-awake
+description: Keep the computer awake / prevent the Mac from sleeping while a coding agent processes a user prompt — start a tagged `claffeinate` instance so the laptop cannot sleep, idle, or dim its display. macOS implementation; a sibling Linux skill (planned) will cover `systemd-inhibit`. Skip silently on non-Darwin hosts. Trigger at the start of *every* user-prompt turn (not just long-running ones); the call is idempotent and ~free after the first time. Also handle reaping when the user closes the tab.
 ---
 
 # Keep the computer awake during coding-agent prompts (macOS)
@@ -29,9 +29,8 @@ substantive tool use. Specifically:
 
 - macOS only. Probe with `[ "$(uname -s)" = "Darwin" ]`. Skip silently on
   non-Darwin hosts — those don't have `caffeinate(1)`. A Linux equivalent
-  using `systemd-inhibit` is planned as a sibling `keep-computer-awake-linux`
-  skill; until that exists, Linux/WSL laptops are not covered by this
-  marketplace.
+  using `systemd-inhibit` is planned as a sibling skill; until that exists,
+  Linux/WSL laptops are not covered by this marketplace.
 - Skip when the user has explicitly said "let it sleep" or "don't caffeinate"
   for the rest of the session.
 - Don't re-trigger mid-prompt. Once per turn at the start is enough;
