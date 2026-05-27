@@ -1,0 +1,105 @@
+{
+  "skill_name": "coding-agent-route-feedback-to-skills-over-memory",
+  "evals": [
+    {
+      "id": 0,
+      "name": "commit-footer-correction",
+      "prompt": "Stop putting `Co-Authored-By: Claude` in commit messages. We don't credit AI in this repo's history — strip that footer going forward.",
+      "expected_output": "Agent recognizes this as behavioral feedback (a commit-content rule). Proposes adding it to an existing commit-related skill (e.g., git-hygiene-commit-message-format) with a draft sentence in the skill's voice. Asks the user how to persist (PR upstream / on-disk edit / on-disk markdown proposal — gated on whether on-disk repo location is known). Does NOT write a memory before asking.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "names-existing-skill",
+          "text": "Names a specific existing skill (e.g., git-hygiene-commit-message-format) as the proposed home for the lesson"
+        },
+        {
+          "id": "drafts-wording",
+          "text": "Drafts concrete proposed wording (one or more complete sentences in the skill's voice), not a vague 'I'd add a note'"
+        },
+        {
+          "id": "asks-persistence",
+          "text": "Asks the user how to persist the edit (offers at least the upstream-PR option; offers on-disk options too if the on-disk repo location is known or the agent surfaces that it isn't)"
+        },
+        {
+          "id": "no-silent-edit",
+          "text": "Does NOT silently edit any SKILL.md file before getting user approval"
+        },
+        {
+          "id": "no-premature-memory",
+          "text": "Does NOT write a memory file as the primary action — memory is mentioned only as a fallback, if at all"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "pr-watcher-workflow-rule",
+      "prompt": "When you push to a branch with an open PR, always arm the CI watcher. Last week you pushed and didn't arm the watcher, then a red check sat for an hour before I noticed. Make this a hard rule.",
+      "expected_output": "Agent recognizes this as a workflow rule with a direct skill home (github-pr-watcher). Proposes adding the rule (or a strengthened version) to that skill with a draft sentence, then asks about persistence.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "names-existing-skill",
+          "text": "Names github-pr-watcher (or an equivalent existing skill) as the proposed home"
+        },
+        {
+          "id": "drafts-wording",
+          "text": "Drafts concrete proposed wording in the skill's voice"
+        },
+        {
+          "id": "asks-persistence",
+          "text": "Asks how to persist the edit (PR / on-disk / markdown proposal, gated appropriately)"
+        },
+        {
+          "id": "no-silent-edit",
+          "text": "Does NOT silently edit any SKILL.md file before approval"
+        },
+        {
+          "id": "no-premature-memory",
+          "text": "Does NOT write a memory file as the primary action"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "debugging-heuristic-no-skill-match",
+      "prompt": "From now on, when you debug a flaky test, always check the test runner's seed value first — half the time it's a hash-iteration-order bug and the seed reveals it instantly.",
+      "expected_output": "Agent recognizes this is behavioral feedback but no existing skill covers debugging flaky tests. Falls back to memory, but flags the entry as a future-skill candidate (e.g., 'candidate-for-future-skill: debugging-flaky-tests'). Does NOT invent or hallucinate a skill that doesn't exist.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "no-invented-skill",
+          "text": "Does NOT claim to add this to a skill that doesn't actually exist in the available-skills list"
+        },
+        {
+          "id": "fallback-to-memory",
+          "text": "Falls back to writing a memory (or proposes to) since no skill fits"
+        },
+        {
+          "id": "future-skill-flag",
+          "text": "Flags the memory as a candidate for a future skill (uses phrasing like 'candidate-for-future-skill' or explicitly notes the lesson could later be promoted to a skill)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "user-identity-fact",
+      "prompt": "FYI I'm a staff engineer on the inference platform team at Anthropic. Mostly Rust, occasional Python — and I've been writing systems code for ~15 years, so you can skip the basics.",
+      "expected_output": "Agent recognizes this as user-identity material, not behavioral feedback. Writes (or proposes to write) a user-type memory normally. Does NOT propose a skill edit — user identity doesn't generalize and doesn't belong in a sharable skill.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "no-skill-proposal",
+          "text": "Does NOT propose adding this to a skill"
+        },
+        {
+          "id": "treats-as-user-fact",
+          "text": "Treats the input as user identity / a user-type memory (acknowledges role, expertise, language preferences)"
+        },
+        {
+          "id": "no-persistence-question",
+          "text": "Does NOT ask the user about PR / on-disk / markdown persistence options — those are skill-edit questions, not memory questions"
+        }
+      ]
+    }
+  ]
+}
