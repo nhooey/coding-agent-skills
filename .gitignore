@@ -7,3 +7,6 @@
 # skill-creator scratch workspaces (benchmarks, logs, eval outputs)
 /skills/*-workspace/
 
+# Git worktrees per the using-git-worktrees skill
+/.worktrees/
+
