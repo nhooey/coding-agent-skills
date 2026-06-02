@@ -71,7 +71,38 @@
       base = flake-skills.lib.mkAllSkillsFlake {
         inherit nixpkgs;
         skillsDir = ./skills;
+        packagePrefix = "agent-skill-";
       };
+
+      packs = {
+        # Every coding-agent-* skill as one env. mkAllSkillsFlake already
+        # exposes the same set under the auto `agent-skills-all` key, but that
+        # name collides across sibling repos when aggregated (skillspkgs /
+        # nur-packages do a last-write-wins `//` merge), so the bare key is
+        # unreachable downstream. This uniquely-named pack — mirroring
+        # skills-git's `agent-skills-git-all` and skills-nix's
+        # `agent-skills-nix-all` — survives the merge. Keep in sync as skills
+        # are added.
+        agent-skills-coding-agent-all = [
+          "coding-agent-keep-computer-awake"
+          "coding-agent-questions-as-first-class-prompts"
+          "coding-agent-route-feedback-to-skills-over-memory"
+          "coding-agent-session-recap"
+        ];
+      };
+
+      # Build a `flake-skills.lib.mkSkillsEnv` for one (packName, skillNames)
+      # pair. The env keeps the same `nix run`/`nix build` UX as a plain
+      # `symlinkJoin`, but also carries the `passthru.isFlakeSkillsEnv` +
+      # `flakeSkillsEnv` records that `programs.flake-skills.skills` needs to
+      # expand the env back into per-skill records on home-manager activation.
+      mkEnv =
+        system: packName: skillNames:
+        flake-skills.lib.mkSkillsEnv {
+          pkgs = nixpkgs.legacyPackages.${system};
+          name = packName;
+          skills = builtins.map (n: base.packages.${system}."agent-skill-${n}") skillNames;
+        };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
@@ -82,7 +113,10 @@
       perSystem =
         { system, ... }:
         {
-          packages = base.packages.${system};
+          packages =
+            base.packages.${system}
+            // builtins.mapAttrs (packName: skillNames: mkEnv system packName skillNames) packs;
+
           apps = base.apps.${system};
 
           # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
