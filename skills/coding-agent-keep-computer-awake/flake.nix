@@ -7,7 +7,8 @@
     flake-skills.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { nixpkgs, flake-skills, ... }:
+  outputs =
+    { nixpkgs, flake-skills, ... }:
     flake-skills.lib.mkSkillFlake {
       inherit nixpkgs;
       skillName = "coding-agent-keep-computer-awake";

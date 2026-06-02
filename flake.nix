@@ -12,11 +12,22 @@
       url = "github:numtide/devshell";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Declared explicitly even though `skills-git` and `flake-skills` already
+    # pull in `treefmt-nix` transitively: this flake owns its formatter
+    # toolchain rather than borrowing a dependency's. Both consumers below
+    # `follows` this input so the whole tree resolves to one version.
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # `flake-skills` is the builder library, not a skill — it turns skill
     # directories into installable flakes and aggregates them.
     flake-skills = {
       url = "github:nhooey/flake-skills";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        treefmt-nix.follows = "treefmt-nix";
+      };
     };
 
     # The git / GitHub skills this repo dogfoods, pulled from the published
@@ -27,6 +38,7 @@
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-skills.follows = "flake-skills";
+        treefmt-nix.follows = "treefmt-nix";
       };
     };
 
@@ -64,12 +76,22 @@
       systems = import inputs.systems;
       imports = [
         inputs.devshell.flakeModule
+        inputs.treefmt-nix.flakeModule
       ];
       perSystem =
         { system, ... }:
         {
           packages = base.packages.${system};
           apps = base.apps.${system};
+
+          # `nix fmt` runs nixfmt over every tracked `.nix` file; the module
+          # also surfaces a `checks.${system}.treefmt` so `nix flake check`
+          # fails on unformatted Nix. The repo is Nix-only today — add
+          # per-language formatters here as other tracked file types arrive.
+          treefmt = {
+            projectRootFile = "flake.nix";
+            programs.nixfmt.enable = true;
+          };
 
           # Auto-reconcile skills at project scope on `nix develop`: the git
           # skills from the skills-git input and the authoring-only tools from
