@@ -10,3 +10,6 @@
 # Git worktrees per the using-git-worktrees skill
 /.worktrees/
 
+# Project-scope skill installs from `nix develop`'s startup hooks.
+/.claude/skills/
+
