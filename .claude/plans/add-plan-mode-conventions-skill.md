@@ -16,7 +16,7 @@ This plan adds a single skill to the marketplace that establishes conventions fo
 in tone (matching the existing `coding-agent-*` skills), even though plan mode itself is a Claude Code feature today —
 other coding agents may grow equivalent flows, and the conventions transfer.
 
-Note on *this* plan file: the in-flight Plan Mode session originally wrote it to `~/.claude/plans/` because that is the
+Note on _this_ plan file: the in-flight Plan Mode session originally wrote it to `~/.claude/plans/` because that is the
 current plan-file location; per the user's correction, it now lives at this project-local
 `.claude/plans/add-plan-mode-conventions-skill.md` path — exactly the convention the skill prescribes. This file follows
 the 120-character wrap rule the skill prescribes.
@@ -94,7 +94,7 @@ the 120-character wrap rule the skill prescribes.
 Match the existing skills (`coding-agent-route-feedback-to-skills-over-memory`, `coding-agent-session-recap`):
 
 - YAML frontmatter with `name` and a single-paragraph `description` that fires on plan-mode triggers.
-- Body wrapped at ~72 characters (the SKILL.md convention — distinct from the 120-char rule the skill *describes* for
+- Body wrapped at ~72 characters (the SKILL.md convention — distinct from the 120-char rule the skill _describes_ for
   plan files).
 - Section structure: short intro → "When this skill applies" → one subsection per rule → "Edge cases" → "Cross-
   references" (link `coding-agent-route-feedback-to-skills-over-memory` since both touch agent-user interaction).
@@ -105,8 +105,8 @@ Match the existing skills (`coding-agent-route-feedback-to-skills-over-memory`, 
 Copy `skills/coding-agent-session-recap/flake.nix` verbatim, changing:
 
 - `description` — to `"coding-agent-plan-mode-conventions: Coding-agent skill — write plan files to the project's
-  .claude/plans/ directory, wrap at 120 chars, answer-then-offer when the user asks a question mid-plan, and move
-  implemented plans into .claude/plans/implemented/"`
+.claude/plans/ directory, wrap at 120 chars, answer-then-offer when the user asks a question mid-plan, and move
+implemented plans into .claude/plans/implemented/"`
 - `skillName` — to `"coding-agent-plan-mode-conventions"`
 
 `src = ./.` and the input declarations are unchanged.

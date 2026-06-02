@@ -23,10 +23,10 @@ machine" is what makes the format scan.
 
 ## What each line carries
 
-- **🗣 line** — the *intent* of the user's turn, compressed to one
+- **🗣 line** — the _intent_ of the user's turn, compressed to one
   sentence. "Make a branch and open a PR" is fine; quoting the user
   verbatim is not the goal.
-- **🤖 line** — what the assistant *did* and the relevant outcome.
+- **🤖 line** — what the assistant _did_ and the relevant outcome.
   Lead with the action ("Opened PR #16", "Edited X", "Ran cleanup"),
   add a clause for the result if any ("PR merged before the amend
   landed", "all 8 checks green"). Don't restate the assistant's
@@ -54,9 +54,9 @@ output.
 
 ## Course corrections deserve their own line
 
-When the user pushes back on the assistant's approach — *"don't write
-memories, write to the skill instead"*, *"rewrite the commit message
-to focus on the why"*, *"that's not what I meant, do X"* — that's the
+When the user pushes back on the assistant's approach — _"don't write
+memories, write to the skill instead"_, _"rewrite the commit message
+to focus on the why"_, _"that's not what I meant, do X"_ — that's the
 load-bearing turn of the session. Keep it as its own 🗣 line, and have
 the next 🤖 line acknowledge the change of direction, not just the new
 output.
@@ -85,7 +85,7 @@ see where the path forked, not just where it ended.
   emojis", "as a back-and-forth").
 
 Don't volunteer this format unprompted — sessions get recapped on
-request, not by default. For ad-hoc *"what's the state of X?"*
+request, not by default. For ad-hoc _"what's the state of X?"_
 questions during a session, answer directly; the recap format is
 for end-of-session retrospectives.
 

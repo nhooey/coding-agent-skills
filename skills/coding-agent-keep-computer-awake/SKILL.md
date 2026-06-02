@@ -61,7 +61,7 @@ Notes:
   after 1 hour even if the agent session is still running. Long enough that
   realistic prompt durations almost never hit it; short enough that a
   silently-orphaned instance doesn't keep the laptop awake all night.
-  Re-running `start` on the *next* prompt restarts the timer (a fresh
+  Re-running `start` on the _next_ prompt restarts the timer (a fresh
   `start` after the previous instance has exited).
 - **First-call cost.** The first `nix run` on a fresh machine downloads
   claffeinate and `jq`. Subsequent calls hit the Nix store and run in
@@ -119,7 +119,7 @@ instance — useful if the user wants to allow sleep right now.
   `uname -s` and skip.
 - **Idempotency hides timer-not-resetting.** A second `start` in the same
   tab cheerfully returns "already running" without changing anything. If
-  the assistant *needs* a fresh window, `kill-mine; start` is the only
+  the assistant _needs_ a fresh window, `kill-mine; start` is the only
   correct refresh — see the section above.
 - **`TERM_SESSION_ID=unknown` instances get reaped aggressively.** SSH
   sessions without iTerm/JediTerm don't set `TERM_SESSION_ID`, so
@@ -135,7 +135,7 @@ instance — useful if the user wants to allow sleep right now.
   bridge will have equivalent symptoms — substitute the agent's process
   name and bridge-port env var when applying this lesson.
 - **Don't double-caffeinate.** If the user is already running `caffeinate`
-  by hand, claffeinate will start a *second* assertion (different tag).
+  by hand, claffeinate will start a _second_ assertion (different tag).
   Both are fine independently, but the user may be surprised to see two
   processes in `pgrep caffeinate`. If they ask, `claffeinate list` shows
   only the tagged ones.
