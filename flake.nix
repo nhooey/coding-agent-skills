@@ -84,13 +84,20 @@
           packages = base.packages.${system};
           apps = base.apps.${system};
 
-          # `nix fmt` runs nixfmt over every tracked `.nix` file; the module
-          # also surfaces a `checks.${system}.treefmt` so `nix flake check`
-          # fails on unformatted Nix. The repo is Nix-only today — add
-          # per-language formatters here as other tracked file types arrive.
+          # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
+          # the module also surfaces a `checks.${system}.treefmt` so `nix flake
+          # check` fails on any unformatted file. prettier's includes are pinned
+          # to markdown and YAML so it leaves `evals.json` (and any future JSON)
+          # alone — add formatters here as other tracked file types arrive.
           treefmt = {
             projectRootFile = "flake.nix";
             programs.nixfmt.enable = true;
+            programs.prettier.enable = true;
+            settings.formatter.prettier.includes = [
+              "*.md"
+              "*.yaml"
+              "*.yml"
+            ];
           };
 
           # Auto-reconcile skills at project scope on `nix develop`: the git

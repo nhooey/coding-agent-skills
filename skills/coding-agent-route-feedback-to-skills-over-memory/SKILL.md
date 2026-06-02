@@ -22,31 +22,31 @@ memory file:
   thinks to read memory; a skill in the available-skills list is
   surfaced to every session automatically.
 
-Your reflex should be: *"can this lesson go in a skill?" → if yes,
-propose the edit → only fall back to memory if no skill fits.*
+Your reflex should be: _"can this lesson go in a skill?" → if yes,
+propose the edit → only fall back to memory if no skill fits._
 
 ## When this applies
 
-Trigger on any moment the user is teaching the agent *how to work* —
+Trigger on any moment the user is teaching the agent _how to work_ —
 whether or not the auto-memory system happens to be loaded. Concrete
 signals:
 
-- **Corrections** to the agent's approach: *"don't write memories,
-  write to the skill instead,"* *"stop summarizing every response,"*
-  *"use `gh` not `curl` for that."*
-- **Confirmations** of a non-obvious choice the agent made: *"yes, one
-  bundled PR was right here,"* *"keep doing it that way,"* — quiet
+- **Corrections** to the agent's approach: _"don't write memories,
+  write to the skill instead,"_ _"stop summarizing every response,"_
+  _"use `gh` not `curl` for that."_
+- **Confirmations** of a non-obvious choice the agent made: _"yes, one
+  bundled PR was right here,"_ _"keep doing it that way,"_ — quiet
   approvals are easy to miss and deserve the same routing.
-- **Workflow rules** that generalize beyond this session: *"always
-  `force-with-lease`,"* *"never amend after pushing,"* *"that `gh` flag
-  is broken in v2."*
-- **Explicit save requests** about behavior: *"remember that we use
-  squash merges here."*
+- **Workflow rules** that generalize beyond this session: _"always
+  `force-with-lease`,"_ _"never amend after pushing,"_ _"that `gh` flag
+  is broken in v2."_
+- **Explicit save requests** about behavior: _"remember that we use
+  squash merges here."_
 
 Don't trigger on these — they are genuine memory material:
 
 - **User identity facts** — role, expertise, name, personal
-  preferences-about-them. These are about *this user*; they don't
+  preferences-about-them. These are about _this user_; they don't
   generalize and don't belong in a sharable skill.
 - **Time-bound project state** — who is working on what, deadlines,
   incident history, current sprint goals. These are local and decay
@@ -54,8 +54,8 @@ Don't trigger on these — they are genuine memory material:
 - **External references** — Linear project names, dashboard URLs, Slack
   channel handles. These are pointers, not behaviors.
 
-The line worth holding: a skill captures *how to do work*; a memory
-captures *who the user is, what they're working on, or where to look*.
+The line worth holding: a skill captures _how to do work_; a memory
+captures _who the user is, what they're working on, or where to look_.
 
 ## The check: which skill, if any?
 
@@ -108,7 +108,7 @@ the user prefers. Don't pick blindly.
 
 ## After the user accepts the wording: how to persist
 
-The wording is one decision; *where the edit lands* is a separate one.
+The wording is one decision; _where the edit lands_ is a separate one.
 Ask the user which persistence path they want — but **only offer paths
 that actually exist for this skill.** The available paths depend on
 whether you know the skill's on-disk repo location:
@@ -148,7 +148,7 @@ on-disk offer is worse than not offering it.
 
 ### Asking the question
 
-When the on-disk location *is* known, ask all three:
+When the on-disk location _is_ known, ask all three:
 
 ```
 How do you want this to land?
@@ -165,7 +165,7 @@ path I can take is a PR against <upstream-repo-url>. Want me to open
 one?
 ```
 
-Saying *why* the on-disk options are missing gives the user the chance
+Saying _why_ the on-disk options are missing gives the user the chance
 to provide the path if they want.
 
 ## Mid-save pivot
@@ -176,7 +176,7 @@ proposal. Don't write the memory "just in case" — two-stage saves
 ("write memory, maybe move it") strand the same lesson in two places
 and the duplication causes drift.
 
-If you already wrote a memory earlier in *this same session* for a
+If you already wrote a memory earlier in _this same session_ for a
 lesson that turns out to fit a skill, offer to remove the memory once
 the skill edit is approved. Don't leave the rule in both places.
 
@@ -184,11 +184,11 @@ the skill edit is approved. Don't leave the rule in both places.
 
 - **User says "save as a memory anyway."** Respect the override. Write
   the memory and don't re-propose the skill edit for that lesson.
-  Add a short note in the memory body explaining *why* the user
+  Add a short note in the memory body explaining _why_ the user
   preferred memory ("user wanted this scoped to themselves") so later
   sessions don't try to re-route the same item.
 - **User wants both.** Land the skill edit as the primary record, then
-  save a thin memory that *points to* the skill via a `[[skill-name]]`
+  save a thin memory that _points to_ the skill via a `[[skill-name]]`
   link rather than restating the rule. The memory is an index entry,
   not a duplicate.
 - **Right skill is read-only / upstream-only.** If the natural home is
@@ -198,11 +198,11 @@ the skill edit is approved. Don't leave the rule in both places.
   PR; fall back to memory if the user doesn't want to PR upstream.
 - **Lesson contradicts an existing skill.** If the user's feedback
   conflicts with what a skill currently says (rather than extending
-  it), surface the conflict before editing: *"the `<skill>` skill
+  it), surface the conflict before editing: _"the `<skill>` skill
   currently says X; your feedback says Y. Update the skill, or treat
-  this as a one-off exception?"* Don't silently overwrite skill
+  this as a one-off exception?"_ Don't silently overwrite skill
   guidance based on a single correction.
-- **No skill fits, but one *should* exist.** If the lesson is broadly
+- **No skill fits, but one _should_ exist.** If the lesson is broadly
   applicable but no skill covers the topic, write the memory with a
   `candidate-for-future-skill: <topic>` line in the body. Don't spin
   up a new skill on the spot for one lesson; wait for the cluster.
