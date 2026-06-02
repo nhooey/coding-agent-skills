@@ -42,12 +42,13 @@
       };
     };
 
-    # Skills installed only for authoring this repo (nix-*, humanizer,
-    # skill-creator, superpowers), in their own flake so readers don't
-    # confuse them with the skills this flake outputs. See
-    # ./skills-authoring/flake.nix.
-    skills-authoring = {
-      url = "path:./skills-authoring";
+    # skillspkgs' curated `authoring` combination (nix-*, humanizer,
+    # skill-creator, superpowers). Pulled at `?dir=sources/combinations` so
+    # only the combination-builder eval is fetched, not the full skillspkgs
+    # tree. Replaces the prior `./skills-authoring/` sub-flake — the
+    # authoring set is now sourced from skillspkgs alongside skills-git.
+    skillspkgs-combinations = {
+      url = "github:nhooey/skillspkgs?dir=sources/combinations";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-skills.follows = "flake-skills";
@@ -100,13 +101,13 @@
             ];
           };
 
-          # Auto-reconcile skills at project scope on `nix develop`: the git
-          # skills from the skills-git input and the authoring-only tools from
-          # the separate skills-authoring flake, each in its own named startup
-          # hook (mirroring skills-git). Both are declarative + idempotent and
-          # own disjoint reconcile appNames (git = `agent-skills-all`,
-          # authoring = `coding-agent-skills-authoring`), so they coexist in
-          # one scope — each sweeps only its own strays.
+          # Auto-reconcile skills at project scope on `nix develop`: the
+          # skills-git pack and skillspkgs' curated `authoring` combination,
+          # each in its own named startup hook (mirroring skills-git). Both
+          # are declarative + idempotent and own disjoint reconcile appNames
+          # (skills-git = `agent-skills-all`, authoring =
+          # `skillspkgs-authoring`), so they coexist in one scope — each
+          # sweeps only its own strays.
           devshells.default = {
             name = "coding-agent-skills";
             motd = ''
@@ -114,10 +115,10 @@
               Run {bold}menu{reset} to list available commands.
             '';
             devshell.startup.install-git-skills.text = ''
-              ${inputs.skills-git.apps.${system}.reconcile.program} --scope=project
+              ${inputs.skills-git.reconcileScript system}
             '';
             devshell.startup.install-authoring-skills.text = ''
-              ${inputs.skills-authoring.reconcileScript system}
+              ${inputs.skillspkgs-combinations.combinations.authoring.${system}.reconcileScript}
             '';
           };
         };
