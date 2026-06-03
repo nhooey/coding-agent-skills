@@ -103,6 +103,20 @@
           name = packName;
           skills = builtins.map (n: base.packages.${system}."agent-skill-${n}") skillNames;
         };
+
+      # The dev shell's full skill set as one combination: the skills-git pack
+      # plus skillspkgs' `authoring` combination spliced in as a source. One
+      # reconcile hook converges the union under one owner.
+      devShellSkills = flake-skills.lib.mkCombination {
+        inherit nixpkgs;
+        systems = import inputs.systems;
+        name = "coding-agent-skills-devshell";
+        packagePrefix = "agent-skill-";
+        sources = [
+          { source = inputs.skills-git; }
+          { source = inputs.skillspkgs-combinations.combinations.authoring; }
+        ];
+      };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
@@ -136,23 +150,17 @@
           };
 
           # Auto-reconcile skills at project scope on `nix develop`: the
-          # skills-git pack and skillspkgs' curated `authoring` combination,
-          # each in its own named startup hook (mirroring skills-git). Both
-          # are declarative + idempotent and own disjoint reconcile appNames
-          # (skills-git = `agent-skills-all`, authoring =
-          # `skillspkgs-authoring`), so they coexist in one scope — each
-          # sweeps only its own strays.
+          # skills-git pack plus skillspkgs' curated `authoring` combination,
+          # merged into one combination that a single reconcile hook converges
+          # — one owner, declarative + idempotent.
           devshells.default = {
             name = "coding-agent-skills";
             motd = ''
               {bold}{14}🚀 Entering coding-agent-skills dev shell{reset}
               Run {bold}menu{reset} to list available commands.
             '';
-            devshell.startup.install-git-skills.text = ''
-              ${inputs.skills-git.reconcileScript system}
-            '';
-            devshell.startup.install-authoring-skills.text = ''
-              ${inputs.skillspkgs-combinations.combinations.authoring.${system}.reconcileScript}
+            devshell.startup.install-skills.text = ''
+              ${devShellSkills.reconcileScript system}
             '';
           };
         };
