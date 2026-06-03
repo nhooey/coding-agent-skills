@@ -30,25 +30,12 @@
       };
     };
 
-    # The git / GitHub skills this repo dogfoods, pulled from the published
-    # skills-git marketplace flake (this repo doesn't author them). Installed
-    # into the dev shell under its own `agent-skills-all` ownership.
-    skills-git = {
-      url = "github:nhooey/skills-git";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-skills.follows = "flake-skills";
-        treefmt-nix.follows = "treefmt-nix";
-      };
-    };
-
-    # skillspkgs' curated `authoring` combination (nix-*, humanizer,
-    # skill-creator, superpowers). Pulled at `?dir=sources/combinations` so
-    # only the combination-builder eval is fetched, not the full skillspkgs
-    # tree. Replaces the prior `./skills-authoring/` sub-flake — the
-    # authoring set is now sourced from skillspkgs alongside skills-git.
-    skillspkgs-combinations = {
-      url = "github:nhooey/skillspkgs?dir=sources/combinations";
+    # The dev-shell skill set (git/GitHub + skillspkgs' authoring combination)
+    # as its own sub-flake, so its skill-source inputs stay isolated in
+    # `skills-devshell/flake.lock` rather than this flake's inputs. `flake-skills`
+    # follows the parent's so the whole tree resolves to one rev.
+    skills-devshell = {
+      url = "path:./skills-devshell";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-skills.follows = "flake-skills";
@@ -103,20 +90,6 @@
           name = packName;
           skills = builtins.map (n: base.packages.${system}."agent-skill-${n}") skillNames;
         };
-
-      # The dev shell's full skill set as one combination: the skills-git pack
-      # plus skillspkgs' `authoring` combination spliced in as a source. One
-      # reconcile hook converges the union under one owner.
-      devShellSkills = flake-skills.lib.mkCombination {
-        inherit nixpkgs;
-        systems = import inputs.systems;
-        name = "coding-agent-skills-devshell";
-        packagePrefix = "agent-skill-";
-        sources = [
-          { source = inputs.skills-git; }
-          { source = inputs.skillspkgs-combinations.combinations.authoring; }
-        ];
-      };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
@@ -149,10 +122,10 @@
             ];
           };
 
-          # Auto-reconcile skills at project scope on `nix develop`: the
-          # skills-git pack plus skillspkgs' curated `authoring` combination,
-          # merged into one combination that a single reconcile hook converges
-          # — one owner, declarative + idempotent.
+          # Auto-reconcile the dev-shell skill set (git/GitHub + the authoring
+          # combination) at project scope on `nix develop`. The skills-devshell
+          # sub-flake outputs the reconcile one-liner as text per system; this
+          # just splices it in.
           devshells.default = {
             name = "coding-agent-skills";
             motd = ''
@@ -160,7 +133,7 @@
               Run {bold}menu{reset} to list available commands.
             '';
             devshell.startup.install-skills.text = ''
-              ${devShellSkills.reconcileScript system}
+              ${inputs.skills-devshell.reconcileScript.${system}}
             '';
           };
         };
