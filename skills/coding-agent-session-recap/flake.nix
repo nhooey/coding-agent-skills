@@ -11,6 +11,7 @@
     { nixpkgs, flake-skills, ... }:
     flake-skills.lib.mkSkillFlake {
       inherit nixpkgs;
+      source = import ../../source.nix;
       skillName = "coding-agent-session-recap";
       src = ./.;
     };
