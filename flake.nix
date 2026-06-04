@@ -30,16 +30,36 @@
       };
     };
 
-    # The dev-shell skill set (git/GitHub + skillspkgs' authoring combination)
-    # as its own sub-flake, so its skill-source inputs stay isolated in
-    # `skills-devshell/flake.lock` rather than this flake's inputs. `flake-skills`
-    # follows the parent's so the whole tree resolves to one rev.
-    skills-devshell = {
-      url = "path:./skills-devshell";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-skills.follows = "flake-skills";
-      };
+    # ---------------------------------------------------------------------
+    # Dev-shell skill sources (inlined — consumed only by `devshells` below)
+    # ---------------------------------------------------------------------
+    # The project dev shell installs one curated skill set: the git/GitHub
+    # pack plus skillspkgs' `authoring` combination — combined via
+    # flake-skills' `mkCombination` in `outputs` (`devshellSkills`). These
+    # were previously isolated in a `skills-devshell/` sub-flake, but a
+    # same-repo sub-flake can only be addressed by a relative `path:` input
+    # (which sandboxed/transitive consumers reject) or a brittle self-URL
+    # (which breaks on any repo/owner/host rename), so they are inlined here
+    # instead. They follow the parent `nixpkgs` but NOT `flake-skills`: the
+    # root pins a newer owner-namespacing `flake-skills`, and forcing the
+    # `authoring` combination's transitive sources onto it surfaces an
+    # ownerless aggregate-key the strict namespace check rejects. Letting each
+    # source keep its own (compatible) `flake-skills` matches how the old
+    # sub-flake's isolated lock worked. `mkCombination` still runs from the
+    # root's `flake-skills.lib`, so the combiner is this repo's pinned rev.
+
+    skills-git = {
+      url = "github:nhooey/skills-git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # skillspkgs' curated `authoring` combination, surfaced through its own
+    # subdir flake (`mkCombination` keeps a combination re-composable). This
+    # is a `?dir=` into a *different* repo, which fetches cleanly for
+    # transitive consumers — unlike a self-referential `?dir=`.
+    skillspkgs-combinations = {
+      url = "github:nhooey/skillspkgs?dir=sources/combinations";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -91,6 +111,21 @@
           name = packName;
           skills = builtins.map (n: base.bySkillName.${system}.${n}) skillNames;
         };
+
+      # The project dev-shell skill set, combined from the inlined skill
+      # sources (the git/GitHub pack plus skillspkgs' `authoring`
+      # combination). `reconcileScript` is a `system -> string` function the
+      # dev shell splices into a startup hook.
+      devshellSkills = flake-skills.lib.mkCombination {
+        inherit nixpkgs;
+        name = "coding-agent-skills-devshell";
+        envName = "agent-skills-coding-agent-skills-devshell";
+        packagePrefix = "agent-skill-";
+        sources = [
+          { source = inputs.skills-git; }
+          { source = inputs.skillspkgs-combinations.combinations.authoring; }
+        ];
+      };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
@@ -124,9 +159,9 @@
           };
 
           # Auto-reconcile the dev-shell skill set (git/GitHub + the authoring
-          # combination) at project scope on `nix develop`. The skills-devshell
-          # sub-flake outputs the reconcile one-liner as text per system; this
-          # just splices it in.
+          # combination) at project scope on `nix develop`. `devshellSkills`
+          # (above) yields the reconcile one-liner per system; this just
+          # splices it in.
           devshells.default = {
             name = "coding-agent-skills";
             motd = ''
@@ -134,7 +169,7 @@
               Run {bold}menu{reset} to list available commands.
             '';
             devshell.startup.install-skills.text = ''
-              ${inputs.skills-devshell.reconcileScript.${system}}
+              ${devshellSkills.reconcileScript system}
             '';
           };
         };
