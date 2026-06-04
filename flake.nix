@@ -57,6 +57,7 @@
       # `skills-git` and `skills-authoring` inputs.
       base = flake-skills.lib.mkAllSkillsFlake {
         inherit nixpkgs;
+        source = import ./source.nix;
         skillsDir = ./skills;
         packagePrefix = "agent-skill-";
       };
@@ -88,7 +89,7 @@
         flake-skills.lib.mkSkillsEnv {
           pkgs = nixpkgs.legacyPackages.${system};
           name = packName;
-          skills = builtins.map (n: base.packages.${system}."agent-skill-${n}") skillNames;
+          skills = builtins.map (n: base.bySkillName.${system}.${n}) skillNames;
         };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
