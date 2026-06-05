@@ -51,38 +51,16 @@
         source = import ./source.nix;
         skillsDir = ./skills;
         packagePrefix = "agent-skill-";
+        # Name the aggregate "all" bundle by topic rather than letting it
+        # default to the owner-scoped `agent-skills-nhooey-all`. Every repo
+        # this owner publishes would derive that same owner key, so they
+        # collide under skillspkgs / nur-packages' last-write-wins `//`
+        # merge; the topic-scoped name survives, mirroring skills-git's
+        # `agent-skills-git-all`. The aggregate now carries the
+        # home-manager `isFlakeSkillsEnv` passthru itself (agent-skill-flake
+        # #47), so `default` is directly installable — no hand-rolled pack.
+        name = "agent-skills-coding-agent-all";
       };
-
-      packs = {
-        # Every coding-agent-* skill as one env. mkAllSkillsFlake already
-        # exposes the same set under the auto `agent-skills-all` key, but that
-        # name collides across sibling repos when aggregated (skillspkgs /
-        # nur-packages do a last-write-wins `//` merge), so the bare key is
-        # unreachable downstream. This uniquely-named pack — mirroring
-        # skills-git's `agent-skills-git-all` and skills-nix's
-        # `agent-skills-nix-all` — survives the merge. Keep in sync as skills
-        # are added.
-        agent-skills-coding-agent-all = [
-          "coding-agent-keep-computer-awake"
-          "coding-agent-questions-as-first-class-prompts"
-          "coding-agent-route-feedback-to-skills-over-memory"
-          "coding-agent-session-recap"
-        ];
-      };
-
-      # Build an `agent-skill-flake.lib.mkSkillsEnv` for one (packName,
-      # skillNames) pair. The env keeps the same `nix run`/`nix build` UX as a
-      # plain `symlinkJoin`, but also carries the `passthru.isFlakeSkillsEnv` +
-      # `flakeSkillsEnv` records that `programs.agent-skill-flake.skills` needs
-      # to expand the env back into per-skill records on home-manager
-      # activation.
-      mkEnv =
-        system: packName: skillNames:
-        agent-skill-flake.lib.mkSkillsEnv {
-          pkgs = nixpkgs.legacyPackages.${system};
-          name = packName;
-          skills = builtins.map (n: base.bySkillName.${system}.${n}) skillNames;
-        };
 
       # Root-side wiring for the `skills-devshell/` sub-flake: the runtime
       # `nix run "$PRJ_ROOT/skills-devshell#<app>"` snippets spliced into the
@@ -101,9 +79,7 @@
       perSystem =
         { system, ... }:
         {
-          packages =
-            base.packages.${system}
-            // builtins.mapAttrs (packName: skillNames: mkEnv system packName skillNames) packs;
+          packages = base.packages.${system};
 
           apps = base.apps.${system};
 
