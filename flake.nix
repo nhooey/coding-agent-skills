@@ -55,7 +55,7 @@
         # default to the owner-scoped `agent-skills-nhooey-all`. Every repo
         # this owner publishes would derive that same owner key, so they
         # collide under skillspkgs / nur-packages' last-write-wins `//`
-        # merge; the topic-scoped name survives, mirroring skills-git's
+        # merge; the topic-scoped name survives, mirroring git-skills's
         # `agent-skills-git-all`. The aggregate now carries the
         # home-manager `isFlakeSkillsEnv` passthru itself (agent-skill-flake
         # #47), so `default` is directly installable — no hand-rolled pack.

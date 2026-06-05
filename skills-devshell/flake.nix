@@ -20,8 +20,8 @@
     # its own (compatible) builder. `mkDevshellSkillsFlake` still runs from this
     # flake's `agent-skill-flake.lib`, so the combiner is the pinned rev above.
 
-    skills-git = {
-      url = "github:nhooey/skills-git";
+    git-skills = {
+      url = "github:nhooey/git-skills";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -51,7 +51,7 @@
       envName = "agent-skills-coding-agent-skills-devshell";
       packagePrefix = "agent-skill-";
       sources = [
-        { source = inputs.skills-git; }
+        { source = inputs.git-skills; }
         { source = inputs.skillspkgs-combinations.combinations.authoring; }
       ];
     };

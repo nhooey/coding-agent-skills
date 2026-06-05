@@ -1,5 +1,5 @@
 builds:
-  branch: master
   include:
     - "packages.x86_64-linux.*"
+    - "devShells.x86_64-linux.default"
   exclude: []
