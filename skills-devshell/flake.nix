@@ -48,8 +48,10 @@
       inherit nixpkgs;
       systems = import inputs.systems;
       name = "coding-agent-skills-devshell";
-      envName = "agent-skills-coding-agent-skills-devshell";
-      packagePrefix = "agent-skill-";
+      # envName and packagePrefix are left at their library defaults:
+      # mkDevshellSkillsFlake derives envName = "agent-skills-${name}"
+      # (== agent-skills-coding-agent-skills-devshell) and packagePrefix
+      # defaults to "agent-skill-", so both equal what was spelled out here.
       sources = [
         { source = inputs.git-skills; }
         { source = inputs.skillspkgs-combinations.combinations.authoring; }
