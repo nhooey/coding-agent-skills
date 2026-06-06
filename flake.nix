@@ -51,15 +51,15 @@
         source = import ./source.nix;
         skillsDir = ./skills;
         packagePrefix = "agent-skill-";
-        # Name the aggregate "all" bundle by topic rather than letting it
-        # default to the owner-scoped `agent-skills-nhooey-all`. Every repo
-        # this owner publishes would derive that same owner key, so they
-        # collide under skillspkgs / nur-packages' last-write-wins `//`
-        # merge; the topic-scoped name survives, mirroring git-skills's
-        # `agent-skills-git-all`. The aggregate now carries the
-        # home-manager `isFlakeSkillsEnv` passthru itself (agent-skill-flake
-        # #47), so `default` is directly installable — no hand-rolled pack.
-        name = "agent-skills-coding-agent-all";
+        # Name the aggregate by owner+topic (agent-skills-nhooey-coding-agent-all)
+        # rather than the owner-wide `agent-skills-nhooey-all`. The owner-wide
+        # key would collide across all repos this owner publishes under
+        # skillspkgs / nur-packages' last-write-wins `//` merge; the
+        # owner+topic name is resolvable and unique, mirroring git-skills's
+        # `agent-skills-nhooey-git-all`. The aggregate carries the home-manager
+        # `isFlakeSkillsEnv` passthru itself (agent-skill-flake #47), so
+        # `default` is directly installable — no hand-rolled pack.
+        name = "agent-skills-nhooey-coding-agent-all";
       };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
