@@ -51,6 +51,10 @@
         source = import ./source.nix;
         skillsDir = ./skills;
         packagePrefix = "agent-skill-";
+        # Ship the reference pages a SKILL.md links beside it (examples.md,
+        # commands.md, ...); by default only SKILL.md, references/ and
+        # scripts/ are installed.
+        extraFiles = [ "*.md" ];
         # Name the aggregate by owner+topic (agent-skills-nhooey-coding-agent-all)
         # rather than the owner-wide `agent-skills-nhooey-all`. The owner-wide
         # key would collide across all repos this owner publishes under
