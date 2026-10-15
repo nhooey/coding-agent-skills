@@ -5,6 +5,19 @@ Between tool calls you get a one-line progress update. The final response sorts
 the turn's results into fixed lists, so you can scan it once, see what is done,
 and answer each decision by its number.
 
+## Try it out
+
+Paste this prompt into your coding agent, without installing anything:
+
+```text
+Read the skill in skills/coding-agent-kanban-turn-responses/ of
+https://github.com/nhooey/coding-agent-skills, starting with its SKILL.md
+and the files it links, and follow it for every response from now on in
+this session.
+```
+
+To keep it for every session, install it as [Use](#use) says.
+
 ## Why
 
 A long agent turn usually ends in paragraphs of prose. The one decision that
