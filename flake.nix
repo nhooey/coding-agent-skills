@@ -114,9 +114,11 @@
             ];
             # prettier trims trailing spaces even inside fenced code blocks,
             # and the kanban skill's examples need them: each list header there
-            # ends in 2 spaces, the hard break the skill itself requires.
+            # ends in 2 spaces, the hard break the skill itself requires. Its
+            # README's example has the same headers.
             settings.formatter.prettier.excludes = [
               "skills/coding-agent-kanban-turn-responses/examples.md"
+              "skills/coding-agent-kanban-turn-responses/README.md"
             ];
           };
 
