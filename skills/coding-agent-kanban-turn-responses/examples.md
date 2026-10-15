@@ -7,7 +7,7 @@ _Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s
 A checkbox item and a binary item, each multi-line item parted from the next by a line holding the list's indent and one U+00A0, and nothing else.
 
 ```text
-🛑 **Blocked:**
+🛑 **Blocked:**  
 ▔▔▔▔▔▔▔▔▔▔▔
 1. **Backlog cleanups to start, of 260 entries in the backlog:** any of 2.
    Note on the whole decision: the figures, the words at issue, 🔗 [an example](url).
@@ -17,7 +17,7 @@ A checkbox item and a binary item, each multi-line item parted from the next by 
    🔲 B. **Entries 0550 and 0455, dead code**, on Haiku: delete `findings_sources.py`, and repoint code citing the 2 deleted plans.
       ➕ About 0.1M 1x tokens.
       ➖ Nothing gained but tidiness.
-
+    
 2. **Next decision, naming its subject:** sentence.
    👍 Y. **Name what yes does**: consequence.
       ➕ What Y gains.
@@ -32,13 +32,13 @@ A checkbox item and a binary item, each multi-line item parted from the next by 
 Printed once the roll-up interval has passed; `outstanding.py render` drafts it, and the session prunes what is settled.
 
 ```text
-📌 **Outstanding from previous turns:**
+📌 **Outstanding from previous turns:**  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤔 **Waiting:**
+🤔 **Waiting:**  
 - **Landing `atomic-reload` with 4 other branches,** entry 1419's whole-file database swap among them. 🔖 0f311c94₋₃
-👉 **Todo:**
+👉 **Todo:**  
 - **The 2 API keys to rotate in the cloud console:** `deploy-bot` and `ci-runner`, both issued before the leak. 🔖 18e77cb3₋₁₇
-🛑 **Blocked:**
+🛑 **Blocked:**  
 - **The cache store for the build, given its 3 GB limit:** local disk, S3 or no cache. 🔖 9d2e7a10₋₂
 ```
 

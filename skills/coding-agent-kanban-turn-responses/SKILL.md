@@ -11,7 +11,7 @@ A project may extend this skill with a skill of its own, adding its own backlog 
 
 ## Progress updates
 
-A progress update is any text the agent writes between tool calls before the final response. It is one line, written only when something has changed: a step finished, a step started, or the plan changed. Each step it names opens on its state emoji, the steps parted by `·`, finished first:
+A progress update is any text the agent writes between tool calls before the final response. It is one line, written only when something has changed: a step finished, a step started, or the plan changed. Each step it names opens on its state emoji, the steps parted by a space, `·` and a space, finished first:
 
 ```text
 ✅ the waiver clauses read · 🏃 checking the 2020 resolutions · 💤 the limitation sections

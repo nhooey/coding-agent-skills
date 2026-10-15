@@ -16,7 +16,7 @@
       src = ./.;
       # Ship the reference pages SKILL.md links (examples.md, commands.md,
       # scripts.md); by default only SKILL.md, references/ and scripts/ are
-      # installed.
-      extraFiles = [ "*.md" ];
+      # installed. Lower-case names only, so README.md stays in the repo.
+      extraFiles = [ "[a-z]*.md" ];
     };
 }
