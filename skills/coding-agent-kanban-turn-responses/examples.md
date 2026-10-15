@@ -4,7 +4,7 @@ _Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s
 
 ## A Blocked list
 
-A checkbox item and a binary item, each multi-line item parted from the next by a line holding the list's indent and one U+00A0, and nothing else.
+A checkbox item and a binary item, each multi-line item parted from the next by the separator line: the list's indent, one U+2800, and nothing else, directly under the item's last line. `scripts/lint_reply.py` finds no fault in it.
 
 ```text
 🛑 **Blocked:**  
@@ -17,7 +17,7 @@ A checkbox item and a binary item, each multi-line item parted from the next by 
    🔲 B. **Entries 0550 and 0455, dead code**, on Haiku: delete `findings_sources.py`, and repoint code citing the 2 deleted plans.
       ➕ About 0.1M 1x tokens.
       ➖ Nothing gained but tidiness.
-    
+   ⠀
 2. **Next decision, naming its subject:** sentence.
    👍 Y. **Name what yes does**: consequence.
       ➕ What Y gains.

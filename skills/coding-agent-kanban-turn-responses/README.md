@@ -52,7 +52,7 @@ The parser regression came from the tokenizer rewrite; the fix is committed.
 ▔▔▔▔▔▔▔▔
 1. **Tokenizer fix:** `src/lexer.rs` stops splitting `::` inside generics;
    commit `a1b2c3d`.
-    
+   ⠀
 2. **Test suite:** 412 passed, 0 failed.
 
 🛑 **Blocked:**  
