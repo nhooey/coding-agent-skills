@@ -47,3 +47,21 @@ The global `--human-only` flag counts a typed prompt alone as a turn, folding ag
 | neither                                                                  | its first 3 words that are not articles or prepositions, lowercased: `landing alpha` for both _The landing of `alpha`_ and _Landing alpha!_ |
 
 The key reads the summary alone, the bold text before its colon. Different items in one list that name the same branch or entry, or open on the same 3 words, merge in the draft, and the session splits them when it prunes.
+
+## The `lint_reply.py` script
+
+[`lint_reply.py`](scripts/lint_reply.py) reads no transcript: it checks a draft final response, on stdin or in the file named, for the separator lines the skill requires, and is run on every draft before it is sent. It prints `LINE: [k] message` per finding and exits 1 if there is any, else 0. Lines inside ``` or ~~~ fences are not read.
+
+```text
+python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_reply.py draft.md
+```
+
+| Kind | Finding                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------- |
+| `a`  | a multi-line item followed by the next item of its list with no separator line                    |
+| `b`  | a separator line between 2 one-line items, or right under a header's underline                    |
+| `c`  | a line of only spaces, tabs or U+00A0, not empty, inside a list, where a separator line was meant |
+| `d`  | a separator line whose indent is not its list's, the column its items' text starts at             |
+| `e`  | a blank line directly above or below a separator line, which renders a double gap                 |
+
+A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them, and a header or a line of prose at the item's indent ends it. Its tests run with `python3 -I scripts/test_lint_reply.py`, and `nix flake check` runs them too.

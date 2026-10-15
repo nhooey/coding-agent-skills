@@ -92,11 +92,20 @@
         '';
       };
       perSystem =
-        { system, ... }:
+        { system, pkgs, ... }:
         {
           packages = base.packages.${system};
 
           apps = base.apps.${system};
+
+          # The kanban skill's reply linter, against its fixtures and the
+          # skill's own examples.
+          checks.kanban-lint-reply =
+            pkgs.runCommand "kanban-lint-reply-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+              ''
+                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_lint_reply.py
+                touch $out
+              '';
 
           # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
           # the module also surfaces a `checks.${system}.treefmt` so `nix flake

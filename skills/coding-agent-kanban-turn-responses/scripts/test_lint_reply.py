@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Tests for lint_reply.py, run from anywhere: `python3 -I scripts/test_lint_reply.py`.
+
+Standard library only.
+"""
+
+from __future__ import annotations
+
+import io
+import pathlib
+import re
+import sys
+import unittest
+from contextlib import redirect_stdout
+
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+import lint_reply  # noqa: E402
+
+S = lint_reply.SEPARATOR
+NBSP = lint_reply.NBSP
+
+
+def blocked(gap: str) -> str:
+    """A 2-item Blocked list whose items are parted by the line `gap`."""
+    return (
+        "🛑 **Blocked:**  \n"
+        "▔▔▔▔▔▔▔▔▔▔▔\n"
+        "1. **How the stock counts are stored:** by store and day.\n"
+        "   🔘 A. **One row per product per store**: the counts table grows by store.\n"
+        "      ➕ Queries stay simple.\n"
+        "      ➖ About 131 rows per product, roughly 10 million in all.\n"
+        f"{gap}\n"
+        "2. **Which other fast-changing data moves into rows of its own:** prices.\n"
+        "   👍 Y. **Move prices too**: one migration.\n"
+        "      ➕ One pattern for both.\n"
+        "      ➖ A second migration to review.\n"
+    )
+
+
+ONE_LINE_RUN = (
+    "✅ **Done:**  \n"
+    "▔▔▔▔▔▔▔▔\n"
+    "1. **Tokenizer fix:** commit `a1b2c3d`.\n"
+    "2. **Test suite:** 412 passed, 0 failed.\n"
+    "3. **Lint:** 0 warnings.\n"
+    "\n"
+    "📌 **Outstanding from previous turns:**  \n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "🤔 **Waiting:**  \n"
+    "- **Landing `atomic-reload`.** 🔖 0f311c94₋₃\n"
+    "- **The nightly import.** 🔖 18e77cb3₋₁₇\n"
+)
+
+
+def kinds(text: str) -> list[tuple[int, str]]:
+    return [(line, kind) for line, kind, _ in lint_reply.lint(text)]
+
+
+def fenced_block(path: pathlib.Path, heading: str) -> str:
+    """The first ```text block after `heading` in a Markdown file."""
+    text = path.read_text(encoding="utf-8")
+    after = text[text.index(heading) :]
+    return re.search(r"```text\n(.*?)```", after, re.DOTALL).group(1)
+
+
+class LintReplyTest(unittest.TestCase):
+    def test_correct_blocked_list(self) -> None:
+        self.assertEqual(kinds(blocked(f"   {S}")), [])
+
+    def test_one_space_runs_items_together(self) -> None:
+        self.assertEqual(kinds(blocked(" ")), [(7, "c"), (8, "a")])
+
+    def test_spaces_where_the_separator_belongs(self) -> None:
+        self.assertEqual(kinds(blocked("    ")), [(7, "c"), (8, "a")])
+
+    def test_nbsp_separator(self) -> None:
+        self.assertEqual(kinds(blocked(f"   {NBSP}")), [(7, "c"), (8, "a")])
+
+    def test_empty_line_is_no_separator(self) -> None:
+        self.assertEqual(kinds(blocked("")), [(8, "a")])
+
+    def test_no_line_at_all(self) -> None:
+        text = blocked("X").replace("X\n", "")
+        self.assertEqual(kinds(text), [(7, "a")])
+
+    def test_blank_lines_around_separator(self) -> None:
+        self.assertEqual(kinds(blocked(f"\n   {S}\n")), [(8, "e"), (9, "e")])
+
+    def test_one_line_items_sit_together(self) -> None:
+        self.assertEqual(kinds(ONE_LINE_RUN), [])
+
+    def test_separator_between_one_line_items(self) -> None:
+        text = f"1. **One:** a.\n   {S}\n2. **Two:** b.\n"
+        self.assertEqual(kinds(text), [(2, "b")])
+
+    def test_separator_under_underline(self) -> None:
+        text = f"✅ **Done:**  \n▔▔▔▔▔▔▔▔\n{S}\n1. **One:** a.\n"
+        self.assertEqual(kinds(text), [(3, "b")])
+
+    def test_separator_at_wrong_indent(self) -> None:
+        text = f"1. **One:** a,\n   wrapped.\n  {S}\n2. **Two:** b.\n"
+        self.assertEqual(kinds(text), [(3, "d")])
+
+    def test_multi_line_item_after_one_line_item(self) -> None:
+        text = "1. **One:** a.\n2. **Two:** b,\n   wrapped.\n"
+        self.assertEqual(kinds(text), [(2, "a")])
+
+    def test_loose_item_with_blank_lines_inside(self) -> None:
+        text = (
+            "1. **One:** a.\n"
+            "\n"
+            "   🔘 A. **First**: a.\n"
+            "\n"
+            "   🔘 B. **Second**: b.\n"
+            f"   {S}\n"
+            "2. **Two:** b.\n"
+        )
+        self.assertEqual(kinds(text), [])
+
+    def test_item_ending_in_nested_bullets(self) -> None:
+        text = f"1. **One:** a.\n   - first\n   - second\n   {S}\n2. **Two:** b.\n"
+        self.assertEqual(kinds(text), [])
+
+    def test_nested_steps_are_their_own_list(self) -> None:
+        text = (
+            "1. **Rotate the keys:** in the console.\n"
+            "   1. Open the console,\n"
+            "      then the keys page.\n"
+            f"      {S}\n"
+            "   2. Rotate `deploy-bot`.\n"
+            f"   {S}\n"
+            "2. **Rerun CI:** on master.\n"
+        )
+        self.assertEqual(kinds(text), [])
+
+    def test_nested_steps_without_separator(self) -> None:
+        text = "1. **Rotate the keys:** in the console.\n   1. Open the console,\n      then the keys page.\n   2. Rotate.\n"
+        self.assertEqual(kinds(text), [(4, "a")])
+
+    def test_fenced_content_is_not_read(self) -> None:
+        text = f"```text\n1. **One:** a,\n   wrapped.\n   \n2. **Two:** b.\n{NBSP}\n```\n"
+        self.assertEqual(kinds(text), [])
+
+    def test_lists_parted_by_a_header_are_not_neighbours(self) -> None:
+        text = "✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **One:** a,\n   wrapped.\n\n👉 **Todo:**  \n▔▔▔▔▔▔▔\n1. **Two:** b.\n"
+        self.assertEqual(kinds(text), [])
+
+    def test_skill_examples_are_clean(self) -> None:
+        skill = HERE.parent
+        for path, heading in [(skill / "examples.md", "## A Blocked list"), (skill / "README.md", "The final response:")]:
+            with self.subTest(path=path.name):
+                if not path.exists():  # README.md stays in the repo, out of the installed skill
+                    continue
+                self.assertEqual(kinds(fenced_block(path, heading)), [])
+
+    def test_main_exit_codes(self) -> None:
+        for text, code in [(blocked(f"   {S}"), 0), (blocked(" "), 1)]:
+            sys.stdin = io.StringIO(text)
+            try:
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(lint_reply.main([]), code)
+            finally:
+                sys.stdin = sys.__stdin__
+
+
+if __name__ == "__main__":
+    unittest.main()
