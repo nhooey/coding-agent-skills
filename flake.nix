@@ -51,6 +51,11 @@
         source = import ./source.nix;
         skillsDir = ./skills;
         packagePrefix = "agent-skill-";
+        # Ship the reference pages a SKILL.md links beside it (examples.md,
+        # commands.md, ...); by default only SKILL.md, references/ and
+        # scripts/ are installed. Lower-case names only, so a skill's
+        # README.md stays in the repo for people instead of being installed.
+        extraFiles = [ "[a-z]*.md" ];
         # Name the aggregate by owner+topic (agent-skills-nhooey-coding-agent-all)
         # rather than the owner-wide `agent-skills-nhooey-all`. The owner-wide
         # key would collide across all repos this owner publishes under
@@ -106,6 +111,12 @@
               "*.md"
               "*.yaml"
               "*.yml"
+            ];
+            # prettier trims trailing spaces even inside fenced code blocks,
+            # and the kanban skill's examples need them: each list header there
+            # ends in 2 spaces, the hard break the skill itself requires.
+            settings.formatter.prettier.excludes = [
+              "skills/coding-agent-kanban-turn-responses/examples.md"
             ];
           };
 
