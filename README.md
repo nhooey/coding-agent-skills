@@ -71,7 +71,6 @@ skills/                  one directory per skill (SKILL.md + per-skill flake.nix
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
 source.nix               the upstream owner, shared by the root and every skill flake
 flake.nix                builds skills via agent-skill-flake; wires the dev shell + treefmt
-garnix.yaml              Garnix CI scope (Linux packages + the default dev shell)
 ```
 
 ## Authoring a skill
@@ -81,8 +80,3 @@ that calls `agent-skill-flake.lib.mkSkillFlake` with `source = import
 ../../source.nix`. The root flake's `mkAllSkillsFlake` picks up every directory
 under `skills/` automatically, so no central registry edit is needed. Run
 `nix fmt` and `nix flake check` before committing.
-
-## CI
-
-[Garnix](https://garnix.io) builds the Linux packages and the default dev shell
-on every push (see [`garnix.yaml`](garnix.yaml)).
