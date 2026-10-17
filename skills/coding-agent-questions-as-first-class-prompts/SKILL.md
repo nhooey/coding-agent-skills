@@ -111,13 +111,12 @@ The line: if you are pausing for the user to supply information or pick
 a direction, it is a question and it goes through the facility. If you
 are not actually blocked on their input, don't ask at all.
 
-## Cross-references
+## Related skills
 
-- `github-pull-request-changeset-prompt` — a concrete application of
-  this rule: the post-changeset Stage/Commit/Push prompt is a
-  multi-select that must use the question facility (and shows the
-  4-option-cap split in practice).
-- `coding-agent-route-feedback-to-skills-over-memory` — when proposing
-  where a lesson should land, the "which skill / which persistence
-  path" choice is exactly the kind of decision to surface as a
-  first-class prompt rather than a prose menu.
+When one of these applies and it's in your skill listing, load it
+without asking. If it isn't in your listing, tell the user which skill is
+missing and ask whether to install it from the same collection this skill
+came from; don't apply it from memory.
+
+- `github-workflow-pull-request-changeset-prompt`: a concrete application of this rule, the post-changeset Stage/Commit/Push multi-select, split to fit the 4-option cap.
+- `coding-agent-route-feedback-to-skills-over-memory`: choosing which skill or persistence path a lesson lands in is a decision to surface as a first-class prompt.
