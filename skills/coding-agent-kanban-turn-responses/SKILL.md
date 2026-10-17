@@ -1,6 +1,6 @@
 ---
 name: coding-agent-kanban-turn-responses
-description: "Every response in a turn is kanban-shaped. A progress update between tool calls is one line whose state emoji show what is done, running and next. The final response is up to 8 underlined, numbered lists of what is new this turn, in a fixed order: Done, Open, Logged, Waiting, the user's Questions answered, Review, Todo and Blocked. Whatever earlier turns left open closes it under 📌: in full, grouped by the same lists, once min(30 min, 5 × the average duration of the last 5 completed turns) has passed since the last full roll-up, and otherwise as one count line. Each Todo item is an action of the user's with its path and what it frees; each Blocked item and option names what it acts on so it reads alone, with lettered options and their pros and cons; multi-line items are parted by a separator line, and `scripts/lint_reply.py` checks a draft for it. `pending` reprints the open decisions as they were written; `reassess` works them out afresh; `Expand <item>` reprints one item at the depth its list needs to act on it. Load at the start of every turn, before the first response the user will read."
+description: "Every response in a turn is kanban-shaped. A progress update between tool calls is one line whose state emoji show what is done, running and next. The final response is up to 8 underlined, numbered lists of what is new this turn, in a fixed order: Done, Open, Logged, Waiting, Questions answered, Review, Todo and Blocked, then what earlier turns left open under 📌, in full on an interval and otherwise as one count line. Blocked items and their capital-lettered options each read alone, with pros and cons; multi-line items are parted by a separator line that `scripts/lint_reply.py` checks. `pending` reprints open decisions as written, `reassess` works them out afresh, and `Expand <item>` reprints one item in depth. Load at the start of every turn, before the first response the user will read."
 ---
 
 # Kanban turn responses
@@ -124,7 +124,7 @@ Load this skill at the start of every turn, before the first response the user w
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-kanban-turn-responses.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-kanban-turn-responses.preferences.md" 2>/dev/null`
+!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-kanban-turn-responses.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-kanban-turn-responses.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-kanban-turn-responses.preferences.md` next to this skill's folder, then
