@@ -46,7 +46,10 @@ signals:
 Don't trigger on these — they are genuine memory material:
 
 - **User identity facts** — role, expertise, name, personal
-  preferences-about-them. These are about _this user_; they don't
+  preferences-about-them. (A personal choice about how one skill's
+  output or workflow should look is different: it goes in that skill's
+  preferences file, as [Lesson for anyone, or personal choice?](#lesson-for-anyone-or-personal-choice)
+  says.) These are about _this user_; they don't
   generalize and don't belong in a sharable skill.
 - **Time-bound project state** — who is working on what, deadlines,
   incident history, current sprint goals. These are local and decay
@@ -69,7 +72,7 @@ installed) for a topical home.
   `git-hygiene-commit-message-format`; the lesson extends that skill.
 - **Adjacent match.** No skill names the lesson directly, but one is
   the natural home. Example: a rule about PR title rewording → land it
-  in `github-hygiene-pr-mirrors-commit` even though its current text
+  in `github-hygiene-pull-request-mirrors-commit` even though its current text
   doesn't yet say this.
 - **No match.** The lesson is novel and doesn't fit any existing skill.
   Fall back to memory — but flag the entry as a future-skill candidate
@@ -81,6 +84,36 @@ When two skills both fit, prefer the more specific one. A lesson that
 fits both a broad and a narrow skill belongs in the narrow one; the
 broad skill catches it via cross-reference if needed.
 
+## Lesson for anyone, or personal choice?
+
+Once you know the skill, decide which of its two homes the lesson
+belongs in:
+
+- **Right for anyone using the skill** → edit the skill. A gotcha, a
+  missing edge case, a rule that would help every user: _"that `gh`
+  flag is broken in v2,"_ _"a Blocked option must name what it acts on."_
+- **A personal choice** → that skill's preferences file. Taste, a
+  wording, a glyph, an order, a default this user picked and another
+  user might reasonably not: _"sort the lists Done, Waiting, Todo,"_
+  _"use squash merges here."_ Editing the skill would force the choice
+  on everyone who installs it.
+
+The preferences file sits next to the installed skill folder, named
+`<skill-name>.preferences.md`, in one of two places:
+
+- **User:** `~/.agents/skills/<skill-name>.preferences.md`, for a
+  choice the user wants everywhere. It is managed by the user's Home
+  Manager config, so don't write it directly: propose the change to the
+  Home Manager config that generates it.
+- **Project:** `<project>/.agents/skills/<skill-name>.preferences.md`,
+  for a choice that holds in this project only. It is committed in the
+  project's repo like any other file.
+
+A project's file overrides the user's, and the user's overrides the
+skill's defaults. `coding-agent-skill-references` has the full layout and
+the section a skill uses to read these files. When unsure which kind a
+lesson is, name both homes in the proposal and let the user pick.
+
 ## The verbal proposal
 
 Don't silently edit. State the proposal in plain text and let the user
@@ -88,7 +121,8 @@ redirect before any file changes:
 
 ```
 That sounds like a refinement to `<skill-name>` rather than a memory.
-I'd add it under "<section heading>" as:
+I'd add it under "<section heading>" (or to its preferences file, for a
+personal choice) as:
 
     <draft text, 1–3 sentences, in the skill's existing voice>
 
@@ -110,7 +144,9 @@ the user prefers. Don't pick blindly.
 
 The wording is one decision; _where the edit lands_ is a separate one.
 Ask the user which persistence path they want — but **only offer paths
-that actually exist for this skill.** The available paths depend on
+that actually exist for this skill.** A personal choice skips these
+paths: it lands in the preferences file, the project's committed in the
+project repo, the user's through their Home Manager config. The available paths depend on
 whether you know the skill's on-disk repo location:
 
 1. **Upstream PR** — always available. Branch off the skill's upstream
@@ -207,9 +243,14 @@ the skill edit is approved. Don't leave the rule in both places.
   `candidate-for-future-skill: <topic>` line in the body. Don't spin
   up a new skill on the spot for one lesson; wait for the cluster.
 
-## Cross-references
+## Related skills
 
-- `coding-agent-session-recap` — when recapping a session, a course
-  correction that resulted in a skill edit (rather than a memory write)
-  deserves its own 🗣 line; the routing decision is part of the lesson
-  the recap should preserve.
+When one of these applies and it's in your skill listing, load it
+without asking. If it isn't in your listing, tell the user which skill is
+missing and ask whether to install it from the same collection this skill
+came from; don't apply it from memory.
+
+- `coding-agent-skill-references`: how a skill names other skills, and where its user and project preferences files live.
+- `agent-output-session-recap`: when recapping a session, a course correction that led to a skill edit rather than a memory gets its own 🗣 line.
+- `git-hygiene-commit-message-format`: commit message rules, the example of a direct match above.
+- `github-hygiene-pull-request-mirrors-commit`: pull request titles and bodies mirror the commit, the example of an adjacent match above.

@@ -1,5 +1,5 @@
 {
-  description = "coding-agent-session-recap: Coding-agent skill — render the current conversation as an alternating 🗣 / 🤖 dialogue script when the user asks for a session recap";
+  description = "coding-agent-skill-references: Coding-agent skill — refer to other skills by bare name in a closing Related skills section, and read a skill's user and project preferences files";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -12,7 +12,7 @@
     agent-skill-flake.lib.mkSkillFlake {
       inherit nixpkgs;
       source = import ../../source.nix;
-      skillName = "coding-agent-session-recap";
+      skillName = "coding-agent-skill-references";
       src = ./.;
     };
 }
