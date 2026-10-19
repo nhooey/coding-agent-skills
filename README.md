@@ -16,6 +16,7 @@ ergonomics, and where lessons get stored — rather than what it builds.
 
 | Skill                                                                                                                    | What it does                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)                                       | Before any Claude in Chrome work, finds which browser app and window the session drives, with a bundled macOS script, and switches until it matches the user's preferences.                                       |
 | [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Open/Waiting/Questions/Review/Todo/Blocked lists closing on what earlier turns left open. |
 | [`coding-agent-questions-as-first-class-prompts`](skills/coding-agent-questions-as-first-class-prompts/SKILL.md)         | Routes any question for the user through the agent's structured-question primitive (e.g. `AskUserQuestion`) instead of free-text prose that waits for a reply.                                                    |
 | [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson into the right existing skill with draft wording, falling back to memory only if no skill fits.                                                    |
@@ -45,6 +46,7 @@ Other apps: `reap` (remove garbage-collected/broken entries this flake owns) and
 Package outputs:
 
 - `agent-skills-nhooey-coding-agent-all` — the aggregate of every skill (also `default`)
+- `agent-skill-nhooey-coding-agent-browser-selection`
 - `agent-skill-nhooey-coding-agent-kanban-turn-responses`
 - `agent-skill-nhooey-coding-agent-questions-as-first-class-prompts`
 - `agent-skill-nhooey-coding-agent-route-feedback-to-skills-over-memory`
