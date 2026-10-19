@@ -22,6 +22,8 @@ The one reader of turns and their reply sections.
 
 The global `--human-only` flag counts a typed prompt alone as a turn, folding agent reports and task notifications into the turn under way.
 
+It runs from any directory: the transcript is looked up under the working directory's project first, then in whichever one project directory holds the session's `<session>.jsonl`. Its tests run with `python3 -I scripts/test_reply_turns.py`, and `nix flake check` runs them too.
+
 ## The `outstanding.py` script
 
 [`outstanding.py`](scripts/outstanding.py), in this skill's `scripts/` directory, works out what the 📌 roll-up needs. It reads the Open, Waiting, Review, Todo and Blocked lists of every reply, the 📌 section's groups among them, through `reply_turns.py`.
