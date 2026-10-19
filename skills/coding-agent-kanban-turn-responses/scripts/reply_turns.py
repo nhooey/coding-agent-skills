@@ -7,8 +7,9 @@ ad-hoc grep and jq over the session's JSONL was slow and drifted. This script is
 
 Takes: the session transcript, `~/.claude/projects/<slug>/<session>.jsonl`. The slug is the main
 checkout's path with `/` and `.` turned to `-`, a `.worktrees/` or `.claude/worktrees/` suffix
-stripped, taken from the working directory. The session is `CLAUDE_CODE_SESSION_ID`, overridden
-by `--session`; `--transcript FILE` names the file itself. Run from the project root:
+stripped, taken from the working directory; run from anywhere else, the one project directory
+holding `<session>.jsonl` is used. The session is `CLAUDE_CODE_SESSION_ID`, overridden by
+`--session`; `--transcript FILE` names the file itself. Run from any directory:
 `python3 scripts/reply_turns.py <subcommand>`. Standard library only.
 
 A turn starts at a `user` record with `turnOrigin` `human`, `peer` (an agent's `<agent-message`
@@ -83,11 +84,14 @@ def project_slug(cwd: str) -> str:
 
 
 def transcript_path(transcript: str | None, session: str | None, cwd: str, home: str) -> Path:
-    return (
-        Path(transcript)
-        if transcript
-        else Path(home) / ".claude" / "projects" / project_slug(cwd) / f"{session}.jsonl"
-    )
+    if transcript:
+        return Path(transcript)
+    projects = Path(home) / ".claude" / "projects"
+    by_cwd = projects / project_slug(cwd) / f"{session}.jsonl"
+    # A session id names one transcript, so run from any other directory, such as the skill's own
+    # `scripts/`, it is found in whichever project holds it.
+    found = () if by_cwd.exists() else tuple(projects.glob(f"*/{session}.jsonl"))
+    return found[0] if len(found) == 1 else by_cwd
 
 
 def read_records(path: Path) -> tuple[dict, ...]:

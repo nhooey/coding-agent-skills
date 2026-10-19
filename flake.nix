@@ -104,6 +104,7 @@
             pkgs.runCommand "kanban-lint-reply-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
               ''
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_lint_reply.py
+                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_turns.py
                 touch $out
               '';
 
