@@ -19,6 +19,7 @@ ergonomics, and where lessons get stored — rather than what it builds.
 | [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Open/Waiting/Questions/Review/Todo/Blocked lists closing on what earlier turns left open. |
 | [`coding-agent-questions-as-first-class-prompts`](skills/coding-agent-questions-as-first-class-prompts/SKILL.md)         | Routes any question for the user through the agent's structured-question primitive (e.g. `AskUserQuestion`) instead of free-text prose that waits for a reply.                                                    |
 | [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson into the right existing skill with draft wording, falling back to memory only if no skill fits.                                                    |
+| [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools and one-off checks inline, and turns anything run twice into a named, documented tool in the project instead of a cryptic scratchpad script.                              |
 | [`coding-agent-session-recap`](skills/coding-agent-session-recap/SKILL.md)                                               | Renders a session summary as alternating 🗣 user / 🤖 assistant one-liners, one sentence per turn, no tool-call noise.                                                                                            |
 
 ## Install
@@ -48,6 +49,7 @@ Package outputs:
 - `agent-skill-nhooey-coding-agent-kanban-turn-responses`
 - `agent-skill-nhooey-coding-agent-questions-as-first-class-prompts`
 - `agent-skill-nhooey-coding-agent-route-feedback-to-skills-over-memory`
+- `agent-skill-nhooey-coding-agent-scratchpad-scripts`
 - `agent-skill-nhooey-coding-agent-session-recap`
 
 ## Development
