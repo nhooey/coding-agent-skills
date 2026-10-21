@@ -158,8 +158,60 @@ class LintReplyTest(unittest.TestCase):
         self.assertEqual(kinds(text), [])
 
     def test_lists_parted_by_a_header_are_not_neighbours(self) -> None:
-        text = "✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **One**  \n   a.\n\n👉 **Todo:**  \n▔▔▔▔▔▔▔\n1. **Two**\n"
+        text = "✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **One**  \n   a.\n\n👉 **Todo:**  \n▔▔▔▔▔▔▔▔\n1. **Two**\n"
         self.assertEqual(kinds(text), [])
+
+    def test_list_among_options_captures_the_later_options(self) -> None:
+        text = (
+            "1. **Which findings to fix**  \n"
+            "   🔲 A. **The rebase claim**: drop \"current\".\n"
+            "      ➕ True again.\n"
+            "      ➖ A reviewer may still ask.\n"
+            "   🔲 B. **The Cost claim**: one graph breaks it.\n"
+            "   - The fix adds a clause.\n"
+            "   - It also rewords the count.\n"
+            "      ➕ Closes the counterexample.\n"
+            "      ➖ A longer claim.\n"
+            "   🔲 C. **The trigger**: needs the lock file.\n"
+            "      ➕ Reproducible.\n"
+            "      ➖ One more clause.\n"
+        )
+        self.assertEqual(kinds(text), [(6, "h"), (7, "a"), (7, "h")])
+
+    def test_list_in_an_option_note_and_numbered_option_note(self) -> None:
+        text = "1. **One**  \n   🔘 A. **First**: a.\n      - why\n      1. how\n      ➕ a.\n      ➖ b.\n"
+        self.assertEqual(kinds(text), [(3, "h"), (4, "h")])
+
+    def test_list_before_the_options_and_after_the_item(self) -> None:
+        text = (
+            "1. **One**  \n"
+            "   - a fact\n"
+            "   🔘 A. **First**: a.\n"
+            "      ➕ a.\n"
+            "      ➖ b.\n"
+            f"   {S}\n"
+            "2. **Two**  \n"
+            "   - a fact\n"
+        )
+        self.assertEqual(kinds(text), [])
+
+    def test_underline_widths(self) -> None:
+        headers = {
+            "✅ **Done:**": 8,
+            "🚧 **Open:**": 8,
+            "📝 **Logged:**": 10,
+            "🤔 **Waiting:**": 11,
+            "❓ **Questions:**": 13,
+            "🔍 **Review:**": 10,
+            "👉 **Todo:**": 8,
+            "🛑 **Blocked:**": 11,
+            "📌 **Outstanding from previous turns:**": 35,
+        }
+        for header, width in headers.items():
+            rule = "━" if header.startswith("📌") else "▔"
+            with self.subTest(header=header):
+                self.assertEqual(kinds(f"{header}  \n{rule * width}\n"), [])
+                self.assertEqual(kinds(f"{header}  \n{rule * (width + 1)}\n"), [(2, "i")])
 
     def test_skill_examples_are_clean(self) -> None:
         skill = HERE.parent

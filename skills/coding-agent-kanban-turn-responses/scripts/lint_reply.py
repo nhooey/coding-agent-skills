@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Check a draft final response's list separators and item summary lines before it is sent.
+"""Check a draft final response's list separators, item summary lines, Blocked options and header
+underlines before it is sent.
 
 Why it exists: a multi-line item is parted from the next item of its list by a line holding the
 list's indent and one separator character, SEPARATOR below, and nothing else, with no blank line
@@ -9,7 +10,10 @@ no better. A blank line beside the separator renders a double gap, and a separat
 one-line items, or under a header's underline, is a gap that should not be there. Reading for
 these by eye misses them. A numbered item opens on its bold summary alone, ending in a hard line
 break, 2 trailing spaces, with its sentence on the line beneath; without the break the 2 lines run
-together into one.
+together into one. An option's lines are plain lines of its item's paragraph, not a list, so a
+`-` or `1.` list among them starts a real list, and every line after it, the later options among
+them, joins its last entry and prints at its indent. A header's underline holds one character per
+column of the header as it renders, its emoji counting 2.
 
 Takes: the response on stdin, or in the FILE given. Prints one line per finding, `LINE: [k]
 message`, and exits 1 if there is any, else 0:
@@ -21,6 +25,8 @@ message`, and exits 1 if there is any, else 0:
     [e] a blank line directly above or below a separator line
     [f] a numbered item with text after its bold summary on the same line
     [g] a numbered item's summary line with lines under it but no hard line break
+    [h] a list line among a Blocked item's options, after its first option line
+    [i] a header underline whose width is not the header's
 
 A list is a run of items, `-`, `*`, `+`, `1.` or `1)`, at one indent: every list of the response,
 the 📌 roll-up's groups and an item's own numbered steps among them. An item is multi-line when
@@ -36,6 +42,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 
 # The one place the separator character is set: U+2800 BRAILLE PATTERN BLANK, which neither the
@@ -49,6 +56,7 @@ _ITEM = re.compile(r"^( *)([-*+]|\d{1,9}[.)])( +)(?=\S)")
 _SUMMARY = re.compile(r"\*\*.+?\*\*")
 _UNDERLINE = re.compile(r"^\s*[▔━]+\s*$")
 _FENCE = re.compile(r"^ *(```|~~~)")
+_OPTION = re.compile(r"^( *)(🔘|🔲|👍|👎) [A-Z]\. ")
 
 
 @dataclass
@@ -67,6 +75,16 @@ def _indent(text: str) -> int:
     return len(text) - len(text.lstrip(" "))
 
 
+def _width(text: str) -> int:
+    """Terminal columns of `text` as it renders: `**` markers dropped, wide characters counting 2."""
+    width = 0
+    for char in text.replace("**", ""):
+        if unicodedata.combining(char) or unicodedata.category(char) in ("Mn", "Me", "Cf") or 0xFE00 <= ord(char) <= 0xFE0F:
+            continue
+        width += 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+    return width
+
+
 def lint(text: str) -> list[tuple[int, str, str]]:
     """Return the findings as (line number, kind letter, message), in line order."""
     findings: list[tuple[int, str, str]] = []
@@ -75,6 +93,8 @@ def lint(text: str) -> list[tuple[int, str, str]]:
     fence: str | None = None
     after_underline = False
     previous = "text"  # the kind of the line before: "text", "blank" or "sep"
+    last_text = ""  # the line before, when it held text
+    options: int | None = None  # the indent of the open Blocked item's option lines
 
     def grow() -> None:
         for open_item in stack:
@@ -88,6 +108,7 @@ def lint(text: str) -> list[tuple[int, str, str]]:
                 fence = None
             continue
         if not line or _SPACES.match(line):
+            last_text = ""
             if line and stack:
                 findings.append(
                     (number, "c", f"a line of only whitespace; a gap between items is the indent then U+{ord(SEPARATOR):04X}")
@@ -101,7 +122,10 @@ def lint(text: str) -> list[tuple[int, str, str]]:
             if previous == "blank":
                 findings.append((number, "e", "blank line above a separator line renders a double gap"))
             previous = "sep"
+            last_text = ""
             indent = len(sep.group(1))
+            if options is not None and indent <= options:
+                options = None
             if after_underline:
                 findings.append((number, "b", "separator right under a header's underline"))
                 continue
@@ -119,13 +143,28 @@ def lint(text: str) -> list[tuple[int, str, str]]:
             continue
         previous = "text"
         after_underline = False
+        header, last_text = last_text, line
         if _UNDERLINE.match(line):
             stack.clear()
+            options = None
             after_underline = True
+            want, got = _width(header.rstrip()), len(line.strip())
+            if header and got != want:
+                findings.append((number, "i", f"underline of {got}; the header above it is {want} columns wide"))
             continue
+        option = _OPTION.match(line)
+        if option:
+            options = len(option.group(1))
         item = _ITEM.match(line)
         if item:
             indent = len(item.group(1))
+            if options is not None:
+                if indent >= options:
+                    findings.append(
+                        (number, "h", "a list among a Blocked item's options captures every line after it; write the note as plain lines")
+                    )
+                else:
+                    options = None
             while stack and stack[-1].indent > indent:
                 stack.pop()
             new = Item(number, indent, indent + len(item.group(2)) + len(item.group(3)))
@@ -141,6 +180,8 @@ def lint(text: str) -> list[tuple[int, str, str]]:
             items.append(new)
             continue
         indent = _indent(line)
+        if options is not None and indent < options:
+            options = None
         while stack and indent <= stack[-1].indent:
             stack.pop()
         grow()
