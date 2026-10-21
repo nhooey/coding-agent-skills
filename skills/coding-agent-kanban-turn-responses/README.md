@@ -87,6 +87,8 @@ Each list asks something different of you. Lists you only read need no reply; th
 
 For the example above, `Blocked.1: A` settles the backport: the next turn cherry-picks `a1b2c3d` onto 2.x, and the item leaves 📌 for good. An item from an earlier turn takes that turn's id, from its usage line: `Blocked.2 of 0f311c94: B`.
 
+A reply with a question in it is never read as a choice. `Blocked.1?: does A need Home Manager?` gets Blocked.1 back in its list with the answer under its summary and its options rewritten if the answer changed them, and it stays open until you answer it without a question.
+
 ## Use
 
 Install it with the repo's flake, either alone or with the other skills:

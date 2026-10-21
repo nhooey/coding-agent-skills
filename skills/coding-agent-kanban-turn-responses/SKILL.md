@@ -1,6 +1,6 @@
 ---
 name: coding-agent-kanban-turn-responses
-description: "Every response in a turn is kanban-shaped. A progress update between tool calls is one line whose state emoji show what is done, running and next. The final response is up to 8 underlined, numbered lists of what is new this turn, in a fixed order: Done, Open, Logged, Waiting, Questions answered, Review, Todo and Blocked, each numbered item's bold summary on its own line, then what earlier turns left open under 📌, in full on an interval and otherwise as one count line. Blocked items and their capital-lettered options each read alone, with pros and cons; multi-line items are parted by a separator line, and `scripts/lint_reply.py` checks both. `pending` reprints open decisions as written, `reassess` works them out afresh, and `Expand <item>` reprints one item in depth. Load at the start of every turn, before the first response the user will read."
+description: "Every response in a turn is kanban-shaped. A progress update between tool calls is one line whose state emoji show what is done, running and next. The final response is up to 8 underlined, numbered lists of what is new this turn, in a fixed order: Done, Open, Logged, Waiting, Questions answered, Review, Todo and Blocked, each numbered item's bold summary on its own line, then what earlier turns left open under 📌, in full on an interval and otherwise as one count line. Blocked items and their capital-lettered options each read alone, with pros and cons; an answer that asks a question is answered in its item, restated, never taken as a choice; multi-line items are parted by a separator line, and `scripts/lint_reply.py` checks both. `pending` reprints open decisions as written, `reassess` works them out afresh, and `Expand <item>` reprints one item in depth. Load at the start of every turn, before the first response the user will read."
 ---
 
 # Kanban turn responses
@@ -38,16 +38,16 @@ A step names its subject, never its category: "the 2020 resolutions", not "the d
 | 🚧 **Open:**               | work started and not finished, scope left out, a hold that will not announce itself when it lifts                                                                                                 | the agent        | yes                                                |
 | 📝 **Logged:**             | one item per entry written into the project's backlog, by index and title                                                                                                                         | the next agent   | no                                                 |
 | 🤔 **Waiting:**            | a background shell, subagent, hand-off or expected message, and what the session does with its result                                                                                             | the thing itself | yes                                                |
-| ❓ **Questions:**          | one item per question the user asked, the question as the summary, shortened or reworded where that reads better, the answer under it                                                             | nobody           | no                                                 |
+| ❓ **Questions:**          | one item per question the user asked that names no listed item, the question as the summary, shortened or reworded where that reads better, the answer under it                                   | nobody           | no                                                 |
 | 🔍 **Review:**             | one item per thing put in front of the user to read, listen to or look at, with where to open it and what to look for                                                                             | the user         | yes, until the user's reply shows they reviewed it |
 | 👉 **Todo:**               | one item per action asked of the user that is neither a choice nor a reading: a file to mark up, a prompt to paste, a command to run; each says what to do, where, by its path, and what it frees | the user         | yes                                                |
 | 🛑 **Blocked:**            | one item per decision raised, and per judgement call taken instead of asked, its reversal an option                                                                                               | the user         | yes                                                |
 
 An empty list is left out, and the final response opens on a line of prose. An answer takes the shape its information has: a comparison is a table, a sequence is numbered steps, parallel items are a list.
 
-**A list holds only what is new this turn.** An item an earlier turn printed, unchanged since, is not printed in its list again; it rolls up into 📌. An item whose state changed this turn, a Waiting agent that reported or a Todo item whose prompt is now ready, is new again and is printed in its list with the change.
+**A list holds only what is new this turn.** An item an earlier turn printed, unchanged since, is not printed in its list again; it rolls up into 📌. An item whose state changed this turn, a Waiting agent that reported, a Todo item whose prompt is now ready or an item whose question was answered, is new again and is printed in its list with the change.
 
-**A Review item stays open until the user's reply shows they reviewed it:** they comment on it, answer from it, or say they looked; a reply that only answers something else leaves it open. A review that is itself a choice goes in 🛑 Blocked, and a task that is not a reading goes in 👉 Todo.
+A review that is itself a choice goes in 🛑 Blocked, and a task that is not a reading goes in 👉 Todo.
 
 ## The shape
 
@@ -60,7 +60,7 @@ An empty list is left out, and the final response opens on a line of prose. An a
 
 ## A Blocked item
 
-- **Options:** they follow the item's summary and its note, recommended first, each on one line, as `glyph letter. **name**: consequence`. The letter is a capital, `A`, `B`, `C`, or `Y` and `N` for a yes-or-no question, never a number or a lower-case letter: an answer like `1.B` then cannot be misread, since the number always names the item and the capital the option, and a typo lands on no option instead of the wrong one. The user answers by item and letter, `Blocked.1: B`, or by name; the AskUserQuestion picker, when it opens, lists the same options in the same order.
+- **Options:** they follow the item's summary and its note, recommended first, each on one line, as `glyph letter. **name**: consequence`. The letter is a capital, `A`, `B`, `C`, or `Y` and `N` for a yes-or-no question, never a number or a lower-case letter: an answer like `1.B` then cannot be misread, since the number always names the item and the capital the option, and a typo lands on no option instead of the wrong one. The AskUserQuestion picker, when it opens, lists the same options in the same order.
 - **Pros and cons:** every option carries, indented under it, a ➕ line for what it gains and a ➖ line for what it costs; the recommended option's ➕ says why. ✅ and ❌ are kept for the Done header and the done and failed states, so a pro line never reads as finished work.
 - **Notes:** a note on the whole item is the line under its summary, and a note on one option goes under that option.
 - **Each item and option stands alone.** Read with nothing above it, the summary names the thing decided and each option names what it acts on and what it does to it: the entry number and its title in a few words, the file, branch, table or step, the count. A label that only points back, "the 4 gate bugs", "the fix above", "part S", says what it points at in the same line, "entries 0819, 1375, 0988 and 1374, the stale-database and stale-render bugs".
@@ -70,6 +70,12 @@ An empty list is left out, and the final response opens on a line of prose. An a
 | 🔘        | radio: exactly one chosen, including a pair of courses answered with a label | A, B, C |
 | 🔲        | checkbox: any number chosen, including none                                  | A, B, C |
 | 👍 and 👎 | binary: one yes-or-no question, both lines written                           | Y and N |
+
+## The user's answers
+
+- **By reference:** the user names an item by its list and number, `Blocked.2`, an option by its letter, `Blocked.2: B` or `2. B`, and either by its name. An item of an earlier turn carries that turn's id, from its usage line, before or after: `0f311c94.Blocked.2` or `Blocked.2 of 0f311c94`; with no id, the last final response is meant. An answer to an item of a turn that `reassess` replaced is read against the reassessed item that took it in.
+- **A question is never a choice.** An answer holding a question mark or any question, `Blocked.1?`, `B?`, "how would B work?", "why not C?", asks about the item and picks nothing, even when it names an option. Restate the item in its own list, whatever the list, with the answer as the note under its summary and its options rewritten where the answer changes them; the item stays open until the user answers it without a question. A question goes in ❓ Questions only when it names no listed item.
+- **A Review item stays open until the user's reply shows they reviewed it:** they comment on it, answer from it, or say they looked; a reply that only answers something else leaves it open.
 
 ## Earlier turns' items
 
@@ -106,7 +112,7 @@ Read [commands.md](commands.md) before running any of them, and put their output
 
 ## Around the lists
 
-- **Turn ids and the scripts:** a turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line; the user names a list by it, `Blocked.2 of 0f311c94`. The scripts sit in this skill's `scripts/` directory and use only the Python standard library: [`reply_turns.py`](scripts/reply_turns.py) reads turns and their sections, [`outstanding.py`](scripts/outstanding.py) works out the roll-up's interval, items and tags, [`box_table.py`](scripts/box_table.py) draws a box table, and [`lint_reply.py`](scripts/lint_reply.py) checks a draft's separator and summary lines; [scripts.md](scripts.md) lists their subcommands. Run them by their path under `~/.claude/skills/coding-agent-kanban-turn-responses/scripts/`.
+- **Turn ids and the scripts:** a turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line. The scripts sit in this skill's `scripts/` directory and use only the Python standard library: [`reply_turns.py`](scripts/reply_turns.py) reads turns and their sections, [`outstanding.py`](scripts/outstanding.py) works out the roll-up's interval, items and tags, [`box_table.py`](scripts/box_table.py) draws a box table, and [`lint_reply.py`](scripts/lint_reply.py) checks a draft's separator and summary lines; [scripts.md](scripts.md) lists their subcommands. Run them by their path under `~/.claude/skills/coding-agent-kanban-turn-responses/scripts/`.
 - **Time:** say how long work takes, never when it lands or goes out, and set no deadline.
 - **Tables:** a box table in a `text` block, as `markdown-hygiene-terminal-rendering` draws it; `scripts/box_table.py` draws one from tab-separated rows on stdin. A cell holding a state holds its emoji from the progress-update table, not a word.
 - **Links:** every URL, a local served page as much as a web page, is a Markdown link opened by 🔗 and a space, `🔗 [the trial projection](http://127.0.0.1:8765/…)`, kept out of `text` blocks and box tables as `markdown-hygiene-terminal-rendering` says: a table's cell holds the label, and the link follows the table as a 🔗 line, or a list of them.
@@ -116,7 +122,7 @@ Read [commands.md](commands.md) before running any of them, and put their output
 
 **Why:** the user reads a response once and acts on it. A fixed shape lets them see progress as it happens, find their questions, sort the rest by position and answer by reference. A list reprinted every turn is read every turn, so what has not changed rolls up out of the way, and between full roll-ups shrinks to one count line.
 
-**How to apply:** between tool calls, write a one-line progress update when a step finishes or starts. In the final response, write this turn's new items in the non-empty lists, in the table's order, each header underlined, each numbered item's summary on a line of its own, and each multi-line item parted by a separator line. Then run `scripts/outstanding.py due`: on `full`, draft the roll-up with `scripts/outstanding.py render` and prune what is settled; on `counts`, close on the count line, `scripts/outstanding.py render --counts` corrected for what is settled. Last, run `scripts/lint_reply.py` on the whole draft and fix every line it reports before sending it.
+**How to apply:** read the user's answers first: a choice is acted on, and a question about an item is answered in that item, restated in its list. Between tool calls, write a one-line progress update when a step finishes or starts. In the final response, write this turn's new items in the non-empty lists, in the table's order, each header underlined, each numbered item's summary on a line of its own, and each multi-line item parted by a separator line. Then run `scripts/outstanding.py due`: on `full`, draft the roll-up with `scripts/outstanding.py render` and prune what is settled; on `counts`, close on the count line, `scripts/outstanding.py render --counts` corrected for what is settled. Last, run `scripts/lint_reply.py` on the whole draft and fix every line it reports before sending it.
 
 ## When to apply
 
