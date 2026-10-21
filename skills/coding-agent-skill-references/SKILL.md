@@ -117,4 +117,4 @@ missing and ask whether to install it from the same collection this skill
 came from; don't apply it from memory.
 
 - `coding-agent-route-feedback-to-skills-over-memory`: routes a lesson about how the agent works into the right skill, or its preferences file, before memory.
-- `git-hygiene-no-history-in-code`: a tracked file states the current rule, and its history goes in the commit message.
+- `git-hygiene-no-history-in-tracked-files`: a tracked file states the current rule, and its history goes in the commit message.
