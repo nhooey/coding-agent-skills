@@ -136,6 +136,11 @@ Keep the proposal concrete:
   for the user to evaluate — they need to see the wording.
 - Match the surrounding skill's voice — terse imperative, no hedging,
   no first-person.
+- State the rule as it now stands. Leave out who asked for it, when,
+  the user's words and the incident behind it: no dated "rulings"
+  table, no "changed from X". A skill is tracked in git, so that
+  history goes in the commit message that lands the edit, where
+  `git log` on the file finds it.
 
 If the lesson reasonably fits in two places, name both and ask which
 the user prefers. Don't pick blindly.
@@ -253,4 +258,5 @@ came from; don't apply it from memory.
 - `coding-agent-skill-references`: how a skill names other skills, and where its user and project preferences files live.
 - `agent-output-session-recap`: when recapping a session, a course correction that led to a skill edit rather than a memory gets its own 🗣 line.
 - `git-hygiene-commit-message-format`: commit message rules, the example of a direct match above.
+- `git-hygiene-no-history-in-code`: a tracked file states the current rule, and its history goes in the commit message.
 - `github-hygiene-pull-request-mirrors-commit`: pull request titles and bodies mirror the commit, the example of an adjacent match above.
