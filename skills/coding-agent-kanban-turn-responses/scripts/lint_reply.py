@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check a draft final response's list separators before it is sent.
+"""Check a draft final response's list separators and item summary lines before it is sent.
 
 Why it exists: a multi-line item is parted from the next item of its list by a line holding the
 list's indent and one separator character, SEPARATOR below, and nothing else, with no blank line
@@ -7,7 +7,9 @@ on either side. An empty line between items renders no gap, and a line of spaces
 none depending on its width; a U+00A0 typed there reaches the terminal as a plain space, so it is
 no better. A blank line beside the separator renders a double gap, and a separator between
 one-line items, or under a header's underline, is a gap that should not be there. Reading for
-these by eye misses them.
+these by eye misses them. A numbered item opens on its bold summary alone, ending in a hard line
+break, 2 trailing spaces, with its sentence on the line beneath; without the break the 2 lines run
+together into one.
 
 Takes: the response on stdin, or in the FILE given. Prints one line per finding, `LINE: [k]
 message`, and exits 1 if there is any, else 0:
@@ -17,6 +19,8 @@ message`, and exits 1 if there is any, else 0:
     [c] a line holding only spaces, tabs or U+00A0, but not empty, inside a list
     [d] a separator line whose indent is not its list's indent, the item's text column
     [e] a blank line directly above or below a separator line
+    [f] a numbered item with text after its bold summary on the same line
+    [g] a numbered item's summary line with lines under it but no hard line break
 
 A list is a run of items, `-`, `*`, `+`, `1.` or `1)`, at one indent: every list of the response,
 the 📌 roll-up's groups and an item's own numbered steps among them. An item is multi-line when
@@ -42,6 +46,7 @@ NBSP = chr(0xA0)
 _SEP = re.compile(r"^( *)" + re.escape(SEPARATOR) + r" *$")
 _SPACES = re.compile(r"^[ \t" + NBSP + r"]+$")
 _ITEM = re.compile(r"^( *)([-*+]|\d{1,9}[.)])( +)(?=\S)")
+_SUMMARY = re.compile(r"\*\*.+?\*\*")
 _UNDERLINE = re.compile(r"^\s*[▔━]+\s*$")
 _FENCE = re.compile(r"^ *(```|~~~)")
 
@@ -55,6 +60,7 @@ class Item:
     prev: Item | None = None
     sep_before: int | None = None
     sep_after: int | None = None
+    unbroken: bool = False  # a summary alone on its line, with no hard line break after it
 
 
 def _indent(text: str) -> int:
@@ -123,6 +129,10 @@ def lint(text: str) -> list[tuple[int, str, str]]:
             while stack and stack[-1].indent > indent:
                 stack.pop()
             new = Item(number, indent, indent + len(item.group(2)) + len(item.group(3)))
+            summary = _SUMMARY.match(line, item.end()) if item.group(2)[0].isdigit() else None
+            if summary and line[summary.end() :].strip():
+                findings.append((number, "f", "text after the bold summary; it goes on the line beneath"))
+            new.unbroken = bool(summary) and not line[summary.end() :].strip() and not line.endswith("  ")
             if stack and stack[-1].indent == indent:
                 prev = stack.pop()
                 new.prev, new.sep_before = prev, prev.sep_after
@@ -139,6 +149,8 @@ def lint(text: str) -> list[tuple[int, str, str]]:
             fence = fence_open.group(1)
 
     for new in items:
+        if new.unbroken and new.lines > 1:
+            findings.append((new.line, "g", "summary line needs a hard line break, 2 trailing spaces"))
         prev = new.prev
         if prev is None:
             continue

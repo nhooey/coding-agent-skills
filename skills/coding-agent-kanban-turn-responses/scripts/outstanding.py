@@ -11,7 +11,8 @@ line for, an agent message (`<agent-message`) or a task notification included: t
 0 (`₀`), the one before it -1 (`₋₁`), and so on. Items are the top-level bullet or numbered lines of
 the Open, Waiting, Review (once To review), Todo (once To do) and Blocked lists of every reply, and of the 📌 section's
 subsections ("Still open from earlier" or "Outstanding from previous turns"), which carry the same
-list headers. An item's summary is its bold text without a trailing colon, else the line.
+list headers. An item's summary is its bold text without a trailing colon, else the line. A summary
+alone on its line is joined to the line beneath it, its body.
 
 An item is matched across turns by its list and its subject key, so a reworded summary is the same item:
 `entry 1411` where the summary names a backlog entry, else `branch <name>` for its first code span shaped
@@ -49,6 +50,7 @@ from functools import reduce
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lint_reply  # noqa: E402
 import reply_turns as rt  # noqa: E402
 
 # list key -> (reply header names, glyph, header text), in the skill's order
@@ -106,7 +108,7 @@ class Item:
 
     @property
     def body(self) -> str:
-        """The line after its bold summary: what a restatement compares, so a reworded summary alone is no change."""
+        """The text after its bold summary, on its line or the one beneath: what a restatement compares, so a reworded summary alone is no change."""
         text = _PREFIX.sub("", self.line)
         bold = _BOLD.search(text)
         return text[bold.end() :] if bold else text
@@ -153,24 +155,36 @@ def index_of(turns: tuple[rt.Turn, ...], turn: rt.Turn) -> int:
     return turns.index(turn) - (len(turns) - 1)
 
 
-def _scan(state: tuple[str | None, bool, tuple[str, ...]], line: str) -> tuple[str | None, bool, tuple[str, ...]]:
-    key, pinned, found = state
+def _awaits_body(item_text: str) -> bool:
+    """Whether an item line is its bold summary alone, its sentence on the line beneath."""
+    bold = _BOLD.match(item_text)
+    return bool(bold) and not item_text[bold.end() :].strip()
+
+
+def _scan(
+    state: tuple[str | None, bool, tuple[str, ...], bool], line: str
+) -> tuple[str | None, bool, tuple[str, ...], bool]:
+    key, pinned, found, awaiting = state
     header = rt._HEADER.match(line)
     item = _ITEM.match(line)
+    body = line.strip()
     return (
-        (_KEY_OF_NAME.get(header.group(1)), pinned, found)
+        (_KEY_OF_NAME.get(header.group(1)), pinned, found, False)
         if header
-        else (None, True, found)
+        else (None, True, found, False)
         if _PIN.match(line)
-        else (key, pinned, (*found, f"{key}\t{int(pinned)}\t{item.group(1).strip()}"))
+        else (key, pinned, (*found, f"{key}\t{int(pinned)}\t{item.group(1).strip()}"), _awaits_body(item.group(1).strip()))
         if key and item
+        # The summary's own line holds no sentence, so the line beneath it is the item's body.
+        else (key, pinned, (*found[:-1], f"{found[-1]} {body}"), False)
+        if awaiting and body and body != lint_reply.SEPARATOR
         else state
     )
 
 
 def items_of_text(text: str) -> tuple[tuple[str, bool, str], ...]:
-    """Each (list key, inside a 📌 section, item line) of one reply text."""
-    _, _, found = reduce(_scan, text.splitlines(), (None, False, ()))
+    """Each (list key, inside a 📌 section, item line) of one reply text, a summary alone on its line joined to the line beneath."""
+    _, _, found, _ = reduce(_scan, text.splitlines(), (None, False, (), False))
     return tuple((k, p == "1", line) for k, p, line in (f.split("\t", 2) for f in found))
 
 
