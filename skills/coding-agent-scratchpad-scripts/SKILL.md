@@ -30,15 +30,9 @@ _A script an agent writes to its scratchpad is read once, by nobody, and run onc
 
 ## Why the scripts pile up
 
-Each Bash call starts a fresh shell, so a helper the agent wants again gets written to a file instead of kept in the shell. Small edits get done as throwaway Python instead of with the edit tool. And subagents each start their own series, since none can see what the others wrote.
+Each Bash call starts a fresh shell, so a helper the agent wants again gets written to a file instead of kept in the shell. Small edits get done as throwaway Python instead of with the edit tool. And subagents each start their own series, since none can see what the others wrote. Most such scripts run once or never, and the ones run again usually redo a job the project already has a command for.
 
-In one session's scratchpad, after two days: 232 files, 111 of them scripts. Most had names like `t.py`, `m.ts`, `fx.ts`, `one.py` and `peek.py`, or came in series like `ed1.py` to `ed8.py` and `fix_test1.py` to `fix_test3.py`. About 53 ran once, about 25 ran more than once, and 37 never ran by path. The ones reused mostly redid a job the repo already had a command for.
-
-## Rulings
-
-| Ruling     | The user's words                                                                                                                                                                                                              | What it set                                                                                         |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 2026-10-20 | "The agent tends to write a lot of cryptic scratchpad scripts for potentially-repeatable actions that it will do."; "make it a skill about scratchpad scripts, or see if there's an existing skill on the internet for that." | the 5 rules; no published skill covering this was found, in Claude skill guides or obra/superpowers |
+## Why and how to apply
 
 **Why:** a scratchpad script with a cryptic name can't be found, trusted or reused, so the next agent writes another. A tool with a name and a docstring is found and reused by every later session, and an edit made with the edit tool can be reviewed.
 
