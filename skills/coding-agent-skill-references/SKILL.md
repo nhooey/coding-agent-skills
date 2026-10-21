@@ -9,8 +9,9 @@ description: |
   skills section and its fixed intro, loading related skills without asking
   and asking before installing a missing one, the user and project
   preferences files beside the installed skill and their precedence, the
-  "Your preferences" section that reads them, and why relationships go in the
-  body rather than in custom frontmatter.
+  "Your preferences" section that reads them, why relationships go in the
+  body rather than in custom frontmatter, and stating rules as they stand,
+  with their history in commit messages rather than in the skill.
 tags: [skills, authoring]
 ---
 
@@ -88,6 +89,10 @@ file overrides the user's, and the user's overrides this skill's defaults.
 
 Claude Code runs the line that opens on an exclamation mark when it loads the skill and puts the files' contents in its place, the user's first and the project's after it, so the later one wins where they differ. Another agent sees the line as text, and the paragraph under it tells it to read the same files itself.
 
+## A skill states its rules as they stand
+
+A SKILL.md, like every file tracked in git, holds the current rules only. No table of dated rulings, no quotes of who asked, no "this used to say X": an agent loading the skill needs the rule, and the history only costs it context. Why a rule was set, by whom and after what incident goes in the commit message that set it, where `git log` on the file finds it. A reason the agent needs to apply the rule well stays, written as a reason, not as a story.
+
 ## Which feedback goes where
 
 When the user corrects how a skill works:
@@ -102,6 +107,7 @@ When the user corrects how a skill works:
 - Writing or editing a SKILL.md that names another skill, or that should read a preferences file.
 - Loading a skill whose Related skills section lists others.
 - Deciding where a correction about a skill belongs: the skill, or its preferences file.
+- Writing a lesson into a skill: the rule goes in, its history goes in the commit message.
 
 ## Related skills
 
@@ -111,3 +117,4 @@ missing and ask whether to install it from the same collection this skill
 came from; don't apply it from memory.
 
 - `coding-agent-route-feedback-to-skills-over-memory`: routes a lesson about how the agent works into the right skill, or its preferences file, before memory.
+- `git-hygiene-no-history-in-code`: a tracked file states the current rule, and its history goes in the commit message.
