@@ -50,14 +50,14 @@ The parser regression came from the tokenizer rewrite; the fix is committed.
 
 ✅ **Done:**  
 ▔▔▔▔▔▔▔▔
-1. **Tokenizer fix:** `src/lexer.rs` stops splitting `::` inside generics;
-   commit `a1b2c3d`.
+1. **Tokenizer fix**  
+   `src/lexer.rs` stops splitting `::` inside generics; commit `a1b2c3d`.
    ⠀
-2. **Test suite:** 412 passed, 0 failed.
+2. **Test suite, 412 passed and 0 failed**
 
 🛑 **Blocked:**  
 ▔▔▔▔▔▔▔▔▔▔▔
-1. **Whether to backport the `src/lexer.rs` tokenizer fix to the 2.x branch:**
+1. **Backport the `src/lexer.rs` tokenizer fix to the 2.x branch?**  
    🔘 A. **Cherry-pick commit a1b2c3d onto 2.x**: one commit, CI reruns.
       ➕ 2.x users get the fix in the next patch release.
       ➖ 2.x has its own lexer tests, which may need updating.
