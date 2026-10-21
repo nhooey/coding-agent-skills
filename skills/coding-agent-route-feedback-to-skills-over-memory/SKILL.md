@@ -258,5 +258,5 @@ came from; don't apply it from memory.
 - `coding-agent-skill-references`: how a skill names other skills, and where its user and project preferences files live.
 - `agent-output-session-recap`: when recapping a session, a course correction that led to a skill edit rather than a memory gets its own 🗣 line.
 - `git-hygiene-commit-message-format`: commit message rules, the example of a direct match above.
-- `git-hygiene-no-history-in-code`: a tracked file states the current rule, and its history goes in the commit message.
+- `git-hygiene-no-history-in-tracked-files`: a tracked file states the current rule, and its history goes in the commit message.
 - `github-hygiene-pull-request-mirrors-commit`: pull request titles and bodies mirror the commit, the example of an adjacent match above.
