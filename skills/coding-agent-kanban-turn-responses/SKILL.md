@@ -9,7 +9,7 @@ _Every response in a turn shows what is done, what is still open and what the us
 
 A project may extend this skill with a skill of its own, or with its preferences file ([Your preferences](#your-preferences)), adding its own backlog path or link rules; the project's wins where the two differ.
 
-How a response renders in a terminal, its box tables, glyph widths, hard line breaks, separator lines and links, follows `markdown-hygiene-terminal-rendering`; this skill says only which of those a turn response uses and where.
+How a response renders in a terminal, its tables, glyph widths, hard line breaks, separator lines and links, follows `markdown-hygiene-terminal-rendering`; this skill says only which of those a turn response uses and where.
 
 ## Progress updates
 
@@ -112,11 +112,11 @@ Read [commands.md](commands.md) before running any of them, and put their output
 
 ## Around the lists
 
-- **Turn ids and the scripts:** a turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line. The scripts sit in this skill's `scripts/` directory and use only the Python standard library: [`reply_turns.py`](scripts/reply_turns.py) reads turns and their sections, [`outstanding.py`](scripts/outstanding.py) works out the roll-up's interval, items and tags, [`box_table.py`](scripts/box_table.py) draws a box table, and [`lint_reply.py`](scripts/lint_reply.py) checks a draft's separator, summary, option and underline lines; [scripts.md](scripts.md) lists their subcommands. Run them by their path under `~/.claude/skills/coding-agent-kanban-turn-responses/scripts/`.
+- **Turn ids and the scripts:** a turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line. The scripts sit in this skill's `scripts/` directory and use only the Python standard library: [`reply_turns.py`](scripts/reply_turns.py) reads turns and their sections, [`outstanding.py`](scripts/outstanding.py) works out the roll-up's interval, items and tags, [`box_table.py`](scripts/box_table.py) `--probe` checks a glyph's width, and [`lint_reply.py`](scripts/lint_reply.py) checks a draft's separator, summary, option and underline lines; [scripts.md](scripts.md) lists their subcommands. Run them by their path under `~/.claude/skills/coding-agent-kanban-turn-responses/scripts/`.
 - **Time:** say how long work takes, never when it lands or goes out, and set no deadline.
-- **Tables:** a box table in a `text` block, as `markdown-hygiene-terminal-rendering` draws it; `scripts/box_table.py` draws one from tab-separated rows on stdin. A cell holding a state holds its emoji from the progress-update table, not a word.
-- **Links:** every URL, a local served page as much as a web page, is a Markdown link opened by 🔗 and a space, `🔗 [the trial projection](http://127.0.0.1:8765/…)`, kept out of `text` blocks and box tables as `markdown-hygiene-terminal-rendering` says: a table's cell holds the label, and the link follows the table as a 🔗 line, or a list of them.
-- **Glyphs:** the only ones in a response are the 8 header glyphs, `▔`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the box-drawing lines, the 6 state emoji, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
+- **Tables:** a plain Markdown table, as `markdown-hygiene-terminal-rendering` writes it, never a box table in a `text` block. A cell holding a state holds its emoji from the progress-update table, not a word.
+- **Links:** every URL, a local served page as much as a web page, is a Markdown link opened by 🔗 and a space, `🔗 [the trial projection](http://127.0.0.1:8765/…)`, kept out of `text` blocks as `markdown-hygiene-terminal-rendering` says. In a table's cell the link goes without the 🔗, its label short enough not to wrap.
+- **Glyphs:** the only ones in a response are the 8 header glyphs, `▔`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the 6 state emoji, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
 
 ## Why and how to apply
 
@@ -144,6 +144,6 @@ without asking. If it isn't in your listing, tell the user which skill is
 missing and ask whether to install it from the same collection this skill
 came from; don't apply it from memory.
 
-- `markdown-hygiene-terminal-rendering`: how box tables, glyph widths, hard line breaks, separator lines and links render in a terminal.
+- `markdown-hygiene-terminal-rendering`: how tables, glyph widths, hard line breaks, separator lines and links render in a terminal.
 - `writing-hygiene-refer-by-canonical-label`: name each thing by one label every time, never pointing back with a vague phrase.
 - `coding-agent-skill-references`: how a skill names other skills and reads its preferences files.
