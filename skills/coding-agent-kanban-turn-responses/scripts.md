@@ -6,7 +6,7 @@ Both read `~/.claude/projects/<slug>/<session>.jsonl`, the session from `CLAUDE_
 
 ## What a turn is
 
-A turn opens on every prompt the user sees a usage line for: a typed prompt, an agent's report (`<agent-message`) and a task notification. Its reply is the text the session wrote up to the next such prompt. A turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line; the user names a list by it, `Blocked.2 of 0f311c94`. Older replies used the last 6 characters of the prompt's uuid, `7c89a7`, and `find` still takes them. Both scripts read the headers earlier turns carry, `To do` beside `Todo`, and `Still open from earlier` beside `Outstanding from previous turns`.
+A turn opens on every prompt the user sees a usage line for: a typed prompt, an agent's report (`<agent-message`) and a task notification. Its reply is the text the session wrote up to the next such prompt. A turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line; the user names a list by it, `Decisions.2 of 0f311c94`. Older replies used the last 6 characters of the prompt's uuid, `7c89a7`, and `find` still takes them. Both scripts read the headers earlier turns carry, `Open` beside `Unfinished`, `Questions` beside `Answers`, `To review` beside `Review`, `To do` beside `Todo`, `Blocked` beside `Decisions`, and `Still open from earlier` beside `Outstanding from previous turns`.
 
 ## The `scripts/reply_turns.py` script
 
@@ -17,8 +17,8 @@ The one reader of turns and their reply sections.
 | `id`                                       | the current turn's id                                                  |
 | `list [-n N] [--grep TEXT]`                | one line per turn, newest last: id, timestamp, the prompt's first line |
 | `show ID [--prompt-only] [--section NAME]` | the turn's prompt and reply, or one section from every reply text      |
-| `blocked [--since ID]`                     | each turn's Blocked section, from turn ID inclusive                    |
-| `open [--since ID]`                        | each turn's Review, Todo and Blocked sections, under the turn id       |
+| `decisions [--since ID]`                   | each turn's Decisions section, from turn ID inclusive; `blocked` too   |
+| `open [--since ID]`                        | each turn's Review, Todo and Decisions sections, under the turn id     |
 
 The global `--human-only` flag counts a typed prompt alone as a turn, folding agent reports and task notifications into the turn under way.
 
@@ -26,7 +26,7 @@ It runs from any directory: the transcript is looked up under the working direct
 
 ## The `outstanding.py` script
 
-[`outstanding.py`](scripts/outstanding.py), in this skill's `scripts/` directory, works out what the 📌 roll-up needs. It reads the Open, Waiting, Review, Todo and Blocked lists of every reply, the 📌 section's groups among them, through `reply_turns.py`.
+[`outstanding.py`](scripts/outstanding.py), in this skill's `scripts/` directory, works out what the 📌 roll-up needs. It reads the Unfinished, Waiting, Review, Todo and Decisions lists of every reply, the 📌 section's groups among them, through `reply_turns.py`.
 
 | Subcommand                                              | Prints                                                                                                                                           |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -52,7 +52,7 @@ The key reads the summary alone, the bold text before its colon. Different items
 
 ## The `lint_reply.py` script
 
-[`lint_reply.py`](scripts/lint_reply.py) reads no transcript: it checks a draft final response, on stdin or in the file named, for the separator lines, numbered items' summary lines, Blocked options and header underlines the skill requires, and is run on every draft before it is sent. It prints `LINE: [k] message` per finding and exits 1 if there is any, else 0. Lines inside ``` or ~~~ fences are not read.
+[`lint_reply.py`](scripts/lint_reply.py) reads no transcript: it checks a draft final response, on stdin or in the file named, for the separator lines, numbered items' summary lines, Decisions options and header underlines the skill requires, and is run on every draft before it is sent. It prints `LINE: [k] message` per finding and exits 1 if there is any, else 0. Lines inside ``` or ~~~ fences are not read.
 
 ```text
 python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_reply.py draft.md
@@ -67,7 +67,7 @@ python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_repl
 | `e`  | a blank line directly above or below a separator line, which renders a double gap                 |
 | `f`  | a numbered item with text after its bold summary on the same line                                 |
 | `g`  | a numbered item's summary line with lines under it but no hard line break, 2 trailing spaces      |
-| `h`  | a `-` or `1.` list line among a Blocked item's options, after its first option line               |
+| `h`  | a `-` or `1.` list line among a Decisions item's options, after its first option line             |
 | `i`  | a header underline whose width is not the header's, its emoji counting 2 and `**` not counted     |
 
 A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them, and a header or a line of prose at the item's indent ends it. Its tests run with `python3 -I scripts/test_lint_reply.py`, and `nix flake check` runs them too.

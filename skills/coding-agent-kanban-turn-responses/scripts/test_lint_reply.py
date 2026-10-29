@@ -22,11 +22,11 @@ S = lint_reply.SEPARATOR
 NBSP = lint_reply.NBSP
 
 
-def blocked(gap: str) -> str:
-    """A 2-item Blocked list whose items are parted by the line `gap`."""
+def decisions(gap: str) -> str:
+    """A 2-item Decisions list whose items are parted by the line `gap`."""
     return (
-        "🛑 **Blocked:**  \n"
-        "▔▔▔▔▔▔▔▔▔▔▔\n"
+        "🧠 **Decisions:**  \n"
+        "▔▔▔▔▔▔▔▔▔▔▔▔▔\n"
         "1. **How the stock counts are stored**  \n"
         "   By store and day.\n"
         "   🔘 A. **One row per product per store**: the counts table grows by store.\n"
@@ -68,27 +68,27 @@ def fenced_block(path: pathlib.Path, heading: str) -> str:
 
 
 class LintReplyTest(unittest.TestCase):
-    def test_correct_blocked_list(self) -> None:
-        self.assertEqual(kinds(blocked(f"   {S}")), [])
+    def test_correct_decisions_list(self) -> None:
+        self.assertEqual(kinds(decisions(f"   {S}")), [])
 
     def test_one_space_runs_items_together(self) -> None:
-        self.assertEqual(kinds(blocked(" ")), [(8, "c"), (9, "a")])
+        self.assertEqual(kinds(decisions(" ")), [(8, "c"), (9, "a")])
 
     def test_spaces_where_the_separator_belongs(self) -> None:
-        self.assertEqual(kinds(blocked("    ")), [(8, "c"), (9, "a")])
+        self.assertEqual(kinds(decisions("    ")), [(8, "c"), (9, "a")])
 
     def test_nbsp_separator(self) -> None:
-        self.assertEqual(kinds(blocked(f"   {NBSP}")), [(8, "c"), (9, "a")])
+        self.assertEqual(kinds(decisions(f"   {NBSP}")), [(8, "c"), (9, "a")])
 
     def test_empty_line_is_no_separator(self) -> None:
-        self.assertEqual(kinds(blocked("")), [(9, "a")])
+        self.assertEqual(kinds(decisions("")), [(9, "a")])
 
     def test_no_line_at_all(self) -> None:
-        text = blocked("X").replace("X\n", "")
+        text = decisions("X").replace("X\n", "")
         self.assertEqual(kinds(text), [(8, "a")])
 
     def test_blank_lines_around_separator(self) -> None:
-        self.assertEqual(kinds(blocked(f"\n   {S}\n")), [(9, "e"), (10, "e")])
+        self.assertEqual(kinds(decisions(f"\n   {S}\n")), [(9, "e"), (10, "e")])
 
     def test_one_line_items_sit_together(self) -> None:
         self.assertEqual(kinds(ONE_LINE_RUN), [])
@@ -198,13 +198,13 @@ class LintReplyTest(unittest.TestCase):
     def test_underline_widths(self) -> None:
         headers = {
             "✅ **Done:**": 8,
-            "🚧 **Open:**": 8,
+            "🚧 **Unfinished:**": 14,
             "📝 **Logged:**": 10,
             "🤔 **Waiting:**": 11,
-            "❓ **Questions:**": 13,
+            "❓ **Answers:**": 11,
             "🔍 **Review:**": 10,
             "👉 **Todo:**": 8,
-            "🛑 **Blocked:**": 11,
+            "🧠 **Decisions:**": 13,
             "📌 **Outstanding from previous turns:**": 35,
         }
         for header, width in headers.items():
@@ -215,14 +215,14 @@ class LintReplyTest(unittest.TestCase):
 
     def test_skill_examples_are_clean(self) -> None:
         skill = HERE.parent
-        for path, heading in [(skill / "examples.md", "## A Blocked list"), (skill / "README.md", "The final response:")]:
+        for path, heading in [(skill / "examples.md", "## A Decisions list"), (skill / "README.md", "The final response:")]:
             with self.subTest(path=path.name):
                 if not path.exists():  # README.md stays in the repo, out of the installed skill
                     continue
                 self.assertEqual(kinds(fenced_block(path, heading)), [])
 
     def test_main_exit_codes(self) -> None:
-        for text, code in [(blocked(f"   {S}"), 0), (blocked(" "), 1)]:
+        for text, code in [(decisions(f"   {S}"), 0), (decisions(" "), 1)]:
             sys.stdin = io.StringIO(text)
             try:
                 with redirect_stdout(io.StringIO()):

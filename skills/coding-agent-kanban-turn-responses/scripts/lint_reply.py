@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Check a draft final response's list separators, item summary lines, Blocked options and header
-underlines before it is sent.
+"""Check a draft final response's list separators, item summary lines, Decisions options and
+header underlines before it is sent.
 
 Why it exists: a multi-line item is parted from the next item of its list by a line holding the
 list's indent and one separator character, SEPARATOR below, and nothing else, with no blank line
@@ -25,7 +25,7 @@ message`, and exits 1 if there is any, else 0:
     [e] a blank line directly above or below a separator line
     [f] a numbered item with text after its bold summary on the same line
     [g] a numbered item's summary line with lines under it but no hard line break
-    [h] a list line among a Blocked item's options, after its first option line
+    [h] a list line among a Decisions item's options, after its first option line
     [i] a header underline whose width is not the header's
 
 A list is a run of items, `-`, `*`, `+`, `1.` or `1)`, at one indent: every list of the response,
@@ -94,7 +94,7 @@ def lint(text: str) -> list[tuple[int, str, str]]:
     after_underline = False
     previous = "text"  # the kind of the line before: "text", "blank" or "sep"
     last_text = ""  # the line before, when it held text
-    options: int | None = None  # the indent of the open Blocked item's option lines
+    options: int | None = None  # the indent of the open Decisions item's option lines
 
     def grow() -> None:
         for open_item in stack:
@@ -161,7 +161,7 @@ def lint(text: str) -> list[tuple[int, str, str]]:
             if options is not None:
                 if indent >= options:
                     findings.append(
-                        (number, "h", "a list among a Blocked item's options captures every line after it; write the note as plain lines")
+                        (number, "h", "a list among a Decisions item's options captures every line after it; write the note as plain lines")
                     )
                 else:
                     options = None

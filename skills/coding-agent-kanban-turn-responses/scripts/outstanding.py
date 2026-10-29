@@ -9,9 +9,9 @@ reads transcripts through `reply_turns.py` (imported, not copied).
 The relative index counts the turns `reply_turns.py list` prints, which are every turn the user sees a usage
 line for, an agent message (`<agent-message`) or a task notification included: the current turn is
 0 (`₀`), the one before it -1 (`₋₁`), and so on. Items are the top-level bullet or numbered lines of
-the Open, Waiting, Review (once To review), Todo (once To do) and Blocked lists of every reply, and of the 📌 section's
-subsections ("Still open from earlier" or "Outstanding from previous turns"), which carry the same
-list headers. An item's summary is its bold text without a trailing colon, else the line. A summary
+the Unfinished (once Open), Waiting, Review (once To review), Todo (once To do) and Decisions (once
+Blocked) lists of every reply, and of the 📌 section's subsections ("Still open from earlier" or
+"Outstanding from previous turns"), which carry the same list headers. An item's summary is its bold text without a trailing colon, else the line. A summary
 alone on its line is joined to the line beneath it, its body.
 
 An item is matched across turns by its list and its subject key, so a reworded summary is the same item:
@@ -53,14 +53,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lint_reply  # noqa: E402
 import reply_turns as rt  # noqa: E402
 
-# list key -> (reply header names, glyph, header text), in the skill's order
+# list key -> (reply header names, glyph, header text), in the skill's order; the later names are the headers earlier
+# turns carry, from before the user's renames
 LISTS = {
-    "open": (("Open",), "🚧", "Open"),
+    "unfinished": (("Unfinished", "Open"), "🚧", "Unfinished"),
     "waiting": (("Waiting",), "🤔", "Waiting"),
     "review": (("Review", "To review"), "🔍", "Review"),
     "todo": (("Todo", "To do"), "👉", "Todo"),
-    "blocked": (("Blocked",), "🛑", "Blocked"),
+    "decisions": (("Decisions", "Blocked"), "🧠", "Decisions"),
 }
+# `--lists` keys from before the renames
+_OLD_KEYS = {"open": "unfinished", "blocked": "decisions"}
 _KEY_OF_NAME = {name: key for key, (names, _, _) in LISTS.items() for name in names}
 _PIN = re.compile(r"^\s*📌\s+\*\*(Still open from earlier|Outstanding from previous turns):\*\*")
 _ITEM = re.compile(r"^ {0,2}(?:[-*]|\d+[.)])\s+(.*)$")
@@ -258,7 +261,7 @@ def _cut(text: str, width: int) -> str:
 
 
 def parse_lists(text: str) -> tuple[str, ...]:
-    keys = tuple(k.strip() for k in text.split(",") if k.strip())
+    keys = tuple(_OLD_KEYS.get(k.strip(), k.strip()) for k in text.split(",") if k.strip())
     unknown = tuple(k for k in keys if k not in LISTS)
     if unknown:
         raise rt.TurnError(f"unknown list {', '.join(unknown)}; choose from {','.join(LISTS)}")
@@ -394,7 +397,7 @@ def parser() -> argparse.ArgumentParser:
     def common(sp: argparse.ArgumentParser, pattern: bool = False) -> None:
         sp.add_argument("pattern", metavar="PATTERN") if pattern else None
         sp.add_argument("--since", metavar="ID", help="start at this turn, inclusive")
-        sp.add_argument("--lists", default=",".join(LISTS), help="comma list of waiting,review,todo,blocked")
+        sp.add_argument("--lists", default=",".join(LISTS), help="comma list of unfinished,waiting,review,todo,decisions")
         sp.add_argument("--latest", action="store_true", help="keep each summary's latest occurrence only")
         sp.add_argument("--width", type=int, default=_DEFAULT_WIDTH, help="cut summaries to this width")
 
