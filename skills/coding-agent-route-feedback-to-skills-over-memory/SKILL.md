@@ -91,7 +91,7 @@ belongs in:
 
 - **Right for anyone using the skill** → edit the skill. A gotcha, a
   missing edge case, a rule that would help every user: _"that `gh`
-  flag is broken in v2,"_ _"a Blocked option must name what it acts on."_
+  flag is broken in v2,"_ _"a Decisions option must name what it acts on."_
 - **A personal choice** → that skill's preferences file. Taste, a
   wording, a glyph, an order, a default this user picked and another
   user might reasonably not: _"sort the lists Done, Waiting, Todo,"_

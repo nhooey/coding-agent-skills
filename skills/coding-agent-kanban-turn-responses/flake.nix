@@ -1,5 +1,5 @@
 {
-  description = "coding-agent-kanban-turn-responses: Coding-agent skill — shape every response as kanban lists: one-line progress updates between tool calls, and a final response of Done/Open/Waiting/Questions/Review/Todo/Blocked lists with an outstanding roll-up";
+  description = "coding-agent-kanban-turn-responses: Coding-agent skill — shape every response as kanban lists: one-line progress updates between tool calls, and a final response of Done/Unfinished/Waiting/Answers/Review/Todo/Decisions lists with an outstanding roll-up";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
