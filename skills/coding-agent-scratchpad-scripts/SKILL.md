@@ -1,6 +1,6 @@
 ---
 name: coding-agent-scratchpad-scripts
-description: Keeps an agent from filling its scratchpad with cryptic throwaway scripts. An edit to a file goes through the Edit or Write tool, never a generated script; a one-off check runs inline in the Bash call, a heredoc to `python3 -` included, with no file written; anything run, or expected to run, a second time becomes a named, documented tool committed in the project, or in a skill's scripts/ when it isn't specific to the project; a generated file is never `source`d; and a scratchpad file that is kept gets a name saying what it holds. Use it before writing any file to a scratchpad or temporary directory, before writing a script to change a file, and before briefing a subagent that will run commands. Main agents and subagents alike.
+description: Keeps an agent from filling its scratchpad with cryptic throwaway scripts. An edit to a file goes through the Edit or Write tool, never a generated script; a one-off check runs inline in the Bash call, a heredoc to `python3 -` included, with no file written; anything run, or expected to run, a second time becomes a named, documented tool committed in the project, or in a skill's scripts/ when it isn't specific to the project, and so does code whose output a committed claim or file rests on, even if it ran once; a generated file is never `source`d; and a scratchpad file that is kept gets a name saying what it holds. Use it before writing any file to a scratchpad or temporary directory, before writing a script to change a file, and before briefing a subagent that will run commands. Main agents and subagents alike.
 ---
 
 # Scratchpad scripts
@@ -25,6 +25,8 @@ _A script an agent writes to its scratchpad is read once, by nobody, and run onc
 
    Before writing one, check whether the project already does the job: rerunning the test suite, timing a command, diffing fixtures against a base commit and rendering a component are usually a test-runner flag, a `make` target or a dev-shell command already.
 
+   Code whose output a committed claim or file rests on stays in the project too, even if it ran once: a probe behind a documented behaviour becomes a test or an eval example, and a script that built a committed file becomes a tool. A check under rule 2 that a claim ends up resting on is kept the same way.
+
 4. **Never `source` a generated file,** in your own commands or in a subagent's. A sourced file runs unseen in the current shell, and hooks such as CC Safety Net refuse it ("shell execution source cannot be verified safely"), which interrupts the user. Write the commands into the Bash call, or make a tool of them under rule 3. Give every subagent this rule in its brief.
 5. **A scratchpad file that is kept gets a name saying what it holds:** captured output, a data sample, a draft. `pr-78-body.md`, `ci-run-4412-log.txt` and `rulesets-before-garnix-removal/`, not `out.txt`, `a.json` or `s3.ts`. Never a numbered series: a new version replaces the file, or gets a name saying how it differs.
 
@@ -36,7 +38,7 @@ Each Bash call starts a fresh shell, so a helper the agent wants again gets writ
 
 **Why:** a scratchpad script with a cryptic name can't be found, trusted or reused, so the next agent writes another. A tool with a name and a docstring is found and reused by every later session, and an edit made with the edit tool can be reviewed.
 
-**How to apply:** before writing a file anywhere but the project's own source, ask what it is. An edit goes through the Edit or Write tool. A check you'll run once goes inline. Anything you'll run again becomes a named tool in the project, after checking the project doesn't already have one. Data you keep gets a name saying what it holds. When briefing a subagent, pass these rules on, the `source` rule included.
+**How to apply:** before writing a file anywhere but the project's own source, ask what it is. An edit goes through the Edit or Write tool. A check you'll run once goes inline. Anything you'll run again becomes a named tool in the project, after checking the project doesn't already have one, and so does anything a committed claim or file rests on. Data you keep gets a name saying what it holds. When briefing a subagent, pass these rules on, the `source` rule included.
 
 ## Related skills
 
