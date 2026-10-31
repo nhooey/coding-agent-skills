@@ -1,6 +1,6 @@
 # Kanban turn response examples
 
-_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decisions list, the full 📌 roll-up and the count line that stands in for it._
+_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decisions list, two lists in one response, the full 📌 roll-up and the count line that stands in for it._
 
 ## A Decisions list
 
@@ -28,17 +28,40 @@ A checkbox item and a binary item. Each summary has its own line, ending in a ha
       ➖ What N costs or risks.
 ```
 
+## Two lists in one response
+
+A list ends at a blank line. The blank line between the Done list's last separator line and the Todo header ends the Done list, so the Todo list numbers from 1 again. Without it, Markdown reads `👉 **Todo:**` and its underline as more of Done item 2's text, and the renderer numbers the Todo item 3. The same blank line goes before the 📌 roll-up or count line.
+
+```text
+✅ **Done:**  
+▔▔▔▔▔▔▔▔
+1. **Tokenizer fix in commit `a1b2c3d`**
+   ⠀
+2. **Test suite rerun after the fix**  
+   412 passed and 0 failed, in 3 minutes.
+   ⠀
+
+👉 **Todo:**  
+▔▔▔▔▔▔▔▔
+1. **Rotate the `deploy-bot` key in the cloud console**  
+   It was issued before the leak, and rotating it frees the release.
+
+📌 Outstanding: 🧠 2
+```
+
 ## The full roll-up
 
-Printed once the roll-up interval has passed; `outstanding.py render` drafts it, and the session prunes what is settled.
+Printed once the roll-up interval has passed; `outstanding.py render` drafts it, and the session prunes what is settled. A blank line before each group's header ends the group above it.
 
 ```text
 📌 **Outstanding from previous turns:**  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🤔 **Waiting:**  
 - **Landing `atomic-reload` with 4 other branches,** entry 1419's whole-file database swap among them. 🔖 0f311c94₋₃
+
 👉 **Todo:**  
 - **The 2 API keys to rotate in the cloud console:** `deploy-bot` and `ci-runner`, both issued before the leak. 🔖 18e77cb3₋₁₇
+
 🧠 **Decisions:**  
 - **The cache store for the build, given its 3 GB limit:** local disk, S3 or no cache. 🔖 9d2e7a10₋₂
 ```

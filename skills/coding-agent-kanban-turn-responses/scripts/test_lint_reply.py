@@ -161,6 +161,28 @@ class LintReplyTest(unittest.TestCase):
         text = "✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **One**  \n   a.\n\n👉 **Todo:**  \n▔▔▔▔▔▔▔▔\n1. **Two**\n"
         self.assertEqual(kinds(text), [])
 
+    def test_header_under_a_separator_joins_the_item(self) -> None:
+        text = f"✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **One**  \n   a.\n   {S}\n👉 **Todo:**  \n▔▔▔▔▔▔▔▔\n1. **Two**\n"
+        self.assertEqual(kinds(text), [(6, "j")])
+
+    def test_blank_line_between_last_separator_and_header(self) -> None:
+        text = f"✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **One**  \n   a.\n   {S}\n\n👉 **Todo:**  \n▔▔▔▔▔▔▔▔\n1. **Two**\n"
+        self.assertEqual(kinds(text), [])
+
+    def test_header_under_one_line_items_joins_the_last(self) -> None:
+        text = "✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **One**\n2. **Two**\n📌 Outstanding: 🧠 5\n"
+        self.assertEqual(kinds(text), [(5, "j")])
+
+    def test_roll_up_groups_end_at_a_blank_line(self) -> None:
+        head = "📌 **Outstanding from previous turns:**  \n" + "━" * 35 + "\n🤔 **Waiting:**  \n- **Landing.** 🔖 0f311c94₋₃\n"
+        tail = "🧠 **Decisions:**  \n- **The cache store.** 🔖 9d2e7a10₋₂\n"
+        self.assertEqual(kinds(head + tail), [(5, "j")])
+        self.assertEqual(kinds(head + "\n" + tail), [])
+
+    def test_prose_at_the_item_column_stays_in_the_item(self) -> None:
+        text = f"1. **One**  \n   a.\n   {S}\n2. **Two**  \n   b.\n   c.\n"
+        self.assertEqual(kinds(text), [])
+
     def test_list_among_options_captures_the_later_options(self) -> None:
         text = (
             "1. **Which findings to fix**  \n"
@@ -215,8 +237,14 @@ class LintReplyTest(unittest.TestCase):
 
     def test_skill_examples_are_clean(self) -> None:
         skill = HERE.parent
-        for path, heading in [(skill / "examples.md", "## A Decisions list"), (skill / "README.md", "The final response:")]:
-            with self.subTest(path=path.name):
+        examples = skill / "examples.md"
+        for path, heading in [
+            (examples, "## A Decisions list"),
+            (examples, "## Two lists in one response"),
+            (examples, "## The full roll-up"),
+            (skill / "README.md", "The final response:"),
+        ]:
+            with self.subTest(path=path.name, heading=heading):
                 if not path.exists():  # README.md stays in the repo, out of the installed skill
                     continue
                 self.assertEqual(kinds(fenced_block(path, heading)), [])
