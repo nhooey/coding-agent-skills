@@ -64,10 +64,11 @@ python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_repl
 | `b`  | a separator line between 2 one-line items, or right under a header's underline                    |
 | `c`  | a line of only spaces, tabs or U+00A0, not empty, inside a list, where a separator line was meant |
 | `d`  | a separator line whose indent is not its list's, the column its items' text starts at             |
-| `e`  | a blank line directly above or below a separator line, which renders a double gap                 |
+| `e`  | a blank line directly above a separator line, or below one where the list goes on                 |
 | `f`  | a numbered item with text after its bold summary on the same line                                 |
 | `g`  | a numbered item's summary line with lines under it but no hard line break, 2 trailing spaces      |
 | `h`  | a `-` or `1.` list line among a Decisions item's options, after its first option line             |
 | `i`  | a header underline whose width is not the header's, its emoji counting 2 and `**` not counted     |
+| `j`  | a header or line of prose directly under a list, which Markdown reads as more of its last item    |
 
-A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them, and a header or a line of prose at the item's indent ends it. Its tests run with `python3 -I scripts/test_lint_reply.py`, and `nix flake check` runs them too.
+A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them. A blank line ends it; a header or a line of prose left of its items' text, written with no blank line before it, is a `j`. Its tests run with `python3 -I scripts/test_lint_reply.py`, and `nix flake check` runs them too.

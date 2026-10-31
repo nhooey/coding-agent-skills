@@ -306,10 +306,13 @@ def render_draft(items: tuple[Item, ...], width: int) -> str:
     groups = tuple(
         (key, tuple(i for i in items if i.list_key == key)) for key in LISTS if any(i.list_key == key for i in items)
     )
+    # A blank line before every group but the first ends the group above: without it Markdown
+    # reads the next header as more of the last bullet's text.
     body = tuple(
         line
-        for key, members in groups
+        for n, (key, members) in enumerate(groups)
         for line in (
+            *([""] if n else []),
             f"{LISTS[key][1]} **{LISTS[key][2]}:**  ",
             *(f"- **{_cut(i.summary, width)}** {tag(i)}" for i in members),
         )

@@ -4,7 +4,11 @@ header underlines before it is sent.
 
 Why it exists: a multi-line item is parted from the next item of its list by a line holding the
 list's indent and one separator character, SEPARATOR below, and nothing else, with no blank line
-on either side. An empty line between items renders no gap, and a line of spaces renders one or
+on either side, but one: a list ends at a blank line. A header, or any line of prose,
+written directly under a list's last line, its separator line included, is read by Markdown as
+more text of that last item (a lazy continuation), so the header lands inside the item and the
+next list continues the same numbering; a blank line before it ends the list. An empty line
+between items renders no gap, and a line of spaces renders one or
 none depending on its width; a U+00A0 typed there reaches the terminal as a plain space, so it is
 no better. A blank line beside the separator renders a double gap, and a separator between
 one-line items, or under a header's underline, is a gap that should not be there. Reading for
@@ -22,11 +26,12 @@ message`, and exits 1 if there is any, else 0:
     [b] a separator line between 2 one-line items, or right under a header's underline
     [c] a line holding only spaces, tabs or U+00A0, but not empty, inside a list
     [d] a separator line whose indent is not its list's indent, the item's text column
-    [e] a blank line directly above or below a separator line
+    [e] a blank line directly above a separator line, or below one where the list goes on
     [f] a numbered item with text after its bold summary on the same line
     [g] a numbered item's summary line with lines under it but no hard line break
     [h] a list line among a Decisions item's options, after its first option line
     [i] a header underline whose width is not the header's
+    [j] a header or line of prose directly under a list, with no blank line to end the list
 
 A list is a run of items, `-`, `*`, `+`, `1.` or `1)`, at one indent: every list of the response,
 the 📌 roll-up's groups and an item's own numbered steps among them. An item is multi-line when
@@ -95,6 +100,7 @@ def lint(text: str) -> list[tuple[int, str, str]]:
     previous = "text"  # the kind of the line before: "text", "blank" or "sep"
     last_text = ""  # the line before, when it held text
     options: int | None = None  # the indent of the open Decisions item's option lines
+    blank_under_sep: int | None = None  # a blank line under a separator, fine only if the list ends
 
     def grow() -> None:
         for open_item in stack:
@@ -114,10 +120,18 @@ def lint(text: str) -> list[tuple[int, str, str]]:
                     (number, "c", f"a line of only whitespace; a gap between items is the indent then U+{ord(SEPARATOR):04X}")
                 )
             if previous == "sep":
-                findings.append((number, "e", "blank line under a separator line renders a double gap"))
+                blank_under_sep = number
             previous = "blank"
             continue
         sep = _SEP.match(line)
+        ends_list = bool(stack) and not _ITEM.match(line) and _indent(line) < stack[0].column
+        if blank_under_sep is not None and not (ends_list and not sep):
+            findings.append((blank_under_sep, "e", "blank line under a separator line, inside the list, renders a double gap"))
+        blank_under_sep = None
+        if ends_list and not sep and previous != "blank":
+            findings.append(
+                (number, "j", "directly under a list, Markdown reads this as more of its last item; put a blank line before it")
+            )
         if sep:
             if previous == "blank":
                 findings.append((number, "e", "blank line above a separator line renders a double gap"))
