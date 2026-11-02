@@ -1,14 +1,14 @@
 # Kanban turn response examples
 
-_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decisions list, two lists in one response, the full 📌 roll-up and the count line that stands in for it._
+_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decide list, two lists in one response, the full 📌 roll-up and the count line that stands in for it._
 
-## A Decisions list
+## A Decide list
 
 A checkbox item and a binary item. Each summary has its own line, ending in a hard line break, and each item is parted from the next by the separator line: the list's indent, one U+2800, and nothing else, directly under the item's last line. `scripts/lint_reply.py` finds no fault in it.
 
 ```text
-🧠 **Decisions:**  
-▔▔▔▔▔▔▔▔▔▔▔▔▔
+🧠 **Decide:**  
+▔▔▔▔▔▔▔▔▔▔
 1. **Backlog cleanups to start, of 260 entries in the backlog**  
    Any of 2. Note on the whole decision: the figures, the words at issue, 🔗 [an example](url).
    🔲 A. **Entry 1411, the 4 quotation matchers made one**, on Sonnet: `decisions.quotation_found`, `quotation_occurs`, `packets.normalised` and `_lands` become one function.
@@ -62,7 +62,7 @@ Printed once the roll-up interval has passed; `outstanding.py render` drafts it,
 👉 **Todo:**  
 - **The 2 API keys to rotate in the cloud console:** `deploy-bot` and `ci-runner`, both issued before the leak. 🔖 18e77cb3₋₁₇
 
-🧠 **Decisions:**  
+🧠 **Decide:**  
 - **The cache store for the build, given its 3 GB limit:** local disk, S3 or no cache. 🔖 9d2e7a10₋₂
 ```
 
