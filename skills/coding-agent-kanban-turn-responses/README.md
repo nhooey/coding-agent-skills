@@ -26,12 +26,12 @@ run. Once it scrolls away, it is gone. This skill fixes that:
 
 - **Progress you can watch.** Each step carries a state emoji (✅ done, 🏃
   running, 💤 not started, ❌ failed), so a glance shows where the turn is.
-- **The same order every time.** ✅ Done, 🚧 Unfinished, 📝 Logged, 🤔
-  Waiting, ❓ Answers, 🔍 Review, 👉 Todo, 🧠 Decisions. Each list holds only
+- **The same order every time.** ✅ Done, 🚧 Pending, 📝 Logged, 🤔
+  Waiting, ❓ Answers, 🔍 Review, 👉 Todo, 🧠 Decide. Each list holds only
   what is new this turn, and empty lists are left out.
-- **Decisions you answer by reference.** Each Decisions item names the thing it
+- **Choices you answer by reference.** Each Decide item names the thing it
   decides, offers lettered options with the recommended one first, and gives
-  each option a ➕ pro and a ➖ con. You can reply `Decisions.1: B`.
+  each option a ➕ pro and a ➖ con. You can reply `Decide.1: B`.
 - **Nothing gets lost.** Items earlier turns left open roll up under 📌, either
   as one count line or, at an interval, as a full list grouped by kind.
 
@@ -55,8 +55,8 @@ The parser regression came from the tokenizer rewrite; the fix is committed.
    ⠀
 2. **Test suite, 412 passed and 0 failed**
 
-🧠 **Decisions:**  
-▔▔▔▔▔▔▔▔▔▔▔▔▔
+🧠 **Decide:**  
+▔▔▔▔▔▔▔▔▔▔
 1. **Backport the `src/lexer.rs` tokenizer fix to the 2.x branch?**  
    🔘 A. **Cherry-pick commit a1b2c3d onto 2.x**: one commit, CI reruns.
       ➕ 2.x users get the fix in the next patch release.
@@ -77,17 +77,17 @@ Each list asks something different of you. Lists you only read need no reply; th
 | List          | Your reply                                                      | What happens                                                            |
 | ------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | ✅ Done       | nothing                                                         | a record of the turn; it never rolls up                                 |
-| 🚧 Unfinished | nothing                                                         | the agent finishes its own work later; it stays under 📌 until then     |
+| 🚧 Pending | nothing                                                         | the agent finishes its own work later; it stays under 📌 until then     |
 | 📝 Logged     | nothing                                                         | the entry waits in the backlog for the next agent                       |
 | 🤔 Waiting    | nothing                                                         | the agent reports when it lands; it stays under 📌 until then           |
 | ❓ Answers    | nothing                                                         | your question, with its answer; it never rolls up                       |
 | 🔍 Review     | comment on it, or say you looked: `Review.1 looks right`        | it closes once your reply shows you reviewed it                         |
 | 👉 Todo       | do it, then say so: `Todo.1 done`                               | it closes, and the agent starts the work it freed                       |
-| 🧠 Decisions  | the item and a letter: `Decisions.1: A`, or short, `1. A, 2. Y` | the agent acts on your choice; a checkbox item takes several, `3. A, C` |
+| 🧠 Decide  | the item and a letter: `Decide.1: A`, or short, `1. A, 2. Y` | the agent acts on your choice; a checkbox item takes several, `3. A, C` |
 
-For the example above, `Decisions.1: A` settles the backport: the next turn cherry-picks `a1b2c3d` onto 2.x, and the item leaves 📌 for good. An item from an earlier turn takes that turn's id, from its usage line: `Decisions.2 of 0f311c94: B`.
+For the example above, `Decide.1: A` settles the backport: the next turn cherry-picks `a1b2c3d` onto 2.x, and the item leaves 📌 for good. An item from an earlier turn takes that turn's id, from its usage line: `Decide.2 of 0f311c94: B`.
 
-A reply with a question in it is never read as a choice. `Decisions.1?: does A need Home Manager?` gets Decisions.1 back in its list with the answer under its summary and its options rewritten if the answer changed them, and it stays open until you answer it without a question.
+A reply with a question in it is never read as a choice. `Decide.1?: does A need Home Manager?` gets Decide.1 back in its list with the answer under its summary and its options rewritten if the answer changed them, and it stays open until you answer it without a question.
 
 ## Use
 
@@ -110,10 +110,10 @@ Commands you can type during a session:
 
 | You type             | The agent                                                     |
 | -------------------- | ------------------------------------------------------------- |
-| `pending`            | reprints the open Review, Todo and Decisions items as written |
+| `open`, or `pending` | reprints the open Review, Todo and Decide items as written |
 | `reassess`           | works out afresh which earlier items are still open           |
-| `Expand Decisions.2` | reprints that item in enough detail to act on                 |
-| `Decisions.1: B`     | picks option B of Decisions item 1                            |
+| `Expand Decide.2` | reprints that item in enough detail to act on                 |
+| `Decide.1: B`     | picks option B of Decide item 1                            |
 
 [SKILL.md](SKILL.md) holds the full rules. It is the only file the agent loads
 when the skill is invoked. The agent reads `examples.md`, `commands.md` and

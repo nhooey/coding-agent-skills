@@ -22,11 +22,11 @@ S = lint_reply.SEPARATOR
 NBSP = lint_reply.NBSP
 
 
-def decisions(gap: str) -> str:
-    """A 2-item Decisions list whose items are parted by the line `gap`."""
+def decide(gap: str) -> str:
+    """A 2-item Decide list whose items are parted by the line `gap`."""
     return (
-        "🧠 **Decisions:**  \n"
-        "▔▔▔▔▔▔▔▔▔▔▔▔▔\n"
+        "🧠 **Decide:**  \n"
+        "▔▔▔▔▔▔▔▔▔▔\n"
         "1. **How the stock counts are stored**  \n"
         "   By store and day.\n"
         "   🔘 A. **One row per product per store**: the counts table grows by store.\n"
@@ -68,27 +68,27 @@ def fenced_block(path: pathlib.Path, heading: str) -> str:
 
 
 class LintReplyTest(unittest.TestCase):
-    def test_correct_decisions_list(self) -> None:
-        self.assertEqual(kinds(decisions(f"   {S}")), [])
+    def test_correct_decide_list(self) -> None:
+        self.assertEqual(kinds(decide(f"   {S}")), [])
 
     def test_one_space_runs_items_together(self) -> None:
-        self.assertEqual(kinds(decisions(" ")), [(8, "c"), (9, "a")])
+        self.assertEqual(kinds(decide(" ")), [(8, "c"), (9, "a")])
 
     def test_spaces_where_the_separator_belongs(self) -> None:
-        self.assertEqual(kinds(decisions("    ")), [(8, "c"), (9, "a")])
+        self.assertEqual(kinds(decide("    ")), [(8, "c"), (9, "a")])
 
     def test_nbsp_separator(self) -> None:
-        self.assertEqual(kinds(decisions(f"   {NBSP}")), [(8, "c"), (9, "a")])
+        self.assertEqual(kinds(decide(f"   {NBSP}")), [(8, "c"), (9, "a")])
 
     def test_empty_line_is_no_separator(self) -> None:
-        self.assertEqual(kinds(decisions("")), [(9, "a")])
+        self.assertEqual(kinds(decide("")), [(9, "a")])
 
     def test_no_line_at_all(self) -> None:
-        text = decisions("X").replace("X\n", "")
+        text = decide("X").replace("X\n", "")
         self.assertEqual(kinds(text), [(8, "a")])
 
     def test_blank_lines_around_separator(self) -> None:
-        self.assertEqual(kinds(decisions(f"\n   {S}\n")), [(9, "e"), (10, "e")])
+        self.assertEqual(kinds(decide(f"\n   {S}\n")), [(9, "e"), (10, "e")])
 
     def test_one_line_items_sit_together(self) -> None:
         self.assertEqual(kinds(ONE_LINE_RUN), [])
@@ -175,7 +175,7 @@ class LintReplyTest(unittest.TestCase):
 
     def test_roll_up_groups_end_at_a_blank_line(self) -> None:
         head = "📌 **Outstanding from previous turns:**  \n" + "━" * 35 + "\n🤔 **Waiting:**  \n- **Landing.** 🔖 0f311c94₋₃\n"
-        tail = "🧠 **Decisions:**  \n- **The cache store.** 🔖 9d2e7a10₋₂\n"
+        tail = "🧠 **Decide:**  \n- **The cache store.** 🔖 9d2e7a10₋₂\n"
         self.assertEqual(kinds(head + tail), [(5, "j")])
         self.assertEqual(kinds(head + "\n" + tail), [])
 
@@ -220,13 +220,13 @@ class LintReplyTest(unittest.TestCase):
     def test_underline_widths(self) -> None:
         headers = {
             "✅ **Done:**": 8,
-            "🚧 **Unfinished:**": 14,
+            "🚧 **Pending:**": 11,
             "📝 **Logged:**": 10,
             "🤔 **Waiting:**": 11,
             "❓ **Answers:**": 11,
             "🔍 **Review:**": 10,
             "👉 **Todo:**": 8,
-            "🧠 **Decisions:**": 13,
+            "🧠 **Decide:**": 10,
             "📌 **Outstanding from previous turns:**": 35,
         }
         for header, width in headers.items():
@@ -239,7 +239,7 @@ class LintReplyTest(unittest.TestCase):
         skill = HERE.parent
         examples = skill / "examples.md"
         for path, heading in [
-            (examples, "## A Decisions list"),
+            (examples, "## A Decide list"),
             (examples, "## Two lists in one response"),
             (examples, "## The full roll-up"),
             (skill / "README.md", "The final response:"),
@@ -250,7 +250,7 @@ class LintReplyTest(unittest.TestCase):
                 self.assertEqual(kinds(fenced_block(path, heading)), [])
 
     def test_main_exit_codes(self) -> None:
-        for text, code in [(decisions(f"   {S}"), 0), (decisions(" "), 1)]:
+        for text, code in [(decide(f"   {S}"), 0), (decide(" "), 1)]:
             sys.stdin = io.StringIO(text)
             try:
                 with redirect_stdout(io.StringIO()):

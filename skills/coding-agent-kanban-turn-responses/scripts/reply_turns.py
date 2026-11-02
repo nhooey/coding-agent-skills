@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Find the turns of this session and pull their prompts and reply sections out of the transcript.
 
-Why it exists: a reply names the turn it answers by id, `Decisions.2 of 0f311c94`, and
-the `pending` and `reassess` commands read every earlier turn's Review, Todo and Decisions sections; doing that with
+Why it exists: a reply names the turn it answers by id, `Decide.2 of 0f311c94`, and
+the `open` and `reassess` commands read every earlier turn's Review, Todo and Decide sections; doing that with
 ad-hoc grep and jq over the session's JSONL was slow and drifted. This script is the one reader.
 
 Takes: the session transcript, `~/.claude/projects/<slug>/<session>.jsonl`. The slug is the main
@@ -23,8 +23,8 @@ record's `uuid`, which earlier replies printed. An id that matches no turn or se
 naming the candidates.
 
 A reply section opens on a line `<glyph> **<Name>:**`, Name one of Answers (once Questions), Done,
-Unfinished (once Open), Logged, Waiting, Review (once To review), Todo (once To do), Decisions (once
-Blocked), matched by name and not glyph; a line of `▔` or `¯` under it belongs to the
+Pending (once Unfinished, before that Open), Logged, Waiting, Review (once To review), Todo (once To do),
+Decide (once Decisions, before that Blocked), matched by name and not glyph; a line of `▔` or `¯` under it belongs to the
 header. A section ends at the next header or at a line starting `Still open from earlier`.
 
 Subcommands, each printing plain text:
@@ -33,8 +33,8 @@ Subcommands, each printing plain text:
                                   (an agent message or task notification is a turn: its line opens `<agent-message` or `<task-notification`)
   show ID [--prompt-only] [--section NAME]
                                   the prompt then the reply, or that section from every reply text
-  decisions [--since ID]          each turn's Decisions section, from turn ID inclusive; `blocked` too
-  open [--since ID]               each turn's Review, Todo and Decisions sections, from turn ID
+  decide [--since ID]             each turn's Decide section, from turn ID inclusive; `decisions` and `blocked` too
+  open [--since ID]               each turn's Review, Todo and Decide sections, from turn ID
                                   inclusive, under the turn's id; a turn with neither is left out
 """
 
@@ -50,12 +50,13 @@ from functools import reduce
 from pathlib import Path
 
 # "To do", "To review", "Questions", "Open" and "Blocked" are the headers before the user's renames to "Todo" (2026-10-05),
-# "Review" (2026-10-13), and "Answers", "Unfinished" and "Decisions" (2026-10-29); earlier turns still carry them.
+# "Review" (2026-10-13), "Answers", "Unfinished" and "Decisions" (2026-10-29), and "Pending" and "Decide"
+# (2026-11-02); earlier turns still carry the old names.
 SECTION_NAMES = (
-    "Answers", "Questions", "Done", "Unfinished", "Open", "Logged", "Waiting", "Review", "To review", "Todo", "To do",
-    "Decisions", "Blocked",
+    "Answers", "Questions", "Done", "Pending", "Unfinished", "Open", "Logged", "Waiting", "Review", "To review", "Todo", "To do",
+    "Decide", "Decisions", "Blocked",
 )
-DECISIONS = ("Decisions", "Blocked")
+DECISIONS = ("Decide", "Decisions", "Blocked")
 _HEADER = re.compile(r"^\s*\S+\s+\*\*(" + "|".join(SECTION_NAMES) + r"):\*\*")
 _STOP = "Still open from earlier"
 _ALL_ORIGINS = frozenset({"human", "peer", "task_notification"})
@@ -273,9 +274,9 @@ def parser() -> argparse.ArgumentParser:
     sh.add_argument("id")
     sh.add_argument("--prompt-only", action="store_true")
     sh.add_argument("--section", choices=SECTION_NAMES, type=str.capitalize)
-    bl = sub.add_parser("decisions", aliases=["blocked"], help="every turn's Decisions section")
+    bl = sub.add_parser("decide", aliases=["decisions", "blocked"], help="every turn's Decide section")
     bl.add_argument("--since", metavar="ID", help="start at this turn, inclusive")
-    op = sub.add_parser("open", help="every turn's Review, Todo and Decisions sections")
+    op = sub.add_parser("open", help="every turn's Review, Todo and Decide sections")
     op.add_argument("--since", metavar="ID", help="start at this turn, inclusive")
     return p
 
@@ -285,6 +286,7 @@ def run(args: argparse.Namespace, turns: tuple[Turn, ...]) -> str:
         "id": lambda: current(turns).id,
         "list": lambda: render_list(turns, args.n, args.grep),
         "show": lambda: render_show(find(turns, args.id), args.prompt_only, args.section),
+        "decide": lambda: render_sections(turns, args.since, DECISIONS),
         "decisions": lambda: render_sections(turns, args.since, DECISIONS),
         "blocked": lambda: render_sections(turns, args.since, DECISIONS),
         "open": lambda: render_sections(turns, args.since, ("Review", "To review", "Todo", "To do", *DECISIONS)),
