@@ -43,7 +43,7 @@ A step names its subject, never its category: "the 2020 resolutions", not "the d
 | 👉 **Todo:**               | one item per action asked of the user that is neither a choice nor a reading: a file to mark up, a prompt to paste, a command to run; each says what to do, where, by its path, and what it frees | the user         | yes                                                |
 | 🧠 **Decide:**             | one item per decision raised, and per judgement call taken instead of asked, its reversal an option                                                                                               | the user         | yes                                                |
 
-An empty list is left out, and the final response opens on a line of prose. An answer takes the shape its information has: a comparison is a table, a sequence is numbered steps, parallel items are a list.
+An empty list is left out, and the final response opens on a line of prose. An answer takes the shape its information has: a comparison is a table, a sequence is numbered steps, parallel items are a list. A table never goes inside an item, where it prints as raw pipe rows: it goes after its list's last line and blank line, under a line naming the item, such as `Answers.3:`, and before the next list's header.
 
 **A list holds only what is new this turn.** An item an earlier turn printed, unchanged since, is not printed in its list again; it rolls up into 📌. An item whose state changed this turn, a Waiting agent that reported, a Todo item whose prompt is now ready or an item whose question was answered, is new again and is printed in its list with the change.
 
