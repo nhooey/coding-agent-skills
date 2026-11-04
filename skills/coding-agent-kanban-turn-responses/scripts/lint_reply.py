@@ -17,7 +17,10 @@ break, 2 trailing spaces, with its sentence on the line beneath; without the bre
 together into one. An option's lines are plain lines of its item's paragraph, not a list, so a
 `-` or `1.` list among them starts a real list, and every line after it, the later options among
 them, joins its last entry and prints at its indent. A header's underline holds one character per
-column of the header as it renders, its emoji counting 2.
+column of the header as it renders, its emoji counting 2. A table indented under a list item is
+never drawn: its rows print as raw pipe text. A line of text directly under a table's last row is
+read as one more row, and a table directly under a line of text can be read as part of it, so a
+table has a blank line above and below it.
 
 Takes: the response on stdin, or in the FILE given. Prints one line per finding, `LINE: [k]
 message`, and exits 1 if there is any, else 0:
@@ -32,6 +35,8 @@ message`, and exits 1 if there is any, else 0:
     [h] a list line among a Decide item's options, after its first option line
     [i] a header underline whose width is not the header's
     [j] a header or line of prose directly under a list, with no blank line to end the list
+    [k] a table inside a list item, indented to its text
+    [l] a table with no blank line above it, or a line directly under its last row
 
 A list is a run of items, `-`, `*`, `+`, `1.` or `1)`, at one indent: every list of the response,
 the 📌 roll-up's groups and an item's own numbered steps among them. An item is multi-line when
@@ -62,6 +67,7 @@ _SUMMARY = re.compile(r"\*\*.+?\*\*")
 _UNDERLINE = re.compile(r"^\s*[▔━]+\s*$")
 _FENCE = re.compile(r"^ *(```|~~~)")
 _OPTION = re.compile(r"^( *)(🔘|🔲|👍|👎) [A-Z]\. ")
+_ROW = re.compile(r"^ *\|")
 
 
 @dataclass
@@ -101,6 +107,7 @@ def lint(text: str) -> list[tuple[int, str, str]]:
     last_text = ""  # the line before, when it held text
     options: int | None = None  # the indent of the open Decide item's option lines
     blank_under_sep: int | None = None  # a blank line under a separator, fine only if the list ends
+    above = "blank"  # the line before, for tables: "blank" (or none), "row" or "text"
 
     def grow() -> None:
         for open_item in stack:
@@ -112,7 +119,14 @@ def lint(text: str) -> list[tuple[int, str, str]]:
         if fence:
             if line.lstrip(" ").startswith(fence):
                 fence = None
+            above = "text"
             continue
+        row = bool(_ROW.match(line))
+        if row and above == "text":
+            findings.append((number, "l", "a table directly under a line of text; put a blank line above it"))
+        elif not row and above == "row" and line.strip():
+            findings.append((number, "l", "directly under a table, this line is read as one more row; put a blank line above it"))
+        above = "row" if row else "text" if line.strip() else "blank"
         if not line or _SPACES.match(line):
             last_text = ""
             if line and stack:
@@ -128,6 +142,10 @@ def lint(text: str) -> list[tuple[int, str, str]]:
         if blank_under_sep is not None and not (ends_list and not sep):
             findings.append((blank_under_sep, "e", "blank line under a separator line, inside the list, renders a double gap"))
         blank_under_sep = None
+        if row and stack and not ends_list and not (previous == "text" and _ROW.match(last_text)):
+            findings.append(
+                (number, "k", "a table inside a list item prints as raw pipe rows; end the list and put the table after it")
+            )
         if ends_list and not sep and previous != "blank":
             findings.append(
                 (number, "j", "directly under a list, Markdown reads this as more of its last item; put a blank line before it")

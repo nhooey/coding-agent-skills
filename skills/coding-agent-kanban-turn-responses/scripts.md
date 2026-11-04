@@ -52,7 +52,7 @@ The key reads the summary alone, the bold text before its colon. Different items
 
 ## The `lint_reply.py` script
 
-[`lint_reply.py`](scripts/lint_reply.py) reads no transcript: it checks a draft final response, on stdin or in the file named, for the separator lines, numbered items' summary lines, Decide options and header underlines the skill requires, and is run on every draft before it is sent. It prints `LINE: [k] message` per finding and exits 1 if there is any, else 0. Lines inside ``` or ~~~ fences are not read.
+[`lint_reply.py`](scripts/lint_reply.py) reads no transcript: it checks a draft final response, on stdin or in the file named, for the separator lines, numbered items' summary lines, Decide options, header underlines and table placement the skill requires, and is run on every draft before it is sent. It prints `LINE: [k] message` per finding and exits 1 if there is any, else 0. Lines inside ``` or ~~~ fences are not read.
 
 ```text
 python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_reply.py draft.md
@@ -70,5 +70,7 @@ python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_repl
 | `h`  | a `-` or `1.` list line among a Decide item's options, after its first option line                |
 | `i`  | a header underline whose width is not the header's, its emoji counting 2 and `**` not counted     |
 | `j`  | a header or line of prose directly under a list, which Markdown reads as more of its last item    |
+| `k`  | a table indented under a list item, which prints as raw pipe rows instead of a drawn table        |
+| `l`  | a table with no blank line above it, or a line directly under its last row, drawn as one more row |
 
 A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them. A blank line ends it; a header or a line of prose left of its items' text, written with no blank line before it, is a `j`. Its tests run with `python3 -I scripts/test_lint_reply.py`, and `nix flake check` runs them too.
