@@ -235,6 +235,34 @@ class LintReplyTest(unittest.TestCase):
                 self.assertEqual(kinds(f"{header}  \n{rule * width}\n"), [])
                 self.assertEqual(kinds(f"{header}  \n{rule * (width + 1)}\n"), [(2, "i")])
 
+    TABLE = "| Col | Val |\n| --- | --- |\n| a   | 1   |\n"
+
+    def test_table_after_the_list_with_blank_lines(self) -> None:
+        text = (
+            "❓ **Answers:**  \n"
+            "▔▔▔▔▔▔▔▔▔▔▔\n"
+            "1. **Which tools reach the data**\n"
+            "\n"
+            "Answers.1:\n"
+            "\n"
+            f"{self.TABLE}"
+            "\n"
+            "📌 Outstanding: 👉 4\n"
+        )
+        self.assertEqual(kinds(text), [])
+
+    def test_table_inside_a_list_item(self) -> None:
+        indented = "".join(f"   {row}\n" for row in self.TABLE.splitlines())
+        text = f"1. **A list item**  \n{indented}\n   Text after a blank line.\n"
+        self.assertEqual(kinds(text), [(2, "k"), (2, "l")])
+        self.assertEqual(kinds(text.replace("**  \n", "**  \n\n")), [(3, "k")])
+
+    def test_text_directly_under_a_table(self) -> None:
+        self.assertEqual(kinds(f"Test A:\n\n{self.TABLE}Text right under it.\n"), [(6, "l")])
+
+    def test_table_directly_under_text(self) -> None:
+        self.assertEqual(kinds(f"Answers.1:\n{self.TABLE}"), [(2, "l")])
+
     def test_skill_examples_are_clean(self) -> None:
         skill = HERE.parent
         examples = skill / "examples.md"
