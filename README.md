@@ -24,6 +24,7 @@ in agent-output-skills.
 | [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson into the right existing skill with draft wording, falling back to memory only if no skill fits.                                                    |
 | [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools and one-off checks inline, and turns anything run twice into a named, documented tool in the project instead of a cryptic scratchpad script.                              |
 | [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md)                                         | How a skill names other skills (bare names, a closing Related skills section) and reads its user and project preferences files.                                                                                   |
+| [`coding-agent-vpn-blocked-domains`](skills/coding-agent-vpn-blocked-domains/SKILL.md)                                   | When a domain blocks a request, checks whether it went through the VPN and suggests excluding the domain from it, or connecting it if it was off.                                                                 |
 
 ## Install
 
@@ -55,6 +56,7 @@ Package outputs:
 - `agent-skill-nhooey-coding-agent-route-feedback-to-skills-over-memory`
 - `agent-skill-nhooey-coding-agent-scratchpad-scripts`
 - `agent-skill-nhooey-coding-agent-skill-references`
+- `agent-skill-nhooey-coding-agent-vpn-blocked-domains`
 
 ## Development
 
