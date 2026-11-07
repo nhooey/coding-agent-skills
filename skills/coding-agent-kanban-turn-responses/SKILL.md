@@ -119,7 +119,7 @@ Read [commands.md](commands.md) before running any of them, and put their output
 - **Time:** say how long work takes, never when it lands or goes out, and set no deadline.
 - **Tables:** a plain Markdown table, as `markdown-hygiene-terminal-rendering` writes it, never a box table in a `text` block. A cell holding a state holds its emoji from the progress-update table, not a word.
 - **Links:** every URL, a local served page as much as a web page, is a Markdown link opened by 🔗 and a space, `🔗 [the trial projection](http://127.0.0.1:8765/…)`, kept out of `text` blocks as `markdown-hygiene-terminal-rendering` says. In a table's cell the link goes without the 🔗, its label short enough not to wrap.
-- **Glyphs:** the only ones in a response are the 8 header glyphs, `▔`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the 6 state emoji, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
+- **Glyphs:** the only ones in a response are the 8 header glyphs, `▔`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the 6 state emoji, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, `💻 ❯` and `✴️ ❯` before a command for the user to run, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
 
 ## Why and how to apply
 
