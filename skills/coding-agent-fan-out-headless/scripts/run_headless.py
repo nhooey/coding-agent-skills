@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
-"""Run one prompt across many git checkouts, one headless Claude Code session each.
+"""Run one headless Claude Code session with a prompt, inside one git checkout.
 
-Each session starts with its checkout (or a git worktree of it) as the working
+The session starts with the checkout (or a git worktree of it) as its working
 directory, so it loads that checkout's CLAUDE.md, skills, settings, hooks and
 plugins, the Nix dev shell a plugin or `.envrc` provides among them, as a
-session started there by hand would. The runs go in parallel; the script waits
-for all of them, then writes summary.json.
+session started there by hand would.
 
-Progress goes to stdout as it happens: a line when each run starts, one when it
-ends with how many have ended, its time and its turns, and every
---progress-every seconds (default 60) a line naming each run still going, with
-its time, its tool calls so far and the tool it called last.
+This script handles one checkout. To run a prompt across many, the caller runs
+it once per checkout, as many at a time as it likes, for example:
+  xargs -P 4 -I{} run_headless.py --job tidy --prompt-file prompt.md {} < checkouts.txt
 
-Where a run works (--where):
+Where the session works (--where):
   worktree  (default) a git worktree of the checkout's HEAD, on the branch
             fan-out/<job>, at <checkout>.worktrees/fan-out-<job> beside it, so
-            no run touches a working tree someone is using.
+            the run doesn't touch a working tree someone is using.
   checkout  the checkout itself.
 
-Which session a run starts from (--session):
+Which session it starts from (--session):
   continue  (default) the checkout's newest session, forked so the original is
             left as it was: `--continue --fork-session` in the checkout, or
             `--resume <its .jsonl> --fork-session` in a worktree, since a new
@@ -32,21 +30,32 @@ with uncommitted changes, --dirty decides what a continuing worktree run does:
   tell  (default) continue, and open the prompt with a note naming the
         uncommitted paths and saying their changes are not in the worktree.
   new   start a new session instead of continuing.
-  skip  don't run in that checkout; commit or stash its work and rerun.
+  skip  don't run; commit or stash the checkout's work and rerun.
 
-A run that fails on a usage limit stops the runner from starting any more; the
-ones not started are reported as skipped. Each run's stream-json output and
-stderr go to the log directory, one pair of files per checkout.
+Output: progress lines go to stderr, each opening on the label: one when the
+session starts, one every --progress-every seconds (default 60) with its time,
+its tool calls so far and the tool it called last, and one when it ends. The
+outcome goes to stdout as one JSON line and to <log-dir>/<label>.outcome.json:
+status (ok, failed, limit or skipped), exit code, session_id, resumed_from,
+turns, the start of the final result, the log path and notes. The session's
+stream-json output and stderr are beside it.
+
+Exit status:
+  0    the session ended without an error
+  1    it failed, or timed out
+  2    bad arguments: not a git checkout, an empty prompt, ANTHROPIC_API_KEY set
+  3    skipped, by --dirty skip
+  255  it hit a usage limit. xargs, GNU or BSD, starts no more runs after a
+       command exits 255, so a fan-out through xargs stops there by itself.
 
 Examples:
-  fan_out.py --dry-run --prompt 'Fix the failing tests' ~/git/a ~/git/b
-  fan_out.py --job tidy --parallel 3 --prompt-file prompt.md ~/git/*/
+  run_headless.py --dry-run --prompt 'Fix the failing tests' ~/git/app
+  run_headless.py --job tidy --prompt-file prompt.md --timeout 30 ~/git/app
 """
 
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 import datetime as dt
 import json
 import os
@@ -66,6 +75,7 @@ USAGE_LIMIT = re.compile(
 )
 RESULT_EXCERPT = 400
 TOOL_USE = re.compile(r'"type":"tool_use","id":"[^"]*","name":"([^"]+)"')
+EXIT = {"ok": 0, "failed": 1, "skipped": 3, "limit": 255}
 
 
 def project_key(path: Path) -> str:
@@ -155,16 +165,6 @@ def is_usage_limit(*texts: str) -> bool:
     return any(USAGE_LIMIT.search(t or "") for t in texts)
 
 
-def unique_labels(checkouts: list[Path]) -> list[str]:
-    seen: dict[str, int] = {}
-    labels = []
-    for checkout in checkouts:
-        n = seen.get(checkout.name, 0)
-        seen[checkout.name] = n + 1
-        labels.append(checkout.name if n == 0 else f"{checkout.name}-{n + 1}")
-    return labels
-
-
 def git(*args: str, cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
@@ -182,7 +182,7 @@ def dirty_note(checkout: Path, workdir: Path, paths: list[str], limit: int = 50)
     shown = "\n".join(f"- {p}" for p in paths[:limit])
     more = f"\n- …and {len(paths) - limit} more" if len(paths) > limit else ""
     return (
-        f"Note from the fan-out runner: you are working in {workdir}, a git worktree made "
+        f"Note from the headless runner: you are working in {workdir}, a git worktree made "
         f"from the last commit of {checkout}. These paths had uncommitted changes there, "
         f"and those changes are not in this worktree:\n{shown}{more}\n"
         "Edits the earlier conversation made to them may be missing here, so read the "
@@ -266,55 +266,16 @@ def tool_calls(log: Path) -> tuple[int, str | None]:
     return len(names), names[-1] if names else None
 
 
-class Progress:
-    """Which runs are going, for the start, end and heartbeat lines."""
+def say(line: str) -> None:
+    print(line, file=sys.stderr, flush=True)
 
-    def __init__(self, total: int):
-        self.total = total
-        self.done = 0
-        self.running: dict[str, tuple[float, Path]] = {}
-        self.lock = threading.Lock()
 
-    def say(self, line: str) -> None:
-        with self.lock:
-            print(line, flush=True)
-
-    def started(self, label: str, log: Path) -> None:
-        with self.lock:
-            self.running[label] = (time.monotonic(), log)
-            count = len(self.running)
-        self.say(f"start   {label} ({count} running)")
-
-    def stopped(self, label: str) -> float | None:
-        with self.lock:
-            start = self.running.pop(label, (None, None))[0]
-        return None if start is None else time.monotonic() - start
-
-    def ended(self, outcome: "Outcome", took: float | None) -> None:
-        with self.lock:
-            self.done += 1
-            done = self.done
-        detail = ", ".join(x for x in (
-            elapsed(took) if took is not None else "",
-            f"{outcome.turns} turns" if outcome.turns is not None else "",
-        ) if x)
-        first = outcome.result.splitlines()[0][:120] if outcome.result else ""
-        self.say(f"[{done}/{self.total}] {outcome.status:7} {outcome.label}"
-                 + (f" ({detail})" if detail else "") + f": {first}")
-
-    def heartbeat(self) -> None:
-        with self.lock:
-            running = dict(self.running)
-            done = self.done
-        now = time.monotonic()
-        parts = []
-        for label, (start, log) in sorted(running.items(), key=lambda kv: kv[1][0]):
-            calls, last = tool_calls(log)
-            parts.append(f"{label} {elapsed(now - start)}, {calls} tools"
-                         + (f", last {last}" if last else ""))
-        waiting = self.total - done - len(running)
-        self.say(f"...     {done}/{self.total} ended, {len(running)} running, {waiting} waiting"
-                 + (": " + " · ".join(parts) if parts else ""))
+def heartbeat(label: str, log: Path, start: float, every: float, done: threading.Event) -> None:
+    """Every `every` seconds until `done`, a line on how the session is going."""
+    while not done.wait(every):
+        calls, last = tool_calls(log)
+        say(f"...     {label} {elapsed(time.monotonic() - start)}, {calls} tools"
+            + (f", last {last}" if last else ""))
 
 
 def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) -> Plan:
@@ -348,23 +309,12 @@ def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) 
                 command, notes, skip)
 
 
-def run(plan: Plan, args: argparse.Namespace, stop: threading.Event,
-        progress: Progress) -> Outcome:
-    outcome = _run(plan, args, stop, progress)
-    progress.ended(outcome, progress.stopped(plan.label))
-    return outcome
-
-
-def _run(plan: Plan, args: argparse.Namespace, stop: threading.Event,
-         progress: Progress) -> Outcome:
+def run(plan: Plan, args: argparse.Namespace) -> Outcome:
     checkout = Path(plan.checkout)
     outcome = Outcome(plan.label, plan.checkout, plan.workdir, "skipped",
                       resumed_from=plan.resume, notes=list(plan.notes))
     if plan.skip:
         outcome.result = f"not started: {plan.skip}"
-        return outcome
-    if stop.is_set():
-        outcome.result = "not started: an earlier run hit a usage limit"
         return outcome
     try:
         if args.where == "worktree":
@@ -383,7 +333,11 @@ def _run(plan: Plan, args: argparse.Namespace, stop: threading.Event,
     err_log = args.log_dir / f"{plan.label}.stderr"
     outcome.log = str(log)
     command = env_wrapper(workdir) + plan.command
-    progress.started(plan.label, log)
+    say(f"start   {plan.label}")
+    start, done = time.monotonic(), threading.Event()
+    if args.progress_every > 0:
+        threading.Thread(target=heartbeat, daemon=True,
+                         args=(plan.label, log, start, args.progress_every, done)).start()
     try:
         with log.open("w") as out, err_log.open("w") as err:
             proc = subprocess.run(
@@ -397,6 +351,9 @@ def _run(plan: Plan, args: argparse.Namespace, stop: threading.Event,
     except FileNotFoundError as err:
         outcome.status, outcome.result = "failed", f"could not start: {err}"
         return outcome
+    finally:
+        done.set()
+        took = time.monotonic() - start
 
     stream, stderr = log.read_text(errors="replace"), err_log.read_text(errors="replace")
     result = parse_result(stream) or {}
@@ -408,9 +365,9 @@ def _run(plan: Plan, args: argparse.Namespace, stop: threading.Event,
         outcome.status = "ok"
     elif is_usage_limit(text, stderr):
         outcome.status = "limit"
-        stop.set()
     else:
         outcome.status = "failed"
+    outcome.notes.append(f"took {elapsed(took)}")
     return outcome
 
 
@@ -425,36 +382,38 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         epilog=__doc__.split("\n\n", 1)[1],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("checkouts", nargs="+", type=Path, help="git checkouts to run in")
+    p.add_argument("checkout", type=Path, help="the git checkout to run in")
     src = p.add_mutually_exclusive_group(required=True)
-    src.add_argument("--prompt", help="the prompt for every run")
+    src.add_argument("--prompt", help="the prompt")
     src.add_argument("--prompt-file", type=Path, help="read the prompt from a file ('-' for stdin)")
     p.add_argument("--job", default=dt.datetime.now().strftime("%Y%m%d-%H%M%S"),
-                   help="names the branch, worktree, sessions and log folder (default: a timestamp)")
+                   help="names the branch, worktree, session and log folder (default: a timestamp); "
+                        "give every run of a fan-out the same one")
+    p.add_argument("--label", help="names the log files and progress lines (default: the checkout's "
+                                   "folder name); set it when two checkouts share a name")
     p.add_argument("--where", choices=["worktree", "checkout"], default="worktree")
     p.add_argument("--session", choices=["continue", "new"], default="continue")
     p.add_argument("--dirty", choices=["tell", "new", "skip"], default="tell",
                    help="a continuing worktree run in a checkout with uncommitted changes (default: tell)")
-    p.add_argument("--parallel", type=int, default=4, help="runs at a time (default: 4)")
     p.add_argument("--model", help="passed to claude --model (default: your configured model)")
     p.add_argument("--effort", help="passed to claude --effort")
     p.add_argument("--permission-mode", default="auto", help="passed to claude (default: auto)")
     p.add_argument("--max-turns", type=int, help="passed to claude --max-turns")
-    p.add_argument("--timeout", type=float, help="minutes before a run is killed")
+    p.add_argument("--timeout", type=float, help="minutes before the session is killed")
     p.add_argument("--claude-arg", action="append", default=[],
                    help="one more argument for claude; repeat as needed")
     p.add_argument("--progress-every", type=float, default=60,
-                   help="seconds between lines on the runs still going; 0 for none (default: 60)")
+                   help="seconds between progress lines; 0 for none (default: 60)")
     p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-fan-out/<job>")
     p.add_argument("--projects-root", type=Path, default=PROJECTS_ROOT, help=argparse.SUPPRESS)
     p.add_argument("--allow-api-key", action="store_true",
                    help="run even though ANTHROPIC_API_KEY is set, which bills the API")
-    p.add_argument("--dry-run", action="store_true", help="print each run's plan and start nothing")
+    p.add_argument("--dry-run", action="store_true", help="print the plan and start nothing")
     args = p.parse_args(argv)
     if not re.fullmatch(r"[A-Za-z0-9._-]+", args.job):
         p.error("--job may hold only letters, digits, '.', '_' and '-'")
-    if args.parallel < 1:
-        p.error("--parallel must be at least 1")
+    if args.label is not None and not re.fullmatch(r"[A-Za-z0-9._-]+", args.label):
+        p.error("--label may hold only letters, digits, '.', '_' and '-'")
     args.log_dir = args.log_dir or default_log_root() / args.job
     return args
 
@@ -470,53 +429,33 @@ def read_prompt(args: argparse.Namespace) -> str:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if os.environ.get("ANTHROPIC_API_KEY") and not args.allow_api_key and not args.dry_run:
-        print("ANTHROPIC_API_KEY is set, so every `claude -p` run would bill the API "
-              "instead of your subscription. Unset it, or pass --allow-api-key.", file=sys.stderr)
+        print("ANTHROPIC_API_KEY is set, so `claude -p` would bill the API instead of your "
+              "subscription. Unset it, or pass --allow-api-key.", file=sys.stderr)
         return 2
     prompt = read_prompt(args)
     if not prompt.strip():
         print("the prompt is empty", file=sys.stderr)
         return 2
-
-    checkouts = []
-    for path in args.checkouts:
-        top = toplevel(path.expanduser().resolve()) if path.expanduser().is_dir() else None
-        if top is None:
-            print(f"not a git checkout: {path}", file=sys.stderr)
-            return 2
-        if top not in checkouts:
-            checkouts.append(top)
-    plans = [plan_for(c, label, prompt, args) for c, label in zip(checkouts, unique_labels(checkouts))]
+    path = args.checkout.expanduser()
+    checkout = toplevel(path.resolve()) if path.is_dir() else None
+    if checkout is None:
+        print(f"not a git checkout: {args.checkout}", file=sys.stderr)
+        return 2
+    plan = plan_for(checkout, args.label or checkout.name, prompt, args)
 
     if args.dry_run:
-        for plan in plans:
-            print(json.dumps(asdict(plan) | {"command": plan.command[:2] + ["<prompt>"] + plan.command[3:]}))
+        print(json.dumps(asdict(plan) | {"command": plan.command[:2] + ["<prompt>"] + plan.command[3:]}))
         return 0
 
     args.log_dir.mkdir(parents=True, exist_ok=True)
-    print(f"{len(plans)} runs, {args.parallel} at a time; logs in {args.log_dir}", flush=True)
-    stop = threading.Event()
-    progress = Progress(len(plans))
-    outcomes: list[Outcome] = []
-    every = args.progress_every if args.progress_every > 0 else None
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as pool:
-        pending = {pool.submit(run, plan, args, stop, progress) for plan in plans}
-        last_beat = time.monotonic()
-        while pending:
-            done, pending = concurrent.futures.wait(
-                pending, timeout=every, return_when=concurrent.futures.FIRST_COMPLETED)
-            outcomes.extend(future.result() for future in done)
-            if every and pending and time.monotonic() - last_beat >= every:
-                progress.heartbeat()
-                last_beat = time.monotonic()
-
-    order = {plan.label: i for i, plan in enumerate(plans)}
-    outcomes.sort(key=lambda o: order[o.label])
-    summary = args.log_dir / "summary.json"
-    summary.write_text(json.dumps([asdict(o) for o in outcomes], indent=2) + "\n")
-    counts = {s: sum(o.status == s for o in outcomes) for s in ("ok", "failed", "limit", "skipped")}
-    print(" · ".join(f"{n} {s}" for s, n in counts.items() if n) + f"; summary in {summary}")
-    return 0 if counts["ok"] == len(outcomes) else 1
+    outcome = run(plan, args)
+    first = outcome.result.splitlines()[0][:120] if outcome.result else ""
+    turns = f" ({outcome.turns} turns)" if outcome.turns is not None else ""
+    say(f"{outcome.status:7} {outcome.label}{turns}: {first}")
+    line = json.dumps(asdict(outcome))
+    (args.log_dir / f"{plan.label}.outcome.json").write_text(line + "\n")
+    print(line, flush=True)
+    return EXIT[outcome.status]
 
 
 if __name__ == "__main__":
