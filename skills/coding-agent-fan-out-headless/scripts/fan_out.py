@@ -5,7 +5,12 @@ Each session starts with its checkout (or a git worktree of it) as the working
 directory, so it loads that checkout's CLAUDE.md, skills, settings, hooks and
 plugins, the Nix dev shell a plugin or `.envrc` provides among them, as a
 session started there by hand would. The runs go in parallel; the script waits
-for all of them and prints one line per checkout, then writes summary.json.
+for all of them, then writes summary.json.
+
+Progress goes to stdout as it happens: a line when each run starts, one when it
+ends with how many have ended, its time and its turns, and every
+--progress-every seconds (default 60) a line naming each run still going, with
+its time, its tool calls so far and the tool it called last.
 
 Where a run works (--where):
   worktree  (default) a git worktree of the checkout's HEAD, on the branch
@@ -50,6 +55,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -59,6 +65,7 @@ USAGE_LIMIT = re.compile(
     re.IGNORECASE,
 )
 RESULT_EXCERPT = 400
+TOOL_USE = re.compile(r'"type":"tool_use","id":"[^"]*","name":"([^"]+)"')
 
 
 def project_key(path: Path) -> str:
@@ -245,6 +252,71 @@ class Outcome:
     notes: list[str] = field(default_factory=list)
 
 
+def elapsed(seconds: float) -> str:
+    minutes, secs = divmod(int(seconds), 60)
+    return f"{minutes}m{secs:02d}s" if minutes else f"{secs}s"
+
+
+def tool_calls(log: Path) -> tuple[int, str | None]:
+    """How many tools a run's stream-json log shows it calling, and the last one."""
+    try:
+        names = TOOL_USE.findall(log.read_text(errors="replace"))
+    except OSError:
+        return 0, None
+    return len(names), names[-1] if names else None
+
+
+class Progress:
+    """Which runs are going, for the start, end and heartbeat lines."""
+
+    def __init__(self, total: int):
+        self.total = total
+        self.done = 0
+        self.running: dict[str, tuple[float, Path]] = {}
+        self.lock = threading.Lock()
+
+    def say(self, line: str) -> None:
+        with self.lock:
+            print(line, flush=True)
+
+    def started(self, label: str, log: Path) -> None:
+        with self.lock:
+            self.running[label] = (time.monotonic(), log)
+            count = len(self.running)
+        self.say(f"start   {label} ({count} running)")
+
+    def stopped(self, label: str) -> float | None:
+        with self.lock:
+            start = self.running.pop(label, (None, None))[0]
+        return None if start is None else time.monotonic() - start
+
+    def ended(self, outcome: "Outcome", took: float | None) -> None:
+        with self.lock:
+            self.done += 1
+            done = self.done
+        detail = ", ".join(x for x in (
+            elapsed(took) if took is not None else "",
+            f"{outcome.turns} turns" if outcome.turns is not None else "",
+        ) if x)
+        first = outcome.result.splitlines()[0][:120] if outcome.result else ""
+        self.say(f"[{done}/{self.total}] {outcome.status:7} {outcome.label}"
+                 + (f" ({detail})" if detail else "") + f": {first}")
+
+    def heartbeat(self) -> None:
+        with self.lock:
+            running = dict(self.running)
+            done = self.done
+        now = time.monotonic()
+        parts = []
+        for label, (start, log) in sorted(running.items(), key=lambda kv: kv[1][0]):
+            calls, last = tool_calls(log)
+            parts.append(f"{label} {elapsed(now - start)}, {calls} tools"
+                         + (f", last {last}" if last else ""))
+        waiting = self.total - done - len(running)
+        self.say(f"...     {done}/{self.total} ended, {len(running)} running, {waiting} waiting"
+                 + (": " + " · ".join(parts) if parts else ""))
+
+
 def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) -> Plan:
     resume = newest_session(checkout, args.projects_root) if args.session == "continue" else None
     workdir = worktree_path(checkout, args.job) if args.where == "worktree" else checkout
@@ -276,7 +348,15 @@ def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) 
                 command, notes, skip)
 
 
-def run(plan: Plan, args: argparse.Namespace, stop: threading.Event) -> Outcome:
+def run(plan: Plan, args: argparse.Namespace, stop: threading.Event,
+        progress: Progress) -> Outcome:
+    outcome = _run(plan, args, stop, progress)
+    progress.ended(outcome, progress.stopped(plan.label))
+    return outcome
+
+
+def _run(plan: Plan, args: argparse.Namespace, stop: threading.Event,
+         progress: Progress) -> Outcome:
     checkout = Path(plan.checkout)
     outcome = Outcome(plan.label, plan.checkout, plan.workdir, "skipped",
                       resumed_from=plan.resume, notes=list(plan.notes))
@@ -303,6 +383,7 @@ def run(plan: Plan, args: argparse.Namespace, stop: threading.Event) -> Outcome:
     err_log = args.log_dir / f"{plan.label}.stderr"
     outcome.log = str(log)
     command = env_wrapper(workdir) + plan.command
+    progress.started(plan.label, log)
     try:
         with log.open("w") as out, err_log.open("w") as err:
             proc = subprocess.run(
@@ -362,6 +443,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--timeout", type=float, help="minutes before a run is killed")
     p.add_argument("--claude-arg", action="append", default=[],
                    help="one more argument for claude; repeat as needed")
+    p.add_argument("--progress-every", type=float, default=60,
+                   help="seconds between lines on the runs still going; 0 for none (default: 60)")
     p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-fan-out/<job>")
     p.add_argument("--projects-root", type=Path, default=PROJECTS_ROOT, help=argparse.SUPPRESS)
     p.add_argument("--allow-api-key", action="store_true",
@@ -413,14 +496,19 @@ def main(argv: list[str] | None = None) -> int:
     args.log_dir.mkdir(parents=True, exist_ok=True)
     print(f"{len(plans)} runs, {args.parallel} at a time; logs in {args.log_dir}", flush=True)
     stop = threading.Event()
+    progress = Progress(len(plans))
     outcomes: list[Outcome] = []
+    every = args.progress_every if args.progress_every > 0 else None
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as pool:
-        futures = {pool.submit(run, plan, args, stop): plan for plan in plans}
-        for future in concurrent.futures.as_completed(futures):
-            outcome = future.result()
-            outcomes.append(outcome)
-            print(f"{outcome.status:7} {outcome.label}: {outcome.result.splitlines()[0][:120] if outcome.result else ''}",
-                  flush=True)
+        pending = {pool.submit(run, plan, args, stop, progress) for plan in plans}
+        last_beat = time.monotonic()
+        while pending:
+            done, pending = concurrent.futures.wait(
+                pending, timeout=every, return_when=concurrent.futures.FIRST_COMPLETED)
+            outcomes.extend(future.result() for future in done)
+            if every and pending and time.monotonic() - last_beat >= every:
+                progress.heartbeat()
+                last_beat = time.monotonic()
 
     order = {plan.label: i for i, plan in enumerate(plans)}
     outcomes.sort(key=lambda o: order[o.label])

@@ -64,7 +64,7 @@ Each run gets the checkout's environment the way a manual session does:
 
 ## Reading the results
 
-The runner prints one line per run as it finishes, then writes `summary.json` in the log folder, `$XDG_STATE_HOME/coding-agent-fan-out/<job>/` by default: per checkout its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log` and its `notes`. Each run's full stream-json output and stderr are beside it. The runner exits 0 only when every run is `ok`.
+The runner prints its progress as it goes: a line when each run starts, one when it ends, with how many have ended, its time and its turns, and every `--progress-every` seconds, 60 by default, one naming each run still going with its time, its tool calls so far and the tool it called last. When the agent runs it in the background, it reads that output only when the user asks how it's going. At the end it writes `summary.json` in the log folder, `$XDG_STATE_HOME/coding-agent-fan-out/<job>/` by default: per checkout its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log` and its `notes`. Each run's full stream-json output and stderr are beside it. The runner exits 0 only when every run is `ok`.
 
 Report each checkout's outcome to the user by its name, with the branch of any worktree that holds changes. A run's own work, such as a pull request it opened, is in its result text and log.
 

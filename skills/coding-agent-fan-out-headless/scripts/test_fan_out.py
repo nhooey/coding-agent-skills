@@ -7,6 +7,8 @@ and no real Claude Code.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -34,7 +36,11 @@ FAKE_CLAUDE = textwrap.dedent(
     if mode == "limit":
         print(json.dumps({{"type": "result", "is_error": True, "result": "Claude usage limit reached"}}))
         sys.exit(1)
-    print(json.dumps({{"type": "system", "subtype": "init"}}))
+    print(json.dumps({{"type": "system", "subtype": "init"}}), flush=True)
+    if mode == "slow":
+        import time
+        print('{{"type":"assistant","message":{{"content":[{{"type":"tool_use","id":"toolu_1","name":"Bash","input":{{}}}}]}}}}', flush=True)
+        time.sleep(1.5)
     print(json.dumps({{"type": "result", "is_error": False, "result": "done in " + os.getcwd(),
                        "session_id": "sess-1", "num_turns": 3}}))
     """
@@ -235,6 +241,17 @@ class WholeRuns(unittest.TestCase):
         self.make_alpha_dirty()
         self.assertEqual(self.fan_out("--where", "checkout"), 0)
         self.assertEqual(self.recorded("src_alpha")["argv"][1], "do the thing")
+
+    def test_progress_names_starts_ends_and_running_sessions(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(self.fan_out("--where", "checkout", "--parallel", "1",
+                                          "--progress-every", "0.5", mode="slow"), 0)
+        text = out.getvalue()
+        self.assertIn("start   alpha (1 running)", text)
+        self.assertRegex(text, r"\[1/2\] ok      alpha \(\d+s, 3 turns\)")
+        self.assertRegex(text, r"\[2/2\] ok      beta")
+        self.assertRegex(text, r"\.\.\.     [01]/2 ended, 1 running, [01] waiting: \w+ \d+s, 1 tools, last Bash")
 
     def test_dry_run_creates_nothing(self):
         self.assertEqual(self.fan_out("--dry-run"), 0)
