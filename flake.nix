@@ -108,6 +108,22 @@
                 touch $out
               '';
 
+          # The fan-out runner, against throwaway git repositories and a fake
+          # `claude` that records how it was called.
+          checks.fan-out-headless =
+            pkgs.runCommand "fan-out-headless-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.git
+                ];
+              }
+              ''
+                export HOME=$TMPDIR
+                python3 -I ${./skills/coding-agent-fan-out-headless}/scripts/test_fan_out.py
+                touch $out
+              '';
+
           # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
           # the module also surfaces a `checks.${system}.treefmt` so `nix flake
           # check` fails on any unformatted file. prettier's includes are pinned
