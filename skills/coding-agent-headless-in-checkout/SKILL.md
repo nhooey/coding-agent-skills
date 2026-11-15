@@ -40,10 +40,9 @@ A run takes minutes to an hour, so a session running it follows `coding-agent-us
 
 ## Priority and admission control
 
-- **Priority:** on macOS each session starts under `taskpolicy -c utility`, so the scheduler favours interactive work and everything the session starts inherits the class. Elsewhere the run starts as it did before. `--no-admission` leaves the priority alone.
+- **Priority:** on macOS each session starts under `taskpolicy -c utility`, so the scheduler favours interactive work and everything the session starts inherits the class. Elsewhere it starts at normal priority. `--no-admission` keeps the utility class.
 - **Memory pressure:** before starting, the script reads `kern.memorystatus_vm_pressure_level`: 1 (normal) starts the run; 2 (warning) or 4 (critical) holds it, rechecking every few seconds and saying so on a progress line, `waiting <label> <time>: memory pressure level <n>`. A run already going is never stopped. A level that can't be read, or isn't 1, 2 or 4, counts as 1, with a note in the outcome. Off macOS there is nothing to read, so the run starts.
-- **Giving up:** `--admission-timeout <minutes>` ends the wait with status `skipped` and exit status 3, so a fan-out moves on; the checkout's work is untouched and no worktree is made. Without it the run waits as long as it takes.
-- **`--no-admission`:** start at once, for a run that must go whatever the pressure.
+- **Giving up:** `--admission-timeout <minutes>` ends the wait with status `skipped` and exit status 3, so a fan-out moves on; the checkout's work is untouched and no worktree is made. Without it the run waits as long as it takes; with `--no-admission` it doesn't wait at all, for a run that must go whatever the pressure.
 - **What it bounds:** Nix's `max-jobs` and `cores` apply to each client of the daemon, so holding a new run is what keeps builds across a fan-out near the machine's CPUs. Keep a fan-out's `-P` small anyway.
 - **Checking it:** `taskpolicy -G <pid>` on a started session shows the utility class.
 
