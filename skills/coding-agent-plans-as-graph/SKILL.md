@@ -1,6 +1,6 @@
 ---
 name: coding-agent-plans-as-graph
-description: Keep a project's plans as a graph of Markdown nodes in `agents/plans/`, one node per file, open ones in `open/` and finished ones in `closed/`, with a generated README showing what's in progress, ready, blocked and proposed. Each node has a state (proposed, approved, in-progress; implemented, rejected, abandoned, superseded), a kind (end state, implementation, schedule) and typed links (`part-of`, `needs`, `after`, `superseded-by`), and its body can be as long as it needs. Plans say what will be true, separately from how to get there and from when and by which agents, with costs in tokens, dollars and weekly-limit percent. The bundled `plans.py` checks the graph, lists ready nodes and writes the overview. Use when writing, updating or reviewing a plan, starting work from one, closing a node, scheduling agents across plan nodes, or tidying plans left in `.claude/plans/` or elsewhere.
+description: Keep a project's plans as a graph of Markdown nodes in `agents/plans/`, one node per file, open ones in `open/` and finished ones in `closed/`, a plan of several nodes in a folder of its own, with a generated README showing what's in progress, ready, blocked and proposed. Each node has a state (proposed, approved, in-progress; implemented, rejected, abandoned, superseded), a kind (end state, implementation, schedule) and typed links (`part-of`, `needs`, `after`, `superseded-by`), and its body can be as long as it needs. Plans say what will be true, separately from how to get there and from when and by which agents, with costs in tokens, dollars and weekly-limit percent. The bundled `plans.py` checks the graph, lists ready nodes and writes the overview. Use when writing, updating or reviewing a plan, starting work from one, closing a node, scheduling agents across plan nodes, or tidying plans left in `.claude/plans/` or elsewhere.
 ---
 
 # Plans as a graph of Markdown nodes
@@ -11,13 +11,17 @@ _A plan is a folder of small Markdown files, each a node with a state and typed 
 
 ```text
 agents/plans/
-  README.md           the overview, written by plans.py; never edited by hand
-  open/<id>.md        proposed, approved or in-progress
-  closed/<id>.md      implemented, rejected, abandoned or superseded
+  README.md                the overview, written by plans.py; never edited by hand
+  open/<id>.md             proposed, approved or in-progress
+  closed/<id>.md           implemented, rejected, abandoned or superseded
+  <plan>/open/<id>.md      the same, for the nodes of one plan
+  <plan>/closed/<id>.md
 ```
 
 - **One node per file**, named by its id: lower-case words and dashes that say what it is, such as `uniform-skill-sets`. The id never changes, because links use it.
-- **Open or closed is the folder:** closing a node moves it to `closed/` in the same commit that sets its state, with `git mv`, so its history follows it.
+- **Open or closed is the folder:** closing a node moves it to the `closed/` beside its `open/` in the same commit that sets its state, with `git mv`, so its history follows it.
+- **A plan of several nodes gets its own folder:** nodes that belong to one plan, such as a cross-repository cleanup or a feature's rollout, go in `agents/plans/<plan>/open/` and `closed/`, the folder named like an id. A lone node stays in the top-level `open/` and `closed/`. Ids stay unique across every plan, so a link never says which folder its target is in, and a node can link into another plan.
+- **A long list may wrap:** a formatter such as prettier breaks a long `needs:` list onto an indented next line, and `plans.py` reads the indented line as part of the one above.
 - **`agents/plans/`** sits beside `AGENTS.md`, readable by any agent and committed like code. Plans in `.claude/plans/`, `docs/plans/` or a `_implemented/` folder are moved here (see [Tidying old plans](#tidying-old-plans)).
 
 ## A node

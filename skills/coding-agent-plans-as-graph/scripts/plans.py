@@ -3,13 +3,16 @@
 
 A plan is a folder of Markdown nodes, `agents/plans/` by default:
 
-  open/<id>.md     nodes still to do: proposed, approved or in-progress
-  closed/<id>.md   nodes finished: implemented, rejected, abandoned or superseded
-  README.md        the overview this script writes; never edited by hand
+  open/<id>.md            nodes still to do: proposed, approved or in-progress
+  closed/<id>.md          nodes finished: implemented, rejected, abandoned or superseded
+  <plan>/open/<id>.md     the same, for the nodes of one plan, grouped in its folder
+  <plan>/closed/<id>.md
+  README.md               the overview this script writes; never edited by hand
 
 Each node opens on a frontmatter block between `---` lines, one `key: value`
-per line, lists in brackets: `needs: [a, b]`. The node's id is its file name
-without `.md`. SKILL.md lists the keys.
+per line, lists in brackets: `needs: [a, b]`; an indented line continues the
+one above, as a formatter wraps a long list. The node's id is its file name
+without `.md`, unique across every plan. SKILL.md lists the keys.
 
 Commands:
   check      report every problem, exit 1 if there is any
@@ -25,6 +28,7 @@ import argparse
 import re
 import sys
 from dataclasses import dataclass
+from functools import reduce
 from itertools import accumulate, chain, groupby, islice, repeat
 from pathlib import Path
 from types import MappingProxyType
@@ -50,10 +54,11 @@ class Node:
     id: str
     folder: str
     meta: Meta
+    plan: str = ""
 
     @property
     def where(self) -> str:
-        return f"{self.folder}/{self.id}.md"
+        return f"{self.plan}/{self.folder}/{self.id}.md" if self.plan else f"{self.folder}/{self.id}.md"
 
     @property
     def state(self) -> str:
@@ -66,9 +71,9 @@ class Node:
 
 @dataclass(frozen=True)
 class RawPlan:
-    """What the shell read: (folder, file stem, text) per node, and the names of stray files."""
+    """What the shell read: (plan, folder, file stem, text) per node, and stray file paths."""
 
-    files: Tuple[Tuple[str, str, str], ...]
+    files: Tuple[Tuple[str, str, str, str], ...]
     strays: Tuple[str, ...]
 
 
@@ -89,6 +94,17 @@ def parse_line(number: int, line: str) -> Tuple[Optional[Tuple[str, object]], Pr
     return ((key, parse_value(value)), ()) if sep and key else (None, (f"line {number}: not `key: value`",))
 
 
+def fold(lines: Tuple[str, ...]) -> Tuple[Tuple[int, str], ...]:
+    """Each logical line with its first line's number: an indented line joins the one above."""
+
+    def step(acc: Tuple[Tuple[int, str], ...], numbered: Tuple[int, str]) -> Tuple[Tuple[int, str], ...]:
+        n, line = numbered
+        joins = acc and line[:1].isspace() and line.strip()
+        return acc[:-1] + ((acc[-1][0], f"{acc[-1][1]} {line.strip()}"),) if joins else acc + ((n, line),)
+
+    return reduce(step, enumerate(lines, start=2), ())
+
+
 def parse_frontmatter(text: str) -> Tuple[Meta, Problems]:
     lines = tuple(text.splitlines())
     if not lines or lines[0].strip() != "---":
@@ -98,7 +114,7 @@ def parse_frontmatter(text: str) -> Tuple[Meta, Problems]:
         return MappingProxyType({}), ("frontmatter never closed with a `---` line",)
     parsed = tuple(
         parse_line(n, line)
-        for n, line in enumerate(lines[1:end], start=2)
+        for n, line in fold(lines[1:end])
         if line.strip() and not line.lstrip().startswith("#")
     )
     return (
@@ -109,8 +125,8 @@ def parse_frontmatter(text: str) -> Tuple[Meta, Problems]:
 
 def build(raw: RawPlan) -> Tuple[Graph, Problems]:
     """The graph by node id, and the problems found while reading it."""
-    parsed = tuple((folder, stem, parse_frontmatter(text)) for folder, stem, text in raw.files)
-    nodes = tuple(Node(stem, folder, meta) for folder, stem, (meta, _) in parsed)
+    parsed = tuple((Node(stem, folder, MappingProxyType({}), plan), parse_frontmatter(text)) for plan, folder, stem, text in raw.files)
+    nodes = tuple(Node(n.id, n.folder, meta, n.plan) for n, (meta, _) in parsed)
     duplicates = tuple(
         f"{later.where}: id `{node_id}` is also {first.where}"
         for node_id, group in groupby(sorted(nodes, key=lambda n: n.id), key=lambda n: n.id)
@@ -119,9 +135,9 @@ def build(raw: RawPlan) -> Tuple[Graph, Problems]:
     )
     return (
         MappingProxyType({n.id: n for n in nodes}),
-        tuple(f"{folder}/{stem}.md: {p}" for folder, stem, (_, problems) in parsed for p in problems)
+        tuple(f"{n.where}: {p}" for n, (_, problems) in parsed for p in problems)
         + duplicates
-        + tuple(f"{name}: a node goes in open/ or closed/, not the plan's root" for name in raw.strays),
+        + tuple(f"{name}: a node goes in an open/ or closed/ folder" for name in raw.strays),
     )
 
 
@@ -259,13 +275,20 @@ def overview(graph: Graph) -> str:
 
 
 def read_plan(root: Path) -> RawPlan:
+    plans = ("",) + tuple(p.name for p in sorted(root.iterdir()) if p.is_dir() and p.name not in FOLDERS)
     return RawPlan(
         files=tuple(
-            (folder, path.stem, path.read_text(encoding="utf-8"))
+            (plan, folder, path.stem, path.read_text(encoding="utf-8"))
+            for plan in plans
             for folder in FOLDERS
-            for path in sorted((root / folder).glob("*.md"))
+            for path in sorted((root / plan / folder).glob("*.md"))
         ),
-        strays=tuple(path.name for path in sorted(root.glob("*.md")) if path.name != "README.md"),
+        strays=tuple(
+            str(path.relative_to(root))
+            for plan in plans
+            for path in sorted((root / plan).glob("*.md"))
+            if path.name != "README.md"
+        ),
     )
 
 
