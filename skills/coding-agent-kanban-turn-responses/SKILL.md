@@ -74,6 +74,8 @@ A review that is itself a choice goes in 🧠 Decide, and a task that is not a r
 | 🔲        | checkbox: any number chosen, including none                                  | A, B, C |
 | 👍 and 👎 | binary: one yes-or-no question, both lines written                           | Y and N |
 
+**Buttons for the options.** When the tool `mcp__coding-agent-kanban-answers__kanban_options` is in the agent's listing, from the coding-agent-kanban-answers mod, the agent calls it once, right before writing a final response that holds Decide items, so their buttons sit just above the reply. Its input is `{"items": [...]}`, one entry per Decide item of that response, in the shape `scripts/outstanding.py decide --json` prints: the turn id from `scripts/reply_turns.py id`, the item's number and summary, its kind (`radio`, `checkbox` or `binary`, from its glyphs) and each option's letter and name. A click on a button writes the answer's reference, `0f311c94.Decide.2.B`, into the user's draft and sends nothing. The final response is written exactly as it would be without the tool, and a reply without the tool reads as before.
+
 ## The user's answers
 
 - **By reference:** the user names an item by its list and number, `Decide.2`, an option by its letter, `Decide.2: B` or `2. B`, and either by its name. An item of an earlier turn carries that turn's id, from its usage line, before or after: `0f311c94.Decide.2` or `Decide.2 of 0f311c94`; with no id, the last final response is meant. An answer to an item of a turn that `recheck` replaced is read against the rechecked item that took it in.
