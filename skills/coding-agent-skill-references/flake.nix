@@ -14,5 +14,8 @@
       source = import ../../source.nix;
       skillName = "coding-agent-skill-references";
       src = ./.;
+      # Ship preferences-section.md, the template SKILL.md links; by default
+      # only SKILL.md, references/ and scripts/ are installed.
+      extraFiles = [ "[a-z]*.md" ];
     };
 }

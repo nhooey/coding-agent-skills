@@ -1,17 +1,6 @@
 ---
 name: coding-agent-skill-references
-description: |
-  How a skill refers to other skills and supports user preferences. Use it
-  when writing or editing a SKILL.md that names another skill, when loading a
-  skill whose Related skills section lists others, and when deciding whether
-  a lesson about a skill belongs in the skill itself or in its preferences
-  file. Covers bare skill names (never URLs or owners), the closing Related
-  skills section and its fixed intro, loading related skills without asking
-  and asking before installing a missing one, the user and project
-  preferences files beside the installed skill and their precedence, the
-  "Your preferences" section that reads them, why relationships go in the
-  body rather than in custom frontmatter, and stating rules as they stand,
-  with their history in commit messages rather than in the skill.
+description: Refer to another skill by its bare name, never a URL, owner or path, and list every skill a SKILL.md names in a closing Related skills section with its fixed intro; load a listed skill that applies without asking, and ask before installing a missing one. Keep a user's personal choices in a preferences file beside the installed skill, the project's overriding the user's, read by a "Your preferences" section copied from the bundled template. Relationships go in the body, not in custom frontmatter, and a skill states its rules as they stand, with their history in commit messages. Use when writing or editing a SKILL.md that names another skill or reads a preferences file, when loading a skill whose Related skills section lists others, and when deciding whether a lesson about a skill belongs in the skill or in its preferences file.
 tags: [skills, authoring]
 ---
 
@@ -74,20 +63,9 @@ A project's file overrides the user's, and the user's overrides the skill's defa
 
 ## The "Your preferences" section
 
-A skill that supports preferences carries this section, just before Related skills, with its own name in place of `<skill-name>`:
+A skill that supports preferences carries this section, just before Related skills. Copy it from [preferences-section.md](preferences-section.md), beside this skill, with the skill's own name in place of `<skill-name>`; read that file rather than copying the section from a loaded skill, where the command line has already been expanded.
 
-```markdown
-## Your preferences
-
-!`cat "${CLAUDE_SKILL_DIR}/../<skill-name>.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/<skill-name>.preferences.md" 2>/dev/null || true`
-
-If your agent doesn't run the line above, read these files yourself if they
-exist: `<skill-name>.preferences.md` next to this skill's folder, then
-`.agents/skills/<skill-name>.preferences.md` in the project. A project's
-file overrides the user's, and the user's overrides this skill's defaults.
-```
-
-Claude Code runs the line that opens on an exclamation mark when it loads the skill and puts the files' contents in its place, the user's first and the project's after it, so the later one wins where they differ. Another agent sees the line as text, and the paragraph under it tells it to read the same files itself.
+The section opens on a line holding an exclamation mark and a `cat` of the two files in a code span, using `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PROJECT_DIR}`. Claude Code runs that line when it loads the skill, even inside a code fence, and puts the files' contents in its place, the user's first and the project's after it, so the later one wins where they differ. Another agent sees the line as text, and the paragraph under it tells it to read the same files itself.
 
 ## A skill states its rules as they stand
 
