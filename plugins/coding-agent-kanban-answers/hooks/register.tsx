@@ -33,7 +33,6 @@ import {
   refOf,
   refreshed,
   reopened,
-  rowsOf,
   skipped,
 } from "./answers";
 
@@ -57,8 +56,6 @@ const COLOR = {
 } as const;
 // Columns an option sits in from its summary, and its ➕ and ➖ lines from it.
 const INDENT = 3;
-// The border's two rows and the controls' row and the gap above it.
-const CHROME = 4;
 
 // Change the tag when Band's fields change: it declines what an earlier
 // version stored, which outlives a reload.
@@ -290,7 +287,6 @@ export const register: Register = (on) => {
         ...current,
         position: position(current),
       }));
-    const isFull = rowsOf(item).full + CHROME <= e.props.maxRows;
     // A control's emoji, then its word underlined, so it reads as a link.
     const control = (
       key: string,
@@ -358,7 +354,6 @@ export const register: Register = (on) => {
         {itemView({ Box, Button, Text }, item, {
           title: header(b),
           chosen: lettersFor(text, item),
-          isFull,
           keyOf: (letter) => `option-${letter}`,
           onPick: (letter) => answer($, item, letter),
         })}
@@ -395,7 +390,6 @@ export const register: Register = (on) => {
               {itemView({ Box, Button, Text }, item, {
                 title: `🧠 Decide.${item.number} · ${item.summary}${isSettled ? " (settled)" : ""}`,
                 chosen: isSettled ? [] : lettersFor(text, item),
-                isFull: !isSettled,
                 isSettled,
                 keyOf: (letter) => `${refOf(item)}.${letter}`,
                 onPick: (letter) =>
@@ -418,8 +412,7 @@ type Elements = Pick<
 /**
  * One Decide item as the skill writes it: the title, the note, and each
  * option a plain button reading `glyph letter. name: consequence`, its ➕ and
- * ➖ lines indented under it. `isFull` false leaves out the note, pros, cons
- * and option notes, for a band with few rows.
+ * ➖ lines indented under it, always in full.
  */
 const itemView = (
   elements: Elements,
@@ -427,7 +420,6 @@ const itemView = (
   view: {
     title: string;
     chosen: string[];
-    isFull: boolean;
     isSettled?: boolean;
     keyOf: (letter: string) => string;
     onPick: (letter: string) => unknown;
@@ -478,7 +470,7 @@ const itemView = (
       >
         {inline(view.title, "title")}
       </Text>
-      {view.isFull ? lines("", item.note, undefined, "note") : null}
+      {lines("", item.note, undefined, "note")}
       {item.options.map((option) => {
         const isChosen = view.chosen.includes(option.letter);
         const pick = isChosen ? { backgroundColor: COLOR.chosen } : {};
@@ -507,15 +499,9 @@ const itemView = (
                 ? inline(option.consequence, `${option.letter}-then`, pick)
                 : null}
             </Button>
-            {view.isFull
-              ? lines("➕", option.pros, COLOR.pro, `${option.letter}-pro`)
-              : null}
-            {view.isFull
-              ? lines("➖", option.cons, COLOR.con, `${option.letter}-con`)
-              : null}
-            {view.isFull
-              ? lines("", option.notes, undefined, `${option.letter}-note`)
-              : null}
+            {lines("➕", option.pros, COLOR.pro, `${option.letter}-pro`)}
+            {lines("➖", option.cons, COLOR.con, `${option.letter}-con`)}
+            {lines("", option.notes, undefined, `${option.letter}-note`)}
           </Box>
         );
       })}

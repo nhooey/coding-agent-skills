@@ -257,21 +257,6 @@ export const codeSpans = (line: string): { text: string; isCode: boolean }[] =>
     }))
     .filter((part) => part.text !== "");
 
-/** How many rows an item takes drawn in full, and with its pros, cons and notes left out. */
-export const rowsOf = (item: DecideItem): { full: number; brief: number } => {
-  const brief = 1 + item.options.length;
-  const under = item.options.reduce(
-    (sum, o) =>
-      sum +
-      (o.pros?.length ?? 0) +
-      (o.cons?.length ?? 0) +
-      (o.notes?.length ?? 0),
-    0,
-  );
-
-  return { full: brief + (item.note?.length ?? 0) + under, brief };
-};
-
 /** The items a tool call or the script handed over, whatever else the JSON held. */
 export const itemsOf = (value: unknown): DecideItem[] => {
   const items =
