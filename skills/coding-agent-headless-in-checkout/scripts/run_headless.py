@@ -17,12 +17,15 @@ Where the session works (--where):
   checkout  the checkout itself.
 
 Which session it starts from (--session):
-  continue  (default) the checkout's newest session, forked so the original is
-            left as it was: `--continue --fork-session` in the checkout, or
+  new       (default) a new session, so the prompt carries all the context.
+  continue  the checkout's newest session, forked so the original is left as
+            it was: `--continue --fork-session` in the checkout, or
             `--resume <its .jsonl> --fork-session` in a worktree, since a new
             worktree is a new directory with no sessions of its own. A checkout
-            with no session gets a new one.
-  new       always a new session.
+            with no session gets a new one. When that session was written in
+            the last --live-within minutes (default 10) it may still be
+            running: the run warns, since its fork won't see what the live
+            session does next.
 
 A worktree holds only committed work, so a session continued in one may
 remember edits that stayed behind, uncommitted, in the checkout. For a checkout
@@ -278,10 +281,24 @@ def heartbeat(label: str, log: Path, start: float, every: float, done: threading
             + (f", last {last}" if last else ""))
 
 
+def live_note(session: Path | None, within_minutes: float) -> str | None:
+    """A warning when the session to fork was written recently enough to still be running."""
+    if session is None or within_minutes <= 0:
+        return None
+    age = time.time() - session.stat().st_mtime
+    if age > within_minutes * 60:
+        return None
+    return (f"session {session.stem} was written {elapsed(age)} ago and may still be running; "
+            "this run forks it and won't see what it does next")
+
+
 def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) -> Plan:
     resume = newest_session(checkout, args.projects_root) if args.session == "continue" else None
     workdir = worktree_path(checkout, args.job) if args.where == "worktree" else checkout
     notes, skip = [], None
+    live = live_note(resume, args.live_within)
+    if live:
+        notes.append(live)
     dirty = uncommitted(checkout) if args.where == "worktree" and resume else []
     if dirty:
         if args.dirty == "tell":
@@ -392,7 +409,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--label", help="names the log files and progress lines (default: the checkout's "
                                    "folder name); set it when two checkouts share a name")
     p.add_argument("--where", choices=["worktree", "checkout"], default="worktree")
-    p.add_argument("--session", choices=["continue", "new"], default="continue")
+    p.add_argument("--session", choices=["new", "continue"], default="new")
+    p.add_argument("--live-within", type=float, default=10,
+                   help="minutes: warn when continuing a session written this recently; 0 to never warn "
+                        "(default: 10)")
     p.add_argument("--dirty", choices=["tell", "new", "skip"], default="tell",
                    help="a continuing worktree run in a checkout with uncommitted changes (default: tell)")
     p.add_argument("--model", help="passed to claude --model (default: your configured model)")
@@ -442,6 +462,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"not a git checkout: {args.checkout}", file=sys.stderr)
         return 2
     plan = plan_for(checkout, args.label or checkout.name, prompt, args)
+    for note in plan.notes:
+        if "may still be running" in note:
+            say(f"warning {plan.label}: {note}")
 
     if args.dry_run:
         print(json.dumps(asdict(plan) | {"command": plan.command[:2] + ["<prompt>"] + plan.command[3:]}))
