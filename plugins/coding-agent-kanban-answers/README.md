@@ -45,7 +45,7 @@ The band shows one open Decide item at a time, inside a rounded border, laid out
 ╰──────────────────────────────────────────────────────────────────╯
 ```
 
-Each part has its own colour from the theme, so it reads in light and dark themes alike: the title in the accent colour, code spans in another, the option the draft picks on a highlighted background, the ➕ lines on a faint green background and the ➖ lines on a faint red one. The controls sit on top, so they stay put whatever the item's length, and every clickable word is underlined. When the band has too few rows for the whole item, it leaves out the note and the ➕ and ➖ lines.
+Each part has its own colour from the theme, so it reads in light and dark themes alike: the title in the accent colour, code spans in another, the option the draft picks on a highlighted background, the ➕ lines on a faint green background and the ➖ lines on a faint red one. The controls sit on top, so they stay put whatever the item's length, and the controls' words are underlined. When the band has too few rows for the whole item, it leaves out the note and the ➕ and ➖ lines.
 
 | Control         | What it does                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
