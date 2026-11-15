@@ -36,7 +36,7 @@ This collection ships skills, not plugins, so the hook goes in the user's `setti
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/skills/coding-agent-session-build-limits/scripts/session-build-limits.sh"
+            "command": "bash ~/.claude/skills/coding-agent-session-build-limits/scripts/session-build-limits.sh"
           }
         ]
       }
@@ -44,6 +44,8 @@ This collection ships skills, not plugins, so the hook goes in the user's `setti
   }
 }
 ```
+
+The command runs the script through `bash`, because a skill installed by Nix keeps its scripts read-only, without the executable bit.
 
 Never edit the user's settings without being asked; show the snippet and let the user add it.
 
