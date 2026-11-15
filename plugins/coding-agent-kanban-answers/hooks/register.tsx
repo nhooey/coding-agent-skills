@@ -495,22 +495,16 @@ const itemView = (
               dimColor={dim}
               onPress={() => view.onPick(option.letter)}
             >
-              <Text {...pick}>{glyphOf(item, option.letter)} </Text>
-              <Text {...pick} underline>
-                {option.letter}.
+              <Text {...pick}>
+                {glyphOf(item, option.letter)} {option.letter}.{" "}
               </Text>
-              <Text {...pick}> </Text>
               {inline(option.name, `${option.letter}-name`, {
                 ...pick,
                 bold: true,
-                underline: true,
               })}
               {option.consequence ? <Text {...pick}>: </Text> : null}
               {option.consequence
-                ? inline(option.consequence, `${option.letter}-then`, {
-                    ...pick,
-                    underline: true,
-                  })
+                ? inline(option.consequence, `${option.letter}-then`, pick)
                 : null}
             </Button>
             {view.isFull
