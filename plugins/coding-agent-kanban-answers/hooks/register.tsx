@@ -8,8 +8,8 @@
 //
 // An item is drawn as the skill writes it: its summary, its note, then each
 // option as `glyph letter. name: consequence` with its ➕ and ➖ lines indented
-// under it, inside a rounded border. Backgrounds tell the parts apart: the
-// option the draft picks, the pros and the cons each have their own.
+// under it, inside a rounded border. Only the option the draft picks gets a
+// background.
 
 import { atom, read, update } from "claude-code";
 import type { EngineInterface, Register } from "claude-code";
@@ -51,8 +51,6 @@ const COLOR = {
   title: "claude",
   code: "permission",
   chosen: "diffAddedWord",
-  pro: "diffAddedDimmed",
-  con: "diffRemovedDimmed",
 } as const;
 // Columns an option sits in from its summary, and its ➕ and ➖ lines from it.
 const INDENT = 3;
@@ -499,8 +497,8 @@ const itemView = (
                 ? inline(option.consequence, `${option.letter}-then`, pick)
                 : null}
             </Button>
-            {lines("➕", option.pros, COLOR.pro, `${option.letter}-pro`)}
-            {lines("➖", option.cons, COLOR.con, `${option.letter}-con`)}
+            {lines("➕", option.pros, undefined, `${option.letter}-pro`)}
+            {lines("➖", option.cons, undefined, `${option.letter}-con`)}
             {lines("", option.notes, undefined, `${option.letter}-note`)}
           </Box>
         );
