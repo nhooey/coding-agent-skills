@@ -178,9 +178,24 @@ class OpenDecideItemsTest(unittest.TestCase):
         )
         self.assertEqual(refs, ["9efb08a1.Decide.2", "9efb08a1.Decide.3", "b2c3d4e5.Decide.4"])
 
-    def test_a_reassess_turn_replaces_every_earlier_item(self) -> None:
+    def test_a_recheck_turn_replaces_every_earlier_item(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0]
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "recheck", 1), reply(later, 1))
+        self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
+
+    def test_reassess_is_another_name_for_recheck(self) -> None:
         later = DECIDE_REPLY.split("2. **")[0]
         refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "reassess", 1), reply(later, 1))
+        self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
+
+    def test_the_slash_command_form_of_recheck(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0]
+        refs = self.open_refs(
+            prompt(FIRST, "go"),
+            reply(DECIDE_REPLY),
+            prompt(SECOND, "/coding-agent-kanban-turn-responses recheck", 1),
+            reply(later, 1),
+        )
         self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
 
 

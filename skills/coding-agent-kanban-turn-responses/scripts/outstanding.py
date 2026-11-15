@@ -25,7 +25,7 @@ Subcommands:
   grep PATTERN [...]         the same lines for items whose line matches the regex, ignoring case
   render [...] [--counts]    a DRAFT 📌 section, each item ending `🔖 <id>₋ₖ`, for the session to prune; by
                              default only the last 20 turns (`--last N`, or `--since ID`), and never a
-                             turn before the latest `reassess` turn, whose lists replace
+                             turn before the latest `recheck` (or `reassess`) turn, whose lists replace
                              every earlier item; `--counts` prints the draft's one count line instead.
                              Which items are still open is a judgement this script cannot make
   due [--now ISO]            `full` or `counts <time left>`: full once min(30 min, 5 x the average gap
@@ -35,7 +35,7 @@ Subcommands:
                              one object `{"items": [...]}`, each item its turn id, list, number,
                              summary, kind (radio, checkbox or binary), reference and options (letter
                              and name); the shape the kanban-answers mod reads and its tool takes.
-                             Open: raised since the latest `reassess` turn, its latest restatement
+                             Open: raised since the latest `recheck` (or `reassess`) turn, its latest restatement
                              only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing)
 `--latest` keeps each item's latest occurrence. `render` gives each item the turn that first printed it,
@@ -79,9 +79,9 @@ _PREFIX = re.compile(r"^🔖\s*\w+[₀-₉₋]*:\s*")
 _SUFFIX = re.compile(r"\s*🔖\s+([0-9a-f]{8})[₀-₉₋]*\s*$")
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _RULE = re.compile(r"^\s*[━▀]{3,}\s*$")
-_REASSESS = re.compile(
-    r"^\s*(?:/(?:reply-block|coding-agent-kanban-turn-responses)\s+)?reassess\b"
-    r"|<command-name>/(?:reply-block|coding-agent-kanban-turn-responses)</command-name>\s*<command-args>\s*reassess\b"
+_RECHECK = re.compile(
+    r"^\s*(?:/(?:reply-block|coding-agent-kanban-turn-responses)\s+)?(?:recheck|reassess)\b"
+    r"|<command-name>/(?:reply-block|coding-agent-kanban-turn-responses)</command-name>\s*<command-args>\s*(?:recheck|reassess)\b"
 )
 _ENTRY = re.compile(r"\bentr(?:y|ies)\s+(\d{3,4})\b", re.IGNORECASE)
 _SPAN = re.compile(r"`([^`]+)`")
@@ -224,9 +224,9 @@ def latest_only(items: tuple[Item, ...]) -> tuple[Item, ...]:
     return tuple(i for n, i in enumerate(items) if last[(i.list_key, i.subject)] == n)
 
 
-def reassess_start(turns: tuple[rt.Turn, ...]) -> int:
-    """The position of the latest `reassess` turn, whose lists replace every item before it; else 0."""
-    return next((n for n in reversed(range(len(turns))) if _REASSESS.search(turns[n].prompt)), 0)
+def recheck_start(turns: tuple[rt.Turn, ...]) -> int:
+    """The position of the latest `recheck` (or `reassess`) turn, whose lists replace every item before it; else 0."""
+    return next((n for n in reversed(range(len(turns))) if _RECHECK.search(turns[n].prompt)), 0)
 
 
 def raised_by(turns: tuple[rt.Turn, ...], occurrences: tuple[Item, ...]) -> tuple[str, int]:
@@ -503,9 +503,9 @@ def _is_answered(item: DecideItem, answers: frozenset[tuple[str, int]]) -> bool:
 
 
 def open_decide_items(turns: tuple[rt.Turn, ...]) -> tuple[DecideItem, ...]:
-    """The open Decide items, oldest first: raised since the latest `reassess` turn, each subject's latest
+    """The open Decide items, oldest first: raised since the latest `recheck` (or `reassess`) turn, each subject's latest
     restatement only, none a later prompt answered with an option."""
-    kept = turns[reassess_start(turns) :]
+    kept = turns[recheck_start(turns) :]
     raised = tuple(item for t in kept for text in t.replies for item in decide_items_of_text(t.id, text))
     last = {subject_key(item.summary): n for n, item in enumerate(raised)}
     answers = answered(turns)
@@ -577,7 +577,7 @@ def run(args: argparse.Namespace, turns: tuple[rt.Turn, ...]) -> str:
             parse_lists(args.lists),
             args.latest and not rendering,
             getattr(args, "pattern", None),
-            reassess_start(turns) if rendering else 0,
+            recheck_start(turns) if rendering else 0,
         )
         out = (
             (render_counts if args.counts else lambda items: render_draft(items, args.width))(with_origins(turns, found))
