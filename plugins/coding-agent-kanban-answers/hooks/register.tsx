@@ -20,6 +20,7 @@ import {
   choose,
   codeSpans,
   dismissed,
+  fitsBand,
   glyphOf,
   drawnByTool,
   emptyBand,
@@ -39,6 +40,8 @@ import {
 const TOOL = "kanban_options";
 const TOOL_CALLED = "mcp__coding-agent-kanban-answers__kanban_options";
 const REASSESS = "reassess";
+// The pane that holds the item, and its title.
+const PANE = { id: "kanban-answers", title: "🧠 Decide" } as const;
 const SCRIPT =
   "skills/coding-agent-kanban-turn-responses/scripts/outstanding.py";
 // Hotkeys for the band's controls, pressed while the band holds the keys
@@ -190,11 +193,23 @@ const answer = async (
   });
 };
 
-/** /answers and the 🧠 left after ✕: re-reads the open items and shows the band at the first unanswered one. */
+/** /answers and the 🧠 above the prompt: re-reads the open items and shows them at the first unanswered one. */
 const reopen = async ($: EngineInterface): Promise<void> => {
   await refresh($);
   const text = await read($, draft);
   await update($, band, (b) => reopened(b, text));
+};
+
+/** Opens the pane with the keyboard in it, so its hotkeys work at once. */
+const openPane = ($: EngineInterface) => $.ui.open({ ...PANE, focus: true });
+
+const isPaneShown = async ($: EngineInterface): Promise<boolean> =>
+  (await $.ui.panes()).some((pane) => pane.id === PANE.id && pane.isShown);
+
+/** ❎: puts the items away until a reply raises a new one, and closes the pane. */
+const dismiss = async ($: EngineInterface): Promise<void> => {
+  await update($, band, dismissed);
+  await $.ui.close({ id: PANE.id });
 };
 
 export const register: Register = (on) => {
@@ -203,7 +218,7 @@ export const register: Register = (on) => {
     await $.command.register({
       name: "answers",
       description:
-        "Show the kanban Decide answers band again, at the first unanswered item",
+        "Show the kanban Decide items again, at the first unanswered one",
     });
     await $.tool.register({
       name: TOOL,
@@ -222,13 +237,14 @@ export const register: Register = (on) => {
 
   on("command.run", { command: "answers" }, async ($) => {
     await reopen($);
+    await openPane($);
     const shown = await read($, band);
 
     return {
       text:
         shown.items.length === 0
           ? `No open Decide items${shown.problem ? `: ${shown.problem}` : ""}.`
-          : `Answers band shown: ${shown.items.length} open Decide items.`,
+          : `Decide pane opened: ${shown.items.length} open Decide items.`,
     };
   });
 
@@ -262,100 +278,61 @@ export const register: Register = (on) => {
     return changed;
   });
 
+  // Above the prompt: the item itself when every open item fits the band's
+  // rows and the pane isn't showing them; else a 🧠 that brings them back,
+  // and, for items too tall, a button that opens the pane. Drawing is pure,
+  // so the band can't open the pane by itself.
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     const b = await read($, band);
-    const text = await read($, draft);
-    const item = b.items[positionIn(b)];
+    const seen = { rows: e.props.maxRows, columns: e.props.bodyColumns };
 
-    if (e.props.hasSurvey || item === undefined) {
+    if (e.props.hasSurvey || b.items.length === 0) {
       return next(e);
     }
 
-    const { Box, Button, Text } = $.ui.resolve(e);
+    const elements = $.ui.resolve(e);
+    const { Box, Button, Text } = elements;
+    const fits = fitsBand(b.items, seen);
 
-    if (b.isDismissed) {
-      return (
-        <Box>
-          <Button key="reopen" label="🧠" plain onPress={() => reopen($)} />
-        </Box>
-      );
+    if (!b.isDismissed && fits && !(await isPaneShown($))) {
+      return fullView($, elements, b, await read($, draft));
     }
-    const move = (position: (b: Band) => number) => () =>
-      update($, band, (current) => ({
-        ...current,
-        position: position(current),
-      }));
-    // A control's emoji, then its word underlined, so it reads as a link.
-    const control = (
-      key: string,
-      emoji: string,
-      word: string,
-      onPress: () => unknown,
-      hotkey?: string,
-    ) => (
-      <Button
-        key={key}
-        label={word}
-        plain
-        dimColor
-        {...(hotkey ? { hotkey } : {})}
-        onPress={onPress}
-      >
-        {emoji} <Text underline>{word}</Text>
-      </Button>
-    );
 
     return (
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor={COLOR.border}
-        paddingX={1}
-      >
-        <Box marginBottom={1} flexWrap="wrap" columnGap={2}>
-          {control("prev", "⏪", "Prev", move(prevPosition), KEYS.prev)}
-          {control(
-            "skip",
-            "⏭️",
-            "Skip",
-            move((current) => skipped(current, text)),
-            KEYS.skip,
-          )}
-          {control("next", "⏩", "Next", move(nextPosition), KEYS.next)}
-          {control("reassess", "🔄", "Reassess", () =>
-            $.prompt.submit({ text: REASSESS }),
-          )}
+      <Box>
+        <Button key="reopen" label="🧠" plain onPress={() => reopen($)} />
+        <Text dimColor>
+          {" "}
+          {b.items.length} open{" "}
+          {b.items.length === 1 ? "decision" : "decisions"}
+          {fits ? "" : ", too tall for here "}
+        </Text>
+        {fits ? null : (
           <Button
-            key="dismiss"
-            label="❎"
+            key="open-pane"
+            label="Open in a pane"
             plain
             dimColor
-            role="dismiss"
-            hotkey={KEYS.dismiss}
-            onPress={() => update($, band, dismissed)}
-          />
-          <Box columnGap={1}>
-            {progressMarks(b, text).map(({ mark, isShown }, n) => (
-              <Button
-                key={`mark-${n}`}
-                plain
-                dimColor={!isShown}
-                onPress={move(() => n)}
-              >
-                <Text color={isShown ? COLOR.title : undefined} bold={isShown}>
-                  {isShown ? (mark === "●" ? "◉" : "◎") : mark}
-                </Text>
-              </Button>
-            ))}
-          </Box>
-        </Box>
-        {itemView({ Box, Button, Text }, item, {
-          title: header(b),
-          chosen: lettersFor(text, item),
-          keyOf: (letter) => `option-${letter}`,
-          onPick: (letter) => answer($, item, letter),
-        })}
+            onPress={() => openPane($)}
+          >
+            🪟 <Text underline>Open in a pane</Text>
+          </Button>
+        )}
       </Box>
+    );
+  });
+
+  // The pane: the controls on top, then the item, drawn in full.
+  on("ui.render", { component: "Pane", requestId: PANE.id }, async ($, e) => {
+    const b = await read($, band);
+    const elements = $.ui.resolve(e);
+
+    return b.items[positionIn(b)] === undefined ? (
+      <elements.Text dimColor>
+        No open Decide items{b.problem ? `: ${b.problem}` : ""}.
+      </elements.Text>
+    ) : (
+      fullView($, elements, b, await read($, draft))
     );
   });
 
@@ -399,6 +376,94 @@ export const register: Register = (on) => {
       </Box>
     );
   });
+};
+
+/** The controls, then the shown item in full, in a rounded border: the band's and the pane's drawing alike. */
+const fullView = (
+  $: EngineInterface,
+  elements: Elements,
+  b: Band,
+  text: string,
+) => {
+  const { Box, Button, Text } = elements;
+  const item = b.items[positionIn(b)] as DecideItem;
+  const move = (position: (b: Band) => number) => () =>
+    update($, band, (current) => ({
+      ...current,
+      position: position(current),
+    }));
+  // A control's emoji, then its word underlined, so it reads as a link.
+  const control = (
+    key: string,
+    emoji: string,
+    word: string,
+    onPress: () => unknown,
+    hotkey?: string,
+  ) => (
+    <Button
+      key={key}
+      label={word}
+      plain
+      dimColor
+      {...(hotkey ? { hotkey } : {})}
+      onPress={onPress}
+    >
+      {emoji} <Text underline>{word}</Text>
+    </Button>
+  );
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={COLOR.border}
+      paddingX={1}
+    >
+      <Box marginBottom={1} flexWrap="wrap" columnGap={2}>
+        {control("prev", "⏪", "Prev", move(prevPosition), KEYS.prev)}
+        {control(
+          "skip",
+          "⏭️",
+          "Skip",
+          move((current) => skipped(current, text)),
+          KEYS.skip,
+        )}
+        {control("next", "⏩", "Next", move(nextPosition), KEYS.next)}
+        {control("reassess", "🔄", "Reassess", () =>
+          $.prompt.submit({ text: REASSESS }),
+        )}
+        <Button
+          key="dismiss"
+          label="❎"
+          plain
+          dimColor
+          role="dismiss"
+          hotkey={KEYS.dismiss}
+          onPress={() => dismiss($)}
+        />
+        <Box columnGap={1}>
+          {progressMarks(b, text).map(({ mark, isShown }, n) => (
+            <Button
+              key={`mark-${n}`}
+              plain
+              dimColor={!isShown}
+              onPress={move(() => n)}
+            >
+              <Text color={isShown ? COLOR.title : undefined} bold={isShown}>
+                {isShown ? (mark === "●" ? "◉" : "◎") : mark}
+              </Text>
+            </Button>
+          ))}
+        </Box>
+      </Box>
+      {itemView({ Box, Button, Text }, item, {
+        title: header(b),
+        chosen: lettersFor(text, item),
+        keyOf: (letter) => `option-${letter}`,
+        onPick: (letter) => answer($, item, letter),
+      })}
+    </Box>
+  );
 };
 
 /** The elements an item is drawn with, from the surface's table. */

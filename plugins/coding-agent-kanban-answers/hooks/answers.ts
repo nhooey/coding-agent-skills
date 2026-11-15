@@ -257,6 +257,48 @@ export const codeSpans = (line: string): { text: string; isCode: boolean }[] =>
     }))
     .filter((part) => part.text !== "");
 
+/** Rows a line takes wrapped into `width` columns, at least one. */
+const wrappedRows = (line: string, width: number): number =>
+  Math.max(1, Math.ceil([...line].length / Math.max(10, width)));
+
+/**
+ * Rows an item takes drawn in full in a bordered box `columns` wide: the
+ * border, the controls and the gap under them, the title, the note, and each
+ * option with its ➕, ➖ and note lines, every line wrapped at its indent.
+ */
+export const rowsNeeded = (item: DecideItem, columns: number): number => {
+  const inner = columns - 4;
+  const optionRows = item.options.map(
+    (o) =>
+      wrappedRows(
+        `🔘 ${o.letter}. ${o.name}: ${o.consequence ?? ""}`,
+        inner - 3,
+      ) +
+      [...(o.pros ?? []), ...(o.cons ?? []), ...(o.notes ?? [])].reduce(
+        (sum, line) => sum + wrappedRows(`➕ ${line}`, inner - 6),
+        0,
+      ),
+  );
+
+  return (
+    4 +
+    wrappedRows(`🧠 99/99 · ${item.summary}`, inner) +
+    (item.note ?? []).reduce(
+      (sum, line) => sum + wrappedRows(line, inner - 3),
+      0,
+    ) +
+    optionRows.reduce((sum, rows) => sum + rows, 0)
+  );
+};
+
+/** Whether every open item fits the band, so paging through them never moves between band and pane. */
+export const fitsBand = (
+  items: DecideItem[],
+  layout: { rows: number; columns: number },
+): boolean =>
+  layout.rows > 0 &&
+  items.every((item) => rowsNeeded(item, layout.columns) <= layout.rows);
+
 /** The items a tool call or the script handed over, whatever else the JSON held. */
 export const itemsOf = (value: unknown): DecideItem[] => {
   const items =

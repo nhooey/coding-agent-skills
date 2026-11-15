@@ -13,6 +13,8 @@ import {
   nextPosition,
   prevPosition,
   codeSpans,
+  fitsBand,
+  rowsNeeded,
   progress,
   refreshed,
   reopened,
@@ -203,6 +205,28 @@ describe("what the band says", () => {
     expect(progress({ ...band, position: 0 }, "9efb08a1.Decide.1.A")).toBe(
       "◉ ○ ○",
     );
+  });
+
+  test("an item's rows count its lines, wrapped at their indent", () => {
+    const item = {
+      turn: "9efb08a1",
+      list: "Decide" as const,
+      number: 1,
+      summary: "Short",
+      kind: "radio" as const,
+      ref: "9efb08a1.Decide.1",
+      note: ["A note."],
+      options: [
+        { letter: "A", name: "One", pros: ["Good."], cons: ["x".repeat(150)] },
+        { letter: "B", name: "Two" },
+      ],
+    };
+
+    // Border, controls and gap 4, title 1, note 1, A 1 + pro 1 + con 2, B 1.
+    expect(rowsNeeded(item, 100)).toBe(11);
+    expect(fitsBand([item], { rows: 11, columns: 100 })).toBe(true);
+    expect(fitsBand([item], { rows: 10, columns: 100 })).toBe(false);
+    expect(fitsBand([item], { rows: 0, columns: 0 })).toBe(false);
   });
 
   test("code spans split at backticks and lose their bold marks", () => {

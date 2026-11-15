@@ -26,9 +26,9 @@ It runs `python3` from your `PATH`.
 
 ## What it draws
 
-### The band above the prompt
+### The band above the prompt, or a pane
 
-The band shows one open Decide item at a time, inside a rounded border, laid out as the skill writes it:
+The band shows one open Decide item at a time, inside a rounded border, laid out as the skill writes it, when every open item fits the rows it has. In fullscreen that's at most half the terminal, the prompt included. When an item is too tall, the band folds to `🧠 3 open decisions, too tall for here 🪟 Open in a pane`, and the button opens a pane beside the transcript with the same drawing at full height. `/answers` always opens the pane. A render hook can't open a pane by itself, so the band can't move an item there unasked.
 
 ```text
 ╭──────────────────────────────────────────────────────────────────╮
@@ -59,11 +59,11 @@ Each part has its own colour from the theme, so it reads in light and dark theme
 
 The circles after the controls show which items the draft answers, `●` answered and `○` not, the shown item ringed, `◉` or `◎`, in the accent colour. Click a circle to go to its item. The band refreshes when a reply finishes.
 
-Once the band holds the keys (ctrl+x tab, or a click on it), `h`, `j`, `l` and `q` press `⏪ Prev`, `⏭️ Skip`, `⏩ Next` and `❎`, as their labels show. Options have no hotkey, so they read exactly as the skill writes them; click them, or move the focus to one and press Enter.
+The hotkeys work only where the keyboard is. The prompt holds it by default, so letters typed there stay in the prompt. The pane takes the keyboard as it opens, from `🪟 Open in a pane` or `/answers`; for the band, press ctrl+x then tab, or click it. Then `h`, `j`, `l` and `q` press `⏪ Prev`, `⏭️ Skip`, `⏩ Next` and `❎`, as their labels show, and Escape gives the keyboard back to the prompt. Options have no hotkey, so they read exactly as the skill writes them; click them, or move the focus to one and press Enter.
 
 ### Bringing the band back
 
-After `❎`, while any Decide item is open, the band leaves a single clickable `🧠` where it stood. Clicking it, or running `/answers`, shows the band again at the first item the draft doesn't answer, and re-reads the open items. With no item open, the `🧠` goes too, and `/answers` says there is nothing to answer.
+After `❎`, which also closes the pane, while any Decide item is open, the band leaves a single clickable `🧠` where it stood. Clicking it shows the band again, and `/answers` opens the pane, at the first item the draft doesn't answer, and re-reads the open items. With no item open, the `🧠` goes too, and `/answers` says there is nothing to answer.
 
 ### Buttons in the transcript
 
