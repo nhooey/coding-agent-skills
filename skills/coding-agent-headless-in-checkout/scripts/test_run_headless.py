@@ -18,6 +18,7 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
@@ -119,8 +120,81 @@ class Pieces(unittest.TestCase):
         self.assertFalse(run_headless.is_usage_limit("tests failed", "exit 1"))
 
 
+class FakeLibc:
+    """Stands in for libc: sysctlbyname writes `value` through the pointer, returns `status`."""
+
+    def __init__(self, value: int, status: int = 0):
+        self.value, self.status, self.asked = value, status, None
+
+    def sysctlbyname(self, name, oldp, oldlenp, newp, newlen):
+        import ctypes
+        self.asked = name
+        ctypes.cast(oldp, ctypes.POINTER(ctypes.c_int))[0] = self.value
+        return self.status
+
+
+class Admission(unittest.TestCase):
+    def test_decision_is_a_function_of_level_and_time_waited(self):
+        decide = run_headless.admission_decision
+        self.assertEqual(decide(1, 0, None), "start")
+        self.assertEqual(decide(1, 999, 10), "start")
+        for level in (2, 4):
+            self.assertEqual(decide(level, 0, None), "wait")
+            self.assertEqual(decide(level, 9999, None), "wait")
+            self.assertEqual(decide(level, 9, 10), "wait")
+            self.assertEqual(decide(level, 10, 10), "give_up")
+
+    def test_taskpolicy_prefix_is_macos_only(self):
+        self.assertEqual(run_headless.taskpolicy_prefix("darwin"), ["taskpolicy", "-c", "utility"])
+        self.assertEqual(run_headless.taskpolicy_prefix("linux"), [])
+
+    def test_reading_the_level_through_sysctlbyname(self):
+        libc = FakeLibc(4)
+        self.assertEqual(run_headless.read_pressure_level("darwin", lambda: libc), (4, None))
+        self.assertEqual(libc.asked, b"kern.memorystatus_vm_pressure_level")
+        self.assertEqual(run_headless.read_pressure_level("linux", lambda: libc), (1, None))
+
+    def test_any_failure_to_read_counts_as_level_one_with_a_note(self):
+        def broken():
+            raise OSError("no libc")
+        for load in (broken, lambda: FakeLibc(2, status=-1), lambda: FakeLibc(3), lambda: object()):
+            level, note = run_headless.read_pressure_level("darwin", load)
+            self.assertEqual(level, 1)
+            self.assertIn("counted as 1", note)
+
+    def test_waits_until_the_level_drops_then_starts(self):
+        levels, now, slept = iter([2, 4, 2, 1]), [0.0], []
+        def sleep(seconds):
+            slept.append(seconds)
+            now[0] += seconds
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            result = run_headless.await_admission(
+                "x", None, read=lambda: (next(levels), None), sleep=sleep,
+                clock=lambda: now[0], poll=5)
+        self.assertEqual((result.action, result.waited, slept), ("start", 15.0, [5, 5, 5]))
+        self.assertEqual(err.getvalue().count("waiting x"), 3)
+        self.assertIn("memory pressure level 4", err.getvalue())
+        self.assertTrue(result.notes)
+
+    def test_gives_up_after_the_timeout(self):
+        now = [0.0]
+        def sleep(seconds):
+            now[0] += seconds
+        with contextlib.redirect_stderr(io.StringIO()):
+            result = run_headless.await_admission(
+                "x", 12, read=lambda: (2, None), sleep=sleep, clock=lambda: now[0], poll=5)
+        self.assertEqual((result.action, result.waited), ("give_up", 15.0))
+
+    def test_normal_pressure_starts_without_a_note(self):
+        result = run_headless.await_admission("x", None, read=lambda: (1, None), sleep=None)
+        self.assertEqual((result.action, result.notes), ("start", ()))
+
+
 class Runs(unittest.TestCase):
     def setUp(self):
+        self.level = mock.patch.object(run_headless, "read_pressure_level", return_value=(1, None))
+        self.level.start()
+        self.addCleanup(self.level.stop)
         self.tmp = tempfile.TemporaryDirectory()
         base = Path(self.tmp.name).resolve()
         self.alpha, self.beta = (make_repo(base / "src" / n) for n in ("alpha", "beta"))
@@ -133,6 +207,11 @@ class Runs(unittest.TestCase):
         fake = bin_dir / "claude"
         fake.write_text(FAKE_CLAUDE.format(python=sys.executable))
         fake.chmod(0o755)
+        # A fake `taskpolicy`, since a sandbox may refuse the real one: it notes
+        # its arguments, then runs the command that follows `-c utility`.
+        policy = bin_dir / "taskpolicy"
+        policy.write_text('#!/bin/sh\necho "$1 $2" >> "$FAKE_CLAUDE_RECORD/taskpolicy.txt"\nshift 2\nexec "$@"\n')
+        policy.chmod(0o755)
         self.env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
                     "FAKE_CLAUDE_RECORD": str(self.record)}
         # alpha has an earlier session; beta has none.
@@ -210,6 +289,46 @@ class Runs(unittest.TestCase):
     def test_new_session_ignores_earlier_ones(self):
         self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "new")[0], 0)
         self.assertNotIn("--continue", self.recorded("src_alpha")["argv"])
+
+    def test_pressure_holds_a_run_until_it_eases(self):
+        with mock.patch.object(run_headless, "read_pressure_level",
+                               side_effect=[(2, None), (2, None), (1, None)]):
+            code, out = self.run_one(self.beta, "--admission-poll", "0")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.stderr.count("waiting beta"), 2)
+        self.assertIn("waited", " ".join(json.loads(out)["notes"]))
+
+    def test_admission_timeout_skips_the_run(self):
+        with mock.patch.object(run_headless, "read_pressure_level", return_value=(4, None)):
+            code, out = self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0")
+        self.assertEqual(code, 3)
+        self.assertEqual(json.loads(out)["status"], "skipped")
+        self.assertIn("level 4", json.loads(out)["result"])
+        self.assertFalse(any(self.record.iterdir()), "claude must not have started")
+        self.assertFalse(run_headless.worktree_path(self.beta, "t1").exists())
+
+    def test_no_admission_starts_at_once_and_never_reads_the_level(self):
+        with mock.patch.object(run_headless, "read_pressure_level", return_value=(4, None)) as read:
+            code, _ = self.run_one(self.beta, "--no-admission")
+        self.assertEqual(code, 0)
+        read.assert_not_called()
+
+    def test_run_carries_the_priority_prefix_ahead_of_claude(self):
+        with mock.patch.object(run_headless.sys, "platform", "darwin"):
+            code, _ = self.run_one(self.beta)
+        self.assertEqual(code, 0)
+        self.assertEqual((self.record / "taskpolicy.txt").read_text(), "-c utility\n")
+        self.assertEqual(self.recorded("beta.worktrees_headless-t1")["argv"][:2], ["-p", "do the thing"])
+
+    def test_dry_run_shows_the_prefix_and_the_level_it_read(self):
+        with mock.patch.object(run_headless.sys, "platform", "darwin"), \
+                mock.patch.object(run_headless, "read_pressure_level", return_value=(2, None)):
+            code, out = self.run_one(self.beta, "--dry-run")
+        plan = json.loads(out)
+        self.assertEqual((code, plan["prefix"], plan["pressure_level"]),
+                         (0, ["taskpolicy", "-c", "utility"], 2))
+        code, out = self.run_one(self.beta, "--dry-run", "--no-admission")
+        self.assertIsNone(json.loads(out)["pressure_level"])
 
     def test_new_session_is_the_default(self):
         self.assertEqual(self.run_one(self.alpha, "--where", "checkout")[0], 0)
