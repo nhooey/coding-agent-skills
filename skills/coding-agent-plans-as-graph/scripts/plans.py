@@ -16,185 +16,260 @@ Commands:
   overview   rewrite README.md from the nodes (runs check first)
   ready      print the ids of approved nodes whose needs are all implemented
 
-Standard library only, so it runs anywhere Python 3.9+ does.
+Standard library only, so it runs anywhere Python 3.9+ does. Everything but
+`read_plan` and `main` is pure: it takes values and returns new ones.
 """
 from __future__ import annotations
 
 import argparse
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from itertools import accumulate, chain, groupby, islice, repeat
 from pathlib import Path
+from types import MappingProxyType
+from typing import Mapping, Optional, Tuple
 
 OPEN_STATES = ("proposed", "approved", "in-progress")
 CLOSED_STATES = ("implemented", "rejected", "abandoned", "superseded")
+FOLDERS = ("open", "closed")
 KINDS = ("end-state", "implementation", "schedule")
 LINK_KEYS = ("part-of", "needs", "after", "superseded-by")
+CYCLE_KEYS = ("part-of", "needs", "after")
 LIST_KEYS = ("needs", "after", "touches")
-KNOWN_KEYS = {"title", "state", "kind", "owner", "implemented-by", "cost", *LINK_KEYS, *LIST_KEYS}
+KNOWN_KEYS = frozenset({"title", "state", "kind", "owner", "implemented-by", "cost", *LINK_KEYS, *LIST_KEYS})
 ID = re.compile(r"[a-z0-9][a-z0-9-]*")
 OVERVIEW_MARK = "<!-- Written by plans.py overview; edit the nodes, not this file. -->"
 
+Meta = Mapping[str, object]
+Problems = Tuple[str, ...]
 
-@dataclass
+
+@dataclass(frozen=True)
 class Node:
     id: str
-    path: Path
     folder: str
-    meta: dict = field(default_factory=dict)
+    meta: Meta
 
-    def links(self, key: str) -> list[str]:
-        value = self.meta.get(key)
-        if value is None:
-            return []
-        return value if isinstance(value, list) else [value]
+    @property
+    def where(self) -> str:
+        return f"{self.folder}/{self.id}.md"
 
     @property
     def state(self) -> str:
-        return self.meta.get("state", "")
+        return str(self.meta.get("state", ""))
 
     @property
     def title(self) -> str:
-        return self.meta.get("title", self.id)
+        return str(self.meta.get("title", self.id))
 
 
-def parse_frontmatter(text: str) -> tuple[dict, list[str]]:
-    lines = text.splitlines()
+@dataclass(frozen=True)
+class RawPlan:
+    """What the shell read: (folder, file stem, text) per node, and the names of stray files."""
+
+    files: Tuple[Tuple[str, str, str], ...]
+    strays: Tuple[str, ...]
+
+
+Graph = Mapping[str, Node]
+
+
+# Parsing
+
+
+def parse_value(value: str) -> object:
+    if value.startswith("[") and value.endswith("]"):
+        return tuple(v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip())
+    return value.strip("\"'")
+
+
+def parse_line(number: int, line: str) -> Tuple[Optional[Tuple[str, object]], Problems]:
+    key, sep, value = (part.strip() for part in line.partition(":"))
+    return ((key, parse_value(value)), ()) if sep and key else (None, (f"line {number}: not `key: value`",))
+
+
+def parse_frontmatter(text: str) -> Tuple[Meta, Problems]:
+    lines = tuple(text.splitlines())
     if not lines or lines[0].strip() != "---":
-        return {}, ["no frontmatter: the file must open on a `---` line"]
-    meta, problems = {}, []
-    for n, line in enumerate(lines[1:], start=2):
-        if line.strip() == "---":
-            return meta, problems
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        key, sep, value = line.partition(":")
-        key, value = key.strip(), value.strip()
-        if not sep or not key:
-            problems.append(f"line {n}: not `key: value`")
-            continue
-        if value.startswith("[") and value.endswith("]"):
-            meta[key] = [v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()]
-        else:
-            meta[key] = value.strip("\"'")
-    return {}, ["frontmatter never closed with a `---` line"]
+        return MappingProxyType({}), ("no frontmatter: the file must open on a `---` line",)
+    end = next((i for i, line in enumerate(lines[1:], start=1) if line.strip() == "---"), None)
+    if end is None:
+        return MappingProxyType({}), ("frontmatter never closed with a `---` line",)
+    parsed = tuple(
+        parse_line(n, line)
+        for n, line in enumerate(lines[1:end], start=2)
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    return (
+        MappingProxyType(dict(pair for pair, _ in parsed if pair)),
+        tuple(chain.from_iterable(problems for _, problems in parsed)),
+    )
 
 
-def load(root: Path) -> tuple[dict[str, Node], list[str]]:
-    nodes, problems = {}, []
-    for folder in ("open", "closed"):
-        for path in sorted((root / folder).glob("*.md")):
-            node = Node(path.stem, path, folder)
-            node.meta, errors = parse_frontmatter(path.read_text(encoding="utf-8"))
-            problems += [f"{folder}/{path.name}: {e}" for e in errors]
-            if node.id in nodes:
-                problems.append(f"{folder}/{path.name}: id `{node.id}` is also {nodes[node.id].folder}/{path.name}")
-            nodes[node.id] = node
-    for path in sorted(root.glob("*.md")):
-        if path.name != "README.md":
-            problems.append(f"{path.name}: a node goes in open/ or closed/, not the plan's root")
-    return nodes, problems
+def build(raw: RawPlan) -> Tuple[Graph, Problems]:
+    """The graph by node id, and the problems found while reading it."""
+    parsed = tuple((folder, stem, parse_frontmatter(text)) for folder, stem, text in raw.files)
+    nodes = tuple(Node(stem, folder, meta) for folder, stem, (meta, _) in parsed)
+    duplicates = tuple(
+        f"{later.where}: id `{node_id}` is also {first.where}"
+        for node_id, group in groupby(sorted(nodes, key=lambda n: n.id), key=lambda n: n.id)
+        for first, *rest in (tuple(group),)
+        for later in rest
+    )
+    return (
+        MappingProxyType({n.id: n for n in nodes}),
+        tuple(f"{folder}/{stem}.md: {p}" for folder, stem, (_, problems) in parsed for p in problems)
+        + duplicates
+        + tuple(f"{name}: a node goes in open/ or closed/, not the plan's root" for name in raw.strays),
+    )
 
 
-def check(nodes: dict[str, Node]) -> list[str]:
-    problems = []
-    for node in nodes.values():
-        where = f"{node.folder}/{node.id}.md"
-        if not ID.fullmatch(node.id):
-            problems.append(f"{where}: id must be lower-case letters, digits and dashes")
-        for key in node.meta:
-            if key not in KNOWN_KEYS:
-                problems.append(f"{where}: unknown key `{key}`")
-        for key in ("title", "state", "kind"):
-            if not node.meta.get(key):
-                problems.append(f"{where}: missing `{key}`")
-        allowed = OPEN_STATES if node.folder == "open" else CLOSED_STATES
-        if node.state and node.state not in allowed:
-            other = "closed" if node.folder == "open" else "open"
-            hint = f"; move it to {other}/" if node.state in OPEN_STATES + CLOSED_STATES else ""
-            problems.append(f"{where}: state `{node.state}` doesn't belong in {node.folder}/{hint}")
-        if node.meta.get("kind") and node.meta["kind"] not in KINDS:
-            problems.append(f"{where}: kind must be one of {', '.join(KINDS)}")
-        for key in LINK_KEYS:
-            for target in node.links(key):
-                if target not in nodes:
-                    problems.append(f"{where}: `{key}` names `{target}`, which has no node")
-                elif target == node.id:
-                    problems.append(f"{where}: `{key}` names the node itself")
-        if node.state == "superseded" and not node.links("superseded-by"):
-            problems.append(f"{where}: a superseded node names its replacement in `superseded-by`")
-        if node.links("after") and node.meta.get("kind") != "schedule":
-            problems.append(f"{where}: `after` is run order, so only schedule nodes carry it")
-        if isinstance(node.meta.get("part-of"), list):
-            problems.append(f"{where}: `part-of` names one parent")
-    for key in ("part-of", "needs", "after"):
-        cycle = find_cycle(nodes, key)
-        if cycle:
-            problems.append(f"`{key}` cycle: {' → '.join(cycle)}")
-    return problems
+# Checking
 
 
-def find_cycle(nodes: dict[str, Node], key: str) -> list[str] | None:
-    state: dict[str, int] = {}
-    stack: list[str] = []
+def links(node: Node, key: str) -> Tuple[str, ...]:
+    value = node.meta.get(key)
+    return () if value is None else value if isinstance(value, tuple) else (str(value),)
 
-    def visit(n: str) -> list[str] | None:
-        state[n] = 1
-        stack.append(n)
-        for m in nodes[n].links(key):
-            if m not in nodes:
-                continue
-            if state.get(m) == 1:
-                return stack[stack.index(m):] + [m]
-            if m not in state:
-                found = visit(m)
-                if found:
-                    return found
-        stack.pop()
-        state[n] = 2
+
+def state_problems(node: Node) -> Problems:
+    allowed = OPEN_STATES if node.folder == "open" else CLOSED_STATES
+    other = "closed" if node.folder == "open" else "open"
+    hint = f"; move it to {other}/" if node.state in OPEN_STATES + CLOSED_STATES else ""
+    return (
+        (f"{node.where}: state `{node.state}` doesn't belong in {node.folder}/{hint}",)
+        if node.state and node.state not in allowed
+        else ()
+    )
+
+
+def link_problems(node: Node, graph: Graph) -> Problems:
+    return tuple(
+        f"{node.where}: `{key}` names `{target}`, which has no node"
+        if target not in graph
+        else f"{node.where}: `{key}` names the node itself"
+        for key in LINK_KEYS
+        for target in links(node, key)
+        if target not in graph or target == node.id
+    )
+
+
+def node_problems(node: Node, graph: Graph) -> Problems:
+    w = node.where
+    kind = node.meta.get("kind")
+    rules = (
+        (not ID.fullmatch(node.id), f"{w}: id must be lower-case letters, digits and dashes"),
+        (kind not in (None, "", *KINDS), f"{w}: kind must be one of {', '.join(KINDS)}"),
+        (node.state == "superseded" and not links(node, "superseded-by"),
+         f"{w}: a superseded node names its replacement in `superseded-by`"),
+        (bool(links(node, "after")) and kind != "schedule", f"{w}: `after` is run order, so only schedule nodes carry it"),
+        (isinstance(node.meta.get("part-of"), tuple), f"{w}: `part-of` names one parent"),
+    )
+    return (
+        tuple(message for broken, message in rules[:1] if broken)
+        + tuple(f"{w}: unknown key `{key}`" for key in node.meta if key not in KNOWN_KEYS)
+        + tuple(f"{w}: missing `{key}`" for key in ("title", "state", "kind") if not node.meta.get(key))
+        + state_problems(node)
+        + tuple(message for broken, message in rules[1:2] if broken)
+        + link_problems(node, graph)
+        + tuple(message for broken, message in rules[2:] if broken)
+    )
+
+
+def edges(graph: Graph, key: str, node_id: str, within: frozenset) -> Tuple[str, ...]:
+    return tuple(m for m in links(graph[node_id], key) if m in within)
+
+
+def cyclic_core(graph: Graph, key: str) -> frozenset:
+    """The nodes left after repeatedly dropping every node with no `key` edge into the rest."""
+
+    def prune(remaining: frozenset, _: object) -> frozenset:
+        return frozenset(n for n in remaining if edges(graph, key, n, remaining))
+
+    def step(pair: Tuple[Optional[frozenset], frozenset], _: object) -> Tuple[frozenset, frozenset]:
+        return pair[1], prune(pair[1], None)
+
+    pairs = accumulate(repeat(None), step, initial=(None, frozenset(graph)))
+    return next(after for before, after in pairs if before == after)
+
+
+def find_cycle(graph: Graph, key: str) -> Optional[Tuple[str, ...]]:
+    """One cycle along `key` links, from its smallest node, or None."""
+    core = cyclic_core(graph, key)
+    if not core:
         return None
-
-    for n in sorted(nodes):
-        if n not in state:
-            found = visit(n)
-            if found:
-                return found
-    return None
+    step = lambda node_id, _: edges(graph, key, node_id, core)[0]  # noqa: E731
+    walk = tuple(islice(accumulate(repeat(None), step, initial=min(core)), len(core) + 1))
+    end = next(j for j in range(len(walk)) if walk[j] in walk[:j])
+    return walk[walk.index(walk[end]) : end + 1]
 
 
-def waiting_on(node: Node, nodes: dict[str, Node]) -> list[str]:
-    return [n for n in node.links("needs") if n in nodes and nodes[n].state != "implemented"]
+def check(graph: Graph) -> Problems:
+    cycles = tuple((key, find_cycle(graph, key)) for key in CYCLE_KEYS)
+    return tuple(chain.from_iterable(node_problems(n, graph) for n in graph.values())) + tuple(
+        f"`{key}` cycle: {' → '.join(cycle)}" for key, cycle in cycles if cycle
+    )
 
 
-def ready(nodes: dict[str, Node]) -> list[Node]:
-    return [n for n in nodes.values() if n.state == "approved" and not waiting_on(n, nodes)]
+# Reading the graph
 
 
-def overview(nodes: dict[str, Node], root: Path) -> str:
-    def line(n: Node, extra: str = "") -> str:
-        parent = n.meta.get("part-of")
-        part = f", part of [{nodes[parent].title}]({nodes[parent].folder}/{parent}.md)" if parent in nodes else ""
-        return f"- [{n.title}]({n.folder}/{n.id}.md) `{n.id}`{part}{extra}"
+def waiting_on(node: Node, graph: Graph) -> Tuple[str, ...]:
+    return tuple(n for n in links(node, "needs") if n in graph and graph[n].state != "implemented")
 
-    open_nodes = sorted((n for n in nodes.values() if n.folder == "open"), key=lambda n: n.id)
-    groups = [
-        ("In progress", [line(n, f", {n.meta['owner']}" if n.meta.get("owner") else "")
-                         for n in open_nodes if n.state == "in-progress"]),
-        ("Ready", [line(n) for n in ready(nodes)]),
-        ("Blocked", [line(n, ", waiting on " + ", ".join(f"`{w}`" for w in waiting_on(n, nodes)))
-                     for n in open_nodes if n.state == "approved" and waiting_on(n, nodes)]),
-        ("Proposed", [line(n) for n in open_nodes if n.state == "proposed"]),
-    ]
-    closed = [n for n in nodes.values() if n.folder == "closed"]
+
+def ready(graph: Graph) -> Tuple[Node, ...]:
+    return tuple(n for n in graph.values() if n.state == "approved" and not waiting_on(n, graph))
+
+
+def overview_line(node: Node, graph: Graph, extra: str = "") -> str:
+    parent = node.meta.get("part-of")
+    part = f", part of [{graph[parent].title}]({graph[parent].where})" if parent in graph else ""
+    return f"- [{node.title}]({node.where}) `{node.id}`{part}{extra}"
+
+
+def overview(graph: Graph) -> str:
+    open_nodes = tuple(sorted((n for n in graph.values() if n.folder == "open"), key=lambda n: n.id))
+    closed = tuple(n for n in graph.values() if n.folder == "closed")
+    groups = (
+        ("In progress", tuple(
+            overview_line(n, graph, f", {n.meta['owner']}" if n.meta.get("owner") else "")
+            for n in open_nodes
+            if n.state == "in-progress"
+        )),
+        ("Ready", tuple(overview_line(n, graph) for n in ready(graph))),
+        ("Blocked", tuple(
+            overview_line(n, graph, ", waiting on " + ", ".join(f"`{w}`" for w in waiting_on(n, graph)))
+            for n in open_nodes
+            if n.state == "approved" and waiting_on(n, graph)
+        )),
+        ("Proposed", tuple(overview_line(n, graph) for n in open_nodes if n.state == "proposed")),
+    )
     counts = ", ".join(f"{sum(n.state == s for n in closed)} {s}" for s in CLOSED_STATES)
-    out = [f"# Plans", "", OVERVIEW_MARK, ""]
-    for heading, items in groups:
-        out += [f"## {heading} ({len(items)})", ""] + (items or ["None."]) + [""]
-    out += ["## Closed", "", f"{len(closed)} in [closed/](closed/): {counts}.", ""]
-    return "\n".join(out)
+    sections = chain.from_iterable(
+        (f"## {heading} ({len(items)})", "", *(items or ("None.",)), "") for heading, items in groups
+    )
+    return "\n".join(
+        ("# Plans", "", OVERVIEW_MARK, "", *sections, "## Closed", "", f"{len(closed)} in [closed/](closed/): {counts}.", "")
+    )
 
 
-def main(argv: list[str] | None = None) -> int:
+# The shell: the only functions that touch the file system or the streams
+
+
+def read_plan(root: Path) -> RawPlan:
+    return RawPlan(
+        files=tuple(
+            (folder, path.stem, path.read_text(encoding="utf-8"))
+            for folder in FOLDERS
+            for path in sorted((root / folder).glob("*.md"))
+        ),
+        strays=tuple(path.name for path in sorted(root.glob("*.md")) if path.name != "README.md"),
+    )
+
+
+def main(argv: Optional[list] = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("command", choices=["check", "overview", "ready"])
     p.add_argument("--plans", type=Path, default=Path("agents/plans"), help="the plan folder (default: agents/plans)")
@@ -202,17 +277,15 @@ def main(argv: list[str] | None = None) -> int:
     if not args.plans.is_dir():
         print(f"error: no plan folder at {args.plans}", file=sys.stderr)
         return 2
-    nodes, problems = load(args.plans)
-    problems += check(nodes)
+    graph, load_problems = build(read_plan(args.plans))
+    problems = load_problems + check(graph)
     if args.command == "ready":
-        for n in ready(nodes):
-            print(n.id)
-    for problem in problems:
-        print(problem, file=sys.stderr)
+        print("".join(f"{n.id}\n" for n in ready(graph)), end="")
+    print("".join(f"{problem}\n" for problem in problems), end="", file=sys.stderr)
     if problems:
         return 1
     if args.command == "overview":
-        (args.plans / "README.md").write_text(overview(nodes, args.plans), encoding="utf-8")
+        (args.plans / "README.md").write_text(overview(graph), encoding="utf-8")
     return 0
 
 
