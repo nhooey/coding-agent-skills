@@ -184,9 +184,9 @@
             commands = [
               {
                 category = "ci";
-                name = "check-kanban-answers-mod";
-                help = "validate, type-check and test the coding-agent-kanban-answers mod";
-                command = ''bash "$PRJ_ROOT/plugins/coding-agent-kanban-answers/scripts/check.sh" "$@"'';
+                name = "check-mods";
+                help = "validate, type-check and test the mods under plugins/, or the ones named";
+                command = ''bash "$PRJ_ROOT/plugins/check-mods.sh" "$@"'';
               }
             ];
           };
