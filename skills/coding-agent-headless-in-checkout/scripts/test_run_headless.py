@@ -176,7 +176,7 @@ class Runs(unittest.TestCase):
     def test_worktree_run_resumes_the_checkouts_session_and_leaves_it_untouched(self):
         code, out = self.run_one(self.alpha)
         self.assertEqual(code, 0)
-        argv = self.recorded("alpha.worktrees_fan-out-t1")["argv"]
+        argv = self.recorded("alpha.worktrees_headless-t1")["argv"]
         self.assertEqual(argv[argv.index("--resume") + 1], str(self.alpha_session))
         self.assertIn("--fork-session", argv)
         printed = json.loads(out)
@@ -188,14 +188,14 @@ class Runs(unittest.TestCase):
         self.assertTrue((wt / "README.md").is_file())
         branch = subprocess.run(["git", "branch", "--show-current"], cwd=wt,
                                 capture_output=True, text=True).stdout.strip()
-        self.assertEqual(branch, "fan-out/t1")
+        self.assertEqual(branch, "headless/t1")
         status = subprocess.run(["git", "status", "--porcelain"], cwd=self.alpha,
                                 capture_output=True, text=True).stdout
         self.assertEqual(status, "", "the main checkout must stay clean")
 
     def test_checkout_without_a_session_starts_a_new_one(self):
         self.assertEqual(self.run_one(self.beta)[0], 0)
-        self.assertNotIn("--resume", self.recorded("beta.worktrees_fan-out-t1")["argv"])
+        self.assertNotIn("--resume", self.recorded("beta.worktrees_headless-t1")["argv"])
         self.assertIsNone(self.outcome("beta")["resumed_from"])
 
     def test_checkout_run_uses_continue_where_there_is_a_session(self):
@@ -229,7 +229,7 @@ class Runs(unittest.TestCase):
     def test_dirty_checkout_continues_with_a_note_naming_its_uncommitted_paths(self):
         self.make_alpha_dirty()
         self.assertEqual(self.run_one(self.alpha)[0], 0)
-        argv = self.recorded("alpha.worktrees_fan-out-t1")["argv"]
+        argv = self.recorded("alpha.worktrees_headless-t1")["argv"]
         prompt = argv[1]
         self.assertTrue(prompt.startswith("Note from the headless runner"), prompt)
         self.assertIn("- README.md", prompt)
@@ -240,7 +240,7 @@ class Runs(unittest.TestCase):
     def test_dirty_new_starts_a_fresh_session(self):
         self.make_alpha_dirty()
         self.assertEqual(self.run_one(self.alpha, "--dirty", "new")[0], 0)
-        argv = self.recorded("alpha.worktrees_fan-out-t1")["argv"]
+        argv = self.recorded("alpha.worktrees_headless-t1")["argv"]
         self.assertNotIn("--resume", argv)
         self.assertEqual(argv[1], "do the thing")
 

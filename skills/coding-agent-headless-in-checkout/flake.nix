@@ -1,5 +1,5 @@
 {
-  description = "coding-agent-fan-out-headless: Coding-agent skill — run a prompt as a headless Claude Code session inside one git checkout, with its own skills and Nix environment, and fan it out across many";
+  description = "coding-agent-headless-in-checkout: Coding-agent skill — run a prompt as a headless Claude Code session inside one git checkout, with its own skills and Nix environment, and fan it out across many";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -12,7 +12,7 @@
     agent-skill-flake.lib.mkSkillFlake {
       inherit nixpkgs;
       source = import ../../source.nix;
-      skillName = "coding-agent-fan-out-headless";
+      skillName = "coding-agent-headless-in-checkout";
       src = ./.;
     };
 }

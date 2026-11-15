@@ -12,7 +12,7 @@ it once per checkout, as many at a time as it likes, for example:
 
 Where the session works (--where):
   worktree  (default) a git worktree of the checkout's HEAD, on the branch
-            fan-out/<job>, at <checkout>.worktrees/fan-out-<job> beside it, so
+            headless/<job>, at <checkout>.worktrees/headless-<job> beside it, so
             the run doesn't touch a working tree someone is using.
   checkout  the checkout itself.
 
@@ -91,11 +91,11 @@ def newest_session(checkout: Path, projects_root: Path = PROJECTS_ROOT) -> Path 
 
 
 def worktree_path(checkout: Path, job: str) -> Path:
-    return checkout.parent / f"{checkout.name}.worktrees" / f"fan-out-{job}"
+    return checkout.parent / f"{checkout.name}.worktrees" / f"headless-{job}"
 
 
 def branch_name(job: str) -> str:
-    return f"fan-out/{job}"
+    return f"headless/{job}"
 
 
 def env_wrapper(workdir: Path) -> list[str]:
@@ -294,7 +294,7 @@ def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) 
             skip = f"{len(dirty)} uncommitted paths in the checkout; commit or stash them and rerun"
     command = claude_command(
         prompt,
-        f"fan-out {args.job}",
+        f"headless {args.job}",
         where=args.where,
         resume=resume,
         model=args.model,
@@ -373,7 +373,7 @@ def run(plan: Plan, args: argparse.Namespace) -> Outcome:
 
 def default_log_root() -> Path:
     state = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
-    return Path(state) / "coding-agent-fan-out"
+    return Path(state) / "coding-agent-headless"
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -404,7 +404,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="one more argument for claude; repeat as needed")
     p.add_argument("--progress-every", type=float, default=60,
                    help="seconds between progress lines; 0 for none (default: 60)")
-    p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-fan-out/<job>")
+    p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-headless/<job>")
     p.add_argument("--projects-root", type=Path, default=PROJECTS_ROOT, help=argparse.SUPPRESS)
     p.add_argument("--allow-api-key", action="store_true",
                    help="run even though ANTHROPIC_API_KEY is set, which bills the API")
