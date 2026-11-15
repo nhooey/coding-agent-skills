@@ -1,5 +1,5 @@
 ---
-name: coding-agent-fan-out-headless
+name: coding-agent-headless-in-checkout
 description: Run a prompt as a headless Claude Code session inside one git checkout, so it loads that checkout's CLAUDE.md, skills, settings, plugins and Nix dev shell as a session started there by hand would, and fan it out across many checkouts by running the bundled single-checkout script once per checkout, from xargs, a shell loop or parallel Bash calls. Each run works in a git worktree by default, continues the checkout's newest session as a fork or starts a new one, and reports how it ended as one JSON line and an exit status. Use when the user wants a job done in another repository's own context, or the same job done in several ("run this in all my repos", "do X across these projects", "use up my weekly limit on my recent repos"), instead of subagents, which all start in the parent session's directory with its skills.
 ---
 
@@ -24,7 +24,7 @@ run_headless.py --job <name> --prompt-file prompt.md <checkout>
 
 | Option                       | Default                 | What it does                                                                 |
 | ---------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
-| `--job`                      | a timestamp             | names the worktree branch `fan-out/<job>`, the session and the log folder    |
+| `--job`                      | a timestamp             | names the worktree branch `headless/<job>`, the session and the log folder   |
 | `--label`                    | the checkout's name     | names the log files and progress lines; set it when two checkouts share one  |
 | `--where worktree\|checkout` | `worktree`              | where the session works                                                      |
 | `--session continue\|new`    | `continue`              | fork the checkout's newest session, or start fresh                           |
@@ -42,7 +42,7 @@ The script does one checkout; the caller runs it once per checkout. Give every r
 
 ```bash
 xargs -P 4 -I{} run_headless.py --job <name> --prompt-file prompt.md {} < checkouts.txt
-jq -s . "${XDG_STATE_HOME:-$HOME/.local/state}/coding-agent-fan-out/<name>"/*.outcome.json
+jq -s . "${XDG_STATE_HOME:-$HOME/.local/state}/coding-agent-headless/<name>"/*.outcome.json
 ```
 
 `-P` sets how many run at once. Try the prompt on one checkout, with a low `--max-turns`, before a large batch. A shell loop or separate Bash calls work as well; xargs is the shortest way to cap how many run at a time and to stop on a usage limit (see [Limits and billing](#limits-and-billing)).
@@ -61,10 +61,10 @@ Show the list and the prompt to the user before a real run: every run acts on it
 
 ## Worktrees and sessions
 
-- **Worktree (default):** the run gets `<checkout>.worktrees/fan-out-<job>`, beside the checkout, on a new branch `fan-out/<job>` from the checkout's `HEAD`. The checkout's working tree is never touched, so a run can't collide with uncommitted work or an open session. Uncommitted changes in the checkout are not in the worktree. A rerun with the same `--job` reuses the worktree.
+- **Worktree (default):** the run gets `<checkout>.worktrees/headless-<job>`, beside the checkout, on a new branch `headless/<job>` from the checkout's `HEAD`. The checkout's working tree is never touched, so a run can't collide with uncommitted work or an open session. Uncommitted changes in the checkout are not in the worktree. A rerun with the same `--job` reuses the worktree.
 - **Uncommitted work:** a worktree has only what's committed, so a session continued in one can remember edits that stayed behind in the checkout. For a checkout with uncommitted changes, `--dirty` decides what a continuing worktree run does: `tell` (the default) continues, and opens the prompt with a note naming the uncommitted paths and saying their changes aren't there; `new` starts a new session instead; `skip` doesn't run until the work is committed or stashed. Tell the user which checkouts are dirty before the run, from the dry run's notes.
 - **Checkout:** the run works in the checkout itself. Use it only when the checkout is clean and no one else is working there.
-- **Continuing:** Claude Code keeps a directory's sessions in `~/.claude/projects/<the path, every non-alphanumeric character turned into ->/`. The script takes the newest `.jsonl` there and forks it: `--continue --fork-session` in the checkout, or `--resume <the .jsonl> --fork-session` in a worktree, whose new directory has no sessions of its own. The fork leaves the original session as it was, for a window that may still have it open. A checkout with no session gets a new one, named `fan-out <job>`.
+- **Continuing:** Claude Code keeps a directory's sessions in `~/.claude/projects/<the path, every non-alphanumeric character turned into ->/`. The script takes the newest `.jsonl` there and forks it: `--continue --fork-session` in the checkout, or `--resume <the .jsonl> --fork-session` in a worktree, whose new directory has no sessions of its own. The fork leaves the original session as it was, for a window that may still have it open. A checkout with no session gets a new one, named `headless <job>`.
 
 ## The Nix environment
 
@@ -77,7 +77,7 @@ Each run gets the checkout's environment the way a manual session does:
 
 Progress goes to stderr, each line opening on the run's label: one when the session starts, one every `--progress-every` seconds, 60 by default, with its time, its tool calls so far and the tool it called last, and one when it ends. When the agent runs a fan-out in the background, it reads that output only when the user asks how it's going.
 
-The outcome goes to stdout as one JSON line, and to `<label>.outcome.json` in the log folder, `$XDG_STATE_HOME/coding-agent-fan-out/<job>/` by default: its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log` and its `notes`. The session's full stream-json output and stderr are beside it. The exit status says the same: 0 ok, 1 failed or timed out, 2 bad arguments, 3 skipped, 255 a usage limit.
+The outcome goes to stdout as one JSON line, and to `<label>.outcome.json` in the log folder, `$XDG_STATE_HOME/coding-agent-headless/<job>/` by default: its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log` and its `notes`. The session's full stream-json output and stderr are beside it. The exit status says the same: 0 ok, 1 failed or timed out, 2 bad arguments, 3 skipped, 255 a usage limit.
 
 Report each checkout's outcome to the user by its name, with the branch of any worktree that holds changes. A run's own work, such as a pull request it opened, is in its result text and log.
 
@@ -89,15 +89,15 @@ Report each checkout's outcome to the user by its name, with the branch of any w
 
 ## Cleaning up
 
-A finished job leaves its worktrees and `fan-out/<job>` branches. Remove each by its path and branch name once its changes are merged or dropped, as `shell-hygiene-delete-named-paths` and `git-workflow-tidy-branches` say: `git -C <checkout> worktree remove <checkout>.worktrees/fan-out-<job>`, then `git -C <checkout> branch -d fan-out/<job>`.
+A finished job leaves its worktrees and `headless/<job>` branches. Remove each by its path and branch name once its changes are merged or dropped, as `shell-hygiene-delete-named-paths` and `git-workflow-tidy-branches` say: `git -C <checkout> worktree remove <checkout>.worktrees/headless-<job>`, then `git -C <checkout> branch -d headless/<job>`.
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-fan-out-headless.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-fan-out-headless.preferences.md" 2>/dev/null || true`
+!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-headless-in-checkout.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-headless-in-checkout.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
-exist: `coding-agent-fan-out-headless.preferences.md` next to this skill's folder, then
-`.agents/skills/coding-agent-fan-out-headless.preferences.md` in the project. A project's
+exist: `coding-agent-headless-in-checkout.preferences.md` next to this skill's folder, then
+`.agents/skills/coding-agent-headless-in-checkout.preferences.md` in the project. A project's
 file overrides the user's, and the user's overrides this skill's defaults.
 
 ## Related skills
@@ -109,4 +109,4 @@ came from; don't apply it from memory.
 
 - `coding-agent-usage-line-report-eta`: report a running ETA while a run or a fan-out goes, since either takes minutes to an hour.
 - `shell-hygiene-delete-named-paths`: remove each finished worktree by its own path, never by glob.
-- `git-workflow-tidy-branches`: delete the `fan-out/<job>` branches once their work is merged or dropped.
+- `git-workflow-tidy-branches`: delete the `headless/<job>` branches once their work is merged or dropped.
