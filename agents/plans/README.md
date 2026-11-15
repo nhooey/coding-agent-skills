@@ -2,9 +2,9 @@
 
 <!-- Written by plans.py overview; edit the nodes, not this file. -->
 
-## In progress (1)
+## In progress (0)
 
-- [The coding-agent-plans-as-graph skill](open/plans-as-graph-skill.md) `plans-as-graph-skill`, coding-agent-skills#64
+None.
 
 ## Ready (0)
 
@@ -20,4 +20,4 @@ None.
 
 ## Closed
 
-2 in [closed/](closed/): 0 implemented, 1 rejected, 0 abandoned, 1 superseded.
+3 in [closed/](closed/): 1 implemented, 1 rejected, 0 abandoned, 1 superseded.
