@@ -58,6 +58,20 @@ const BAND = {
   },
 } as const;
 
+const PANE = {
+  plugin: PLUGIN,
+  component: "Pane",
+  requestId: "kanban-answers",
+  props: {
+    title: "🧠 Decide",
+    isFocused: false,
+    bodyColumns: 100,
+    placement: "dock",
+    scroll: { offset: 0, bodyRows: 40 },
+    view: {},
+  },
+} as const;
+
 const ANSWERS = {
   command: "answers",
   args: "",
@@ -70,7 +84,30 @@ const ANSWERS = {
  * output from `open`, and the prompts the plugin submits in `sent`.
  */
 const engine = (on: On, open: () => readonly unknown[]) => {
-  const state = { box: "", sent: [] as string[] };
+  const state = { box: "", sent: [] as string[], isPaneOpen: false };
+  on("ui.open", () => {
+    state.isPaneOpen = true;
+
+    return { value: { isPlaced: true } };
+  });
+  on("ui.panes", () => ({
+    value: state.isPaneOpen
+      ? [
+          {
+            id: "kanban-answers",
+            title: "🧠 Decide",
+            isShown: true,
+            isPlaced: true,
+            isFocused: false,
+          },
+        ]
+      : [],
+  }));
+  on("ui.close", () => {
+    state.isPaneOpen = false;
+
+    return { value: undefined };
+  });
   on("session.id", () => ({ value: "session-1" }));
   on("session.cwd", () => ({ value: "/work" }));
   on("env.get", () => ({ value: "/home/neil" }));
@@ -124,10 +161,10 @@ const headerText = async (ui: {
 }) => (await ui.find({ type: "Text", text: /🧠/ }))?.text;
 
 for (const surface of ["terminal", "desktop"] as const) {
-  test(`the band builds the draft and walks the items, on ${surface}`, async ($, on) => {
+  test(`the pane builds the draft and walks the items, on ${surface}`, async ($, on) => {
     const state = engine(on, () => ITEMS);
     await $.command.run(ANSWERS);
-    const ui = await $.ui.mount({ ...BAND, surface });
+    const ui = await $.ui.mount({ ...PANE, surface });
 
     expect(await headerText(ui)).toBe("🧠 1/3 · Which cache to keep");
 
@@ -160,74 +197,98 @@ for (const surface of ["terminal", "desktop"] as const) {
   });
 }
 
-test("dismiss hides the band, and /answers brings it back at the first unanswered item", async ($, on) => {
+test("/answers opens the pane, and dismiss closes it", async ($, on) => {
   const state = engine(on, () => ITEMS);
   await $.command.run(ANSWERS);
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
+  expect(state.isPaneOpen).toBe(true);
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" });
   await ui.press({ key: "option-A" });
   await ui.press({ key: "dismiss" });
-
-  expect(await headerText(ui)).toBeUndefined();
+  expect(state.isPaneOpen).toBe(false);
 
   await $.command.run(ANSWERS);
+  expect(state.isPaneOpen).toBe(true);
   expect(await headerText(ui)).toBe("🧠 2/3 · Cleanups to start");
   expect(state.box).toBe("9efb08a1.Decide.1.A");
   await ui.unmount();
 });
 
 for (const surface of ["terminal", "desktop"] as const) {
-  test(`dismiss leaves a 🧠 that reopens the band at the first unanswered item, on ${surface}`, async ($, on) => {
+  test(`items that fit the band are drawn in it, and the 🧠 brings them back there, on ${surface}`, async ($, on) => {
     const state = engine(on, () => ITEMS);
-    await $.command.run(ANSWERS);
-    const ui = await $.ui.mount({ ...BAND, surface });
-    await ui.press({ key: "option-A" });
-    await ui.press({ key: "dismiss" });
+    const band = await $.ui.mount({ ...BAND, surface });
+    await $.turn.complete(replyDone("t1"));
 
-    expect(await headerText(ui)).toBeUndefined();
-    expect((await ui.find({ type: "Button", key: "reopen" }))?.text).toBe("🧠");
+    expect(state.isPaneOpen).toBe(false);
+    expect(await headerText(band)).toBe("🧠 1/3 · Which cache to keep");
 
-    await ui.press({ key: "reopen" });
-    expect(await headerText(ui)).toBe("🧠 2/3 · Cleanups to start");
-    expect(await ui.find({ type: "Button", key: "reopen" })).toBeUndefined();
-    expect(state.box).toBe("9efb08a1.Decide.1.A");
+    await band.press({ key: "option-A" });
+    await band.press({ key: "dismiss" });
+    expect((await band.find({ type: "Button", key: "reopen" }))?.text).toBe(
+      "🧠",
+    );
+    expect(
+      (await band.find({ type: "Text", text: /open decisions/ }))?.text,
+    ).toContain("3 open decisions");
+
+    await band.press({ key: "reopen" });
+    expect(state.isPaneOpen).toBe(false);
+    expect(await headerText(band)).toBe("🧠 2/3 · Cleanups to start");
     expect(state.sent).toEqual([]);
-    await ui.unmount();
+    await band.unmount();
   });
 }
 
-test("with no open items a dismissed band leaves no 🧠", async ($, on) => {
-  const open: unknown[] = [...ITEMS];
-  engine(on, () => open);
-  await $.command.run(ANSWERS);
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
-  await ui.press({ key: "dismiss" });
-  open.splice(0, open.length);
+test("items too tall for the band leave a button that opens the pane", async ($, on) => {
+  const state = engine(on, () => ITEMS);
+  const band = await $.ui.mount({
+    ...BAND,
+    surface: "terminal",
+    props: { ...BAND.props, maxRows: 6, scroll: { offset: 0, bodyRows: 6 } },
+  });
   await $.turn.complete(replyDone("t1"));
 
-  expect(await ui.find({ type: "Button", key: "reopen" })).toBeUndefined();
-  await ui.unmount();
+  expect(await headerText(band)).toBeUndefined();
+  expect(
+    (await band.find({ type: "Text", text: /open decisions/ }))?.text,
+  ).toContain("too tall for here");
+  await band.press({ key: "open-pane" });
+  expect(state.isPaneOpen).toBe(true);
+  await band.unmount();
 });
 
-test("a dismissed band stays hidden until a refresh raises a new item", async ($, on) => {
+test("with no open items there is no 🧠 above the prompt", async ($, on) => {
   const open: unknown[] = [...ITEMS];
   engine(on, () => open);
   await $.command.run(ANSWERS);
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
-  await ui.press({ key: "dismiss" });
+  open.splice(0, open.length);
+  await $.turn.complete(replyDone("t1"));
+  const band = await $.ui.mount({ ...BAND, surface: "terminal" });
+
+  expect(await band.find({ type: "Button", key: "reopen" })).toBeUndefined();
+  await band.unmount();
+});
+
+test("a dismissed band stays folded until a reply raises a new item", async ($, on) => {
+  const open: unknown[] = [...ITEMS];
+  engine(on, () => open);
+  const band = await $.ui.mount({ ...BAND, surface: "terminal" });
+  await $.turn.complete(replyDone("t0"));
+  await band.press({ key: "dismiss" });
 
   await $.turn.complete(replyDone("t1"));
-  expect(await headerText(ui)).toBeUndefined();
+  expect(await headerText(band)).toBeUndefined();
 
   open.push({ ...ITEMS[0], turn: "b2c3d4e5", ref: "b2c3d4e5.Decide.1" });
   await $.turn.complete(replyDone("t2"));
-  expect(await headerText(ui)).toBe("🧠 1/4 · Which cache to keep");
-  await ui.unmount();
+  expect(await headerText(band)).toBe("🧠 1/4 · Which cache to keep");
+  await band.unmount();
 });
 
 test("a progress circle jumps to its item", async ($, on) => {
   engine(on, () => ITEMS);
   await $.command.run(ANSWERS);
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" });
   await ui.press({ key: "mark-2" });
 
   expect(await headerText(ui)).toBe("🧠 3/3 · Ship tonight?");
@@ -239,7 +300,7 @@ test("a progress circle jumps to its item", async ($, on) => {
 test("Reassess submits the reassess command", async ($, on) => {
   const state = engine(on, () => ITEMS);
   await $.command.run(ANSWERS);
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" });
   await ui.press({ key: "reassess" });
 
   expect(state.sent).toEqual(["reassess"]);
