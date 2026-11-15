@@ -22,19 +22,30 @@ run_headless.py --job <name> --prompt-file prompt.md <checkout>
 
 `scripts/run_headless.py --help` lists every option. The ones that matter most:
 
-| Option                       | Default                 | What it does                                                                 |
-| ---------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
-| `--job`                      | a timestamp             | names the worktree branch `headless/<job>`, the session and the log folder   |
-| `--label`                    | the checkout's name     | names the log files and progress lines; set it when two checkouts share one  |
-| `--where worktree\|checkout` | `worktree`              | where the session works                                                      |
-| `--session new\|continue`    | `new`                   | start fresh, or fork the checkout's newest session                           |
-| `--model`, `--effort`        | the user's own settings | passed to `claude`                                                           |
-| `--permission-mode`          | `auto`                  | passed to `claude`, always with `--permission-prompts none` so nothing waits |
-| `--max-turns`, `--timeout`   | none                    | caps; set them on a first or experimental run                                |
-| `--claude-arg`               | none                    | one more `claude` argument, repeatable                                       |
-| `--dry-run`                  | off                     | print the working directory, the session it resumes and the command          |
+| Option                       | Default                 | What it does                                                                                                                |
+| ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `--job`                      | a timestamp             | names the worktree branch `headless/<job>`, the session and the log folder                                                  |
+| `--label`                    | the checkout's name     | names the log files and progress lines; set it when two checkouts share one                                                 |
+| `--where worktree\|checkout` | `worktree`              | where the session works                                                                                                     |
+| `--session new\|continue`    | `new`                   | start fresh, or fork the checkout's newest session                                                                          |
+| `--model`, `--effort`        | the user's own settings | passed to `claude`                                                                                                          |
+| `--permission-mode`          | `auto`                  | passed to `claude`, always with `--permission-prompts none` so nothing waits                                                |
+| `--max-turns`, `--timeout`   | none                    | caps; set them on a first or experimental run                                                                               |
+| `--claude-arg`               | none                    | one more `claude` argument, repeatable                                                                                      |
+| `--no-admission`             | off                     | start at once, whatever the memory pressure                                                                                 |
+| `--admission-timeout`        | none                    | minutes to wait for memory pressure to ease before giving up as `skipped`                                                   |
+| `--dry-run`                  | off                     | print the working directory, the session it resumes, the command, the priority prefix and the memory pressure level it read |
 
 A run takes minutes to an hour, so a session running it follows `coding-agent-usage-line-report-eta`.
+
+## Priority and admission control
+
+- **Priority:** on macOS each session starts under `taskpolicy -c utility`, so the scheduler favours interactive work and everything the session starts inherits the class. Elsewhere the run starts as it did before. `--no-admission` leaves the priority alone.
+- **Memory pressure:** before starting, the script reads `kern.memorystatus_vm_pressure_level`: 1 (normal) starts the run; 2 (warning) or 4 (critical) holds it, rechecking every few seconds and saying so on a progress line, `waiting <label> <time>: memory pressure level <n>`. A run already going is never stopped. A level that can't be read, or isn't 1, 2 or 4, counts as 1, with a note in the outcome. Off macOS there is nothing to read, so the run starts.
+- **Giving up:** `--admission-timeout <minutes>` ends the wait with status `skipped` and exit status 3, so a fan-out moves on; the checkout's work is untouched and no worktree is made. Without it the run waits as long as it takes.
+- **`--no-admission`:** start at once, for a run that must go whatever the pressure.
+- **What it bounds:** Nix's `max-jobs` and `cores` apply to each client of the daemon, so holding a new run is what keeps builds across a fan-out near the machine's CPUs. Keep a fan-out's `-P` small anyway.
+- **Checking it:** `taskpolicy -G <pid>` on a started session shows the utility class.
 
 ## Fanning out across checkouts
 

@@ -35,6 +35,16 @@ with uncommitted changes, --dirty decides what a continuing worktree run does:
   new   start a new session instead of continuing.
   skip  don't run; commit or stash the checkout's work and rerun.
 
+Admission control: each session starts under `taskpolicy -c utility` on macOS,
+so the scheduler favours interactive work and everything the session starts
+inherits the class. Before it starts, the script reads the memory pressure
+level, `kern.memorystatus_vm_pressure_level`: 1 (normal) starts the run, 2
+(warning) or 4 (critical) holds it, checking again every few seconds and saying
+so on a progress line. A run already going is never stopped. A level that can't
+be read counts as 1, with a note.
+  --no-admission         start at once, whatever the pressure
+  --admission-timeout M  give up after M minutes of waiting, with status skipped
+
 Output: progress lines go to stderr, each opening on the label: one when the
 session starts, one every --progress-every seconds (default 60) with its time,
 its tool calls so far and the tool it called last, and one when it ends. The
@@ -47,7 +57,7 @@ Exit status:
   0    the session ended without an error
   1    it failed, or timed out
   2    bad arguments: not a git checkout, an empty prompt, ANTHROPIC_API_KEY set
-  3    skipped, by --dirty skip
+  3    skipped, by --dirty skip or by --admission-timeout
   255  it hit a usage limit. xargs, GNU or BSD, starts no more runs after a
        command exits 255, so a fan-out through xargs stops there by itself.
 
@@ -59,6 +69,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import ctypes
 import datetime as dt
 import json
 import os
@@ -70,6 +81,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Callable
 
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 USAGE_LIMIT = re.compile(
@@ -78,6 +90,11 @@ USAGE_LIMIT = re.compile(
 )
 RESULT_EXCERPT = 400
 TOOL_USE = re.compile(r'"type":"tool_use","id":"[^"]*","name":"([^"]+)"')
+PRESSURE_SYSCTL = b"kern.memorystatus_vm_pressure_level"
+PRESSURE_NORMAL = 1
+PRESSURE_LEVELS = frozenset({1, 2, 4})
+ADMISSION_POLL_SECONDS = 5.0
+START, WAIT, GIVE_UP = "start", "wait", "give_up"
 EXIT = {"ok": 0, "failed": 1, "skipped": 3, "limit": 255}
 
 
@@ -238,6 +255,7 @@ class Plan:
     command: list[str]
     notes: list[str] = field(default_factory=list)
     skip: str | None = None
+    prefix: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -258,6 +276,88 @@ class Outcome:
 def elapsed(seconds: float) -> str:
     minutes, secs = divmod(int(seconds), 60)
     return f"{minutes}m{secs:02d}s" if minutes else f"{secs}s"
+
+
+# Admission control. The decision is pure; reading the level is the only effect.
+
+
+def taskpolicy_prefix(platform: str) -> list[str]:
+    """The command that starts a run in the utility scheduling class, on macOS only."""
+    return ["taskpolicy", "-c", "utility"] if platform == "darwin" else []
+
+
+def admission_decision(level: int, waited: float, timeout: float | None) -> str:
+    """Start, wait or give up, from the pressure level and the seconds waited so far."""
+    if level == PRESSURE_NORMAL:
+        return START
+    return GIVE_UP if timeout is not None and waited >= timeout else WAIT
+
+
+def pressure_from_sysctl(status: int, value: int) -> tuple[int, str | None]:
+    """The level a `sysctlbyname` call gave, or level 1 and a note when it gave none."""
+    if status != 0:
+        return PRESSURE_NORMAL, "memory pressure level unreadable (sysctl failed); counted as 1"
+    if value not in PRESSURE_LEVELS:
+        return PRESSURE_NORMAL, f"memory pressure level {value} is not 1, 2 or 4; counted as 1"
+    return value, None
+
+
+def load_libc() -> ctypes.CDLL:
+    return ctypes.CDLL(None)
+
+
+def read_pressure_level(
+    platform: str = sys.platform, load: Callable[[], object] = load_libc
+) -> tuple[int, str | None]:
+    """The effect: the macOS memory pressure level and a note, or (1, a note) on any failure.
+
+    Off macOS there is no such sysctl, so there is nothing to wait for: level 1, no note.
+    """
+    if platform != "darwin":
+        return PRESSURE_NORMAL, None
+    try:
+        libc = load()
+        value, size = ctypes.c_int(0), ctypes.c_size_t(ctypes.sizeof(ctypes.c_int))
+        status = libc.sysctlbyname(
+            PRESSURE_SYSCTL, ctypes.byref(value), ctypes.byref(size), None, ctypes.c_size_t(0)
+        )
+    except (OSError, AttributeError, ValueError, TypeError) as err:
+        return PRESSURE_NORMAL, f"memory pressure level unreadable ({err}); counted as 1"
+    return pressure_from_sysctl(status, value.value)
+
+
+@dataclass(frozen=True)
+class Admission:
+    action: str  # start | give_up
+    level: int
+    waited: float
+    notes: tuple[str, ...]
+
+
+def await_admission(
+    label: str,
+    timeout: float | None,
+    *,
+    read: Callable[[], tuple[int, str | None]],
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+    poll: float = ADMISSION_POLL_SECONDS,
+) -> Admission:
+    """The shell around admission_decision: read, say so while waiting, sleep, read again."""
+    begin = clock()
+    level, note = read()
+    first_level = level
+    notes = (note,) if note else ()
+    while True:
+        waited = clock() - begin
+        action = admission_decision(level, waited, timeout)
+        if action != WAIT:
+            break
+        say(f"waiting {label} {elapsed(waited)}: memory pressure level {level}")
+        sleep(poll)
+        level, _ = read()
+    held = (f"waited {elapsed(waited)} at memory pressure before starting",) if first_level != PRESSURE_NORMAL else ()
+    return Admission(action, level, waited, notes + held)
 
 
 def tool_calls(log: Path) -> tuple[int, str | None]:
@@ -323,7 +423,7 @@ def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) 
     if args.session == "continue" and resume is None and not dirty:
         notes.append("no earlier session; starting a new one")
     return Plan(label, str(checkout), str(workdir), str(resume) if resume else None,
-                command, notes, skip)
+                command, notes, skip, taskpolicy_prefix(sys.platform))
 
 
 def run(plan: Plan, args: argparse.Namespace) -> Outcome:
@@ -333,6 +433,15 @@ def run(plan: Plan, args: argparse.Namespace) -> Outcome:
     if plan.skip:
         outcome.result = f"not started: {plan.skip}"
         return outcome
+    if not args.no_admission:
+        timeout = args.admission_timeout * 60 if args.admission_timeout is not None else None
+        admission = await_admission(plan.label, timeout, read=read_pressure_level,
+                                    poll=args.admission_poll)
+        outcome.notes.extend(admission.notes)
+        if admission.action == GIVE_UP:
+            outcome.result = (f"not started: memory pressure level {admission.level} for "
+                              f"{elapsed(admission.waited)}, past --admission-timeout")
+            return outcome
     try:
         if args.where == "worktree":
             workdir, note = ensure_worktree(checkout, args.job)
@@ -349,7 +458,7 @@ def run(plan: Plan, args: argparse.Namespace) -> Outcome:
     log = args.log_dir / f"{plan.label}.stream.jsonl"
     err_log = args.log_dir / f"{plan.label}.stderr"
     outcome.log = str(log)
-    command = env_wrapper(workdir) + plan.command
+    command = plan.prefix + env_wrapper(workdir) + plan.command
     say(f"start   {plan.label}")
     start, done = time.monotonic(), threading.Event()
     if args.progress_every > 0:
@@ -425,6 +534,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--progress-every", type=float, default=60,
                    help="seconds between progress lines; 0 for none (default: 60)")
     p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-headless/<job>")
+    p.add_argument("--no-admission", action="store_true",
+                   help="start at once, whatever the memory pressure (the utility priority still applies)")
+    p.add_argument("--admission-timeout", type=float, metavar="MINUTES",
+                   help="give up after waiting this long for memory pressure to ease, "
+                        "with status skipped (default: wait as long as it takes)")
+    p.add_argument("--admission-poll", type=float, default=ADMISSION_POLL_SECONDS,
+                   help=argparse.SUPPRESS)
     p.add_argument("--projects-root", type=Path, default=PROJECTS_ROOT, help=argparse.SUPPRESS)
     p.add_argument("--allow-api-key", action="store_true",
                    help="run even though ANTHROPIC_API_KEY is set, which bills the API")
@@ -467,7 +583,12 @@ def main(argv: list[str] | None = None) -> int:
             say(f"warning {plan.label}: {note}")
 
     if args.dry_run:
-        print(json.dumps(asdict(plan) | {"command": plan.command[:2] + ["<prompt>"] + plan.command[3:]}))
+        level, note = (None, None) if args.no_admission else read_pressure_level()
+        print(json.dumps(asdict(plan) | {
+            "command": plan.command[:2] + ["<prompt>"] + plan.command[3:],
+            "pressure_level": level,
+            "pressure_note": note,
+        }))
         return 0
 
     args.log_dir.mkdir(parents=True, exist_ok=True)
