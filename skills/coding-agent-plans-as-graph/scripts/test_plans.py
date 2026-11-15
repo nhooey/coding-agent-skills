@@ -111,8 +111,38 @@ class Plan(unittest.TestCase):
 
     def test_a_node_at_the_plan_root_is_reported(self):
         (self.root / "stray.md").write_text("---\ntitle: S\n---\n")
-        self.assertIn("stray.md: a node goes in open/ or closed/", self.run_cmd("check")[2])
+        self.assertIn("stray.md: a node goes in an open/ or closed/ folder", self.run_cmd("check")[2])
 
+    def test_a_plans_folder_holds_its_own_open_and_closed_nodes(self):
+        (self.root / "gating" / "open").mkdir(parents=True)
+        (self.root / "gating" / "closed").mkdir()
+        self.node("open", "no-oversubscription", kind="end-state", state="proposed")
+        self.node("gating/closed", "nix-limits", state="implemented", part_of="no-oversubscription")
+        self.node("gating/open", "admission", state="approved", part_of="no-oversubscription", needs=["nix-limits"])
+        self.assertEqual(self.run_cmd("check"), (0, "", ""))
+        self.assertEqual(self.run_cmd("ready")[1].split(), ["admission"])
+        self.run_cmd("overview")
+        self.assertIn("(gating/open/admission.md)", (self.root / "README.md").read_text())
+
+    def test_a_node_loose_in_a_plans_folder_is_reported(self):
+        (self.root / "gating" / "open").mkdir(parents=True)
+        (self.root / "gating" / "stray.md").write_text("---\ntitle: x\n---\n")
+        self.assertIn("gating/stray.md: a node goes in an open/ or closed/ folder", self.run_cmd("check")[2])
+
+    def test_an_id_is_unique_across_plans(self):
+        (self.root / "gating" / "open").mkdir(parents=True)
+        self.node("open", "same", state="proposed")
+        self.node("gating/open", "same", state="proposed")
+        self.assertIn("id `same` is also", self.run_cmd("check")[2])
+
+    def test_a_list_wrapped_onto_an_indented_line_is_read_whole(self):
+        (self.root / "open" / "wrapped.md").write_text(
+            "---\ntitle: Wrapped\nstate: approved\nkind: implementation\nneeds:\n  [a, b]\n---\n"
+        )
+        self.node("closed", "a", state="implemented")
+        self.node("closed", "b", state="implemented")
+        self.assertEqual(self.run_cmd("check"), (0, "", ""))
+        self.assertEqual(self.run_cmd("ready")[1].split(), ["wrapped"])
 
 if __name__ == "__main__":
     unittest.main()
