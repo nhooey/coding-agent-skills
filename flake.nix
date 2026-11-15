@@ -108,7 +108,7 @@
                 touch $out
               '';
 
-          # The fan-out runner, against throwaway git repositories and a fake
+          # The headless runner, against throwaway git repositories and a fake
           # `claude` that records how it was called.
           checks.fan-out-headless =
             pkgs.runCommand "fan-out-headless-tests"
@@ -120,7 +120,7 @@
               }
               ''
                 export HOME=$TMPDIR
-                python3 -I ${./skills/coding-agent-fan-out-headless}/scripts/test_fan_out.py
+                python3 -I ${./skills/coding-agent-fan-out-headless}/scripts/test_run_headless.py
                 touch $out
               '';
 

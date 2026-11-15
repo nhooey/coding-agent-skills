@@ -1,5 +1,5 @@
 {
-  description = "coding-agent-fan-out-headless: Coding-agent skill — run one prompt across many git checkouts, one headless Claude Code session per checkout with its own skills and Nix environment";
+  description = "coding-agent-fan-out-headless: Coding-agent skill — run a prompt as a headless Claude Code session inside one git checkout, with its own skills and Nix environment, and fan it out across many";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
