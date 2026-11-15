@@ -99,12 +99,13 @@
           apps = base.apps.${system};
 
           # The kanban skill's reply linter, against its fixtures and the
-          # skill's own examples.
+          # skill's own examples, and its transcript readers' tests.
           checks.kanban-lint-reply =
             pkgs.runCommand "kanban-lint-reply-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
               ''
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_lint_reply.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_turns.py
+                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_outstanding.py
                 touch $out
               '';
 
