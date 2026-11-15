@@ -22,9 +22,9 @@ characters of the prompt's `promptId`; `find` also takes the last 6 characters o
 record's `uuid`, which earlier replies printed. An id that matches no turn or several fails,
 naming the candidates.
 
-A reply section opens on a line `<glyph> **<Name>:**`, Name one of Answers (once Questions), Done,
-Pending (once Unfinished, before that Open), Logged, Waiting, Review (once To review), Todo (once To do),
-Decide (once Decisions, before that Blocked), matched by name and not glyph; a line of `▔` or `¯` under it belongs to the
+A reply section opens on a line `<glyph> **<Name>:**`, Name one of Answers, Done, Pending, Logged,
+Waiting, Review, Todo or Decide, or an alias older replies use (Questions for Answers, Unfinished or Open for
+Pending, To review for Review, To do for Todo, Decisions or Blocked for Decide), matched by name and not glyph; a line of `▔` or `¯` under it belongs to the
 header. A section ends at the next header or at a line starting `Still open from earlier`.
 
 Subcommands, each printing plain text:
@@ -49,9 +49,7 @@ from dataclasses import dataclass, replace
 from functools import reduce
 from pathlib import Path
 
-# "To do", "To review", "Questions", "Open" and "Blocked" are the headers before the user's renames to "Todo" (2026-10-05),
-# "Review" (2026-10-13), "Answers", "Unfinished" and "Decisions" (2026-10-29), and "Pending" and "Decide"
-# (2026-11-02); earlier turns still carry the old names.
+# Each header followed by its aliases, the names older replies in a transcript still carry.
 SECTION_NAMES = (
     "Answers", "Questions", "Done", "Pending", "Unfinished", "Open", "Logged", "Waiting", "Review", "To review", "Todo", "To do",
     "Decide", "Decisions", "Blocked",
