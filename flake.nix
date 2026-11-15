@@ -124,6 +124,14 @@
                 touch $out
               '';
 
+          # The session build limits hook, against a temporary CLAUDE_ENV_FILE.
+          checks.session-build-limits =
+            pkgs.runCommand "session-build-limits-tests" { nativeBuildInputs = [ pkgs.bash ]; }
+              ''
+                bash ${./skills/coding-agent-session-build-limits}/scripts/test_session_build_limits.sh
+                touch $out
+              '';
+
           checks.plans-as-graph =
             pkgs.runCommand "plans-as-graph-tests"
               {

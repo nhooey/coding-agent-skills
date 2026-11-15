@@ -25,6 +25,7 @@ in agent-output-skills.
 | [`coding-agent-questions-as-first-class-prompts`](skills/coding-agent-questions-as-first-class-prompts/SKILL.md)         | Routes any question for the user through the agent's structured-question primitive (e.g. `AskUserQuestion`) instead of free-text prose that waits for a reply.                                                                                                |
 | [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson into the right existing skill with draft wording, falling back to memory only if no skill fits.                                                                                                |
 | [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools and one-off checks inline, and turns anything run twice into a named, documented tool in the project instead of a cryptic scratchpad script.                                                                          |
+| [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)                                 | A SessionStart hook that gives every Claude Code session a fixed share of the machine for make, cargo, Rust tests, pytest-xdist and the JVM, leaving variables the user already set alone.                                                                    |
 | [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md)                                         | How a skill names other skills (bare names, a closing Related skills section) and reads its user and project preferences files.                                                                                                                               |
 | [`coding-agent-vpn-blocked-domains`](skills/coding-agent-vpn-blocked-domains/SKILL.md)                                   | When a domain blocks a request, checks whether it went through the VPN and suggests excluding the domain from it, or connecting it if it was off.                                                                                                             |
 
@@ -59,6 +60,7 @@ Package outputs:
 - `agent-skill-nhooey-coding-agent-questions-as-first-class-prompts`
 - `agent-skill-nhooey-coding-agent-route-feedback-to-skills-over-memory`
 - `agent-skill-nhooey-coding-agent-scratchpad-scripts`
+- `agent-skill-nhooey-coding-agent-session-build-limits`
 - `agent-skill-nhooey-coding-agent-skill-references`
 - `agent-skill-nhooey-coding-agent-vpn-blocked-domains`
 
