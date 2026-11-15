@@ -224,6 +224,18 @@ test("a dismissed band stays hidden until a refresh raises a new item", async ($
   await ui.unmount();
 });
 
+test("a progress circle jumps to its item", async ($, on) => {
+  engine(on, () => ITEMS);
+  await $.command.run(ANSWERS);
+  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
+  await ui.press({ key: "mark-2" });
+
+  expect(await headerText(ui)).toBe("🧠 3/3 · Ship tonight?");
+  await ui.press({ key: "mark-0" });
+  expect(await headerText(ui)).toBe("🧠 1/3 · Which cache to keep");
+  await ui.unmount();
+});
+
 test("Reassess submits the reassess command", async ($, on) => {
   const state = engine(on, () => ITEMS);
   await $.command.run(ANSWERS);

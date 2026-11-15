@@ -32,6 +32,8 @@ The band shows one open Decide item at a time, inside a rounded border, laid out
 
 ```text
 ╭──────────────────────────────────────────────────────────────────╮
+│ h: ⏪ Prev  j: ⏭️ Skip  l: ⏩ Next  🔄 Reassess  q: ❎  ● ◎ ○ ○ ○  │
+│                                                                  │
 │ 🧠 2/5 · Which cache to keep for the loader                      │
 │    Both are already built; this only picks the default.          │
 │    🔘 A. Keep the disk cache: it survives restarts.              │
@@ -40,30 +42,28 @@ The band shows one open Decide item at a time, inside a rounded border, laid out
 │    🔘 B. Keep the memory cache: simpler.                         │
 │       ➕ Less code.                                              │
 │       ➖ Slow cold starts.                                       │
-│                                                                  │
-│ h: ◀ Prev  j: Skip  l: Next ▶  Reassess  q: ✕  ● ◎ ○ ○ ○         │
 ╰──────────────────────────────────────────────────────────────────╯
 ```
 
-Each part has its own colour from the theme, so it reads in light and dark themes alike: the title in the accent colour, code spans in another, the option the draft picks on a highlighted background, the ➕ lines on a faint green background and the ➖ lines on a faint red one. When the band has too few rows for the whole item, it leaves out the note and the ➕ and ➖ lines.
+Each part has its own colour from the theme, so it reads in light and dark themes alike: the title in the accent colour, code spans in another, the option the draft picks on a highlighted background, the ➕ lines on a faint green background and the ➖ lines on a faint red one. The controls sit on top, so they stay put whatever the item's length, and every clickable word is underlined. When the band has too few rows for the whole item, it leaves out the note and the ➕ and ➖ lines.
 
 | Control         | What it does                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | an option       | writes `<turn>.Decide.<n>.<letter>` into the draft, replacing the item's earlier answer there, and moves to the next unanswered item      |
-| a checkbox item | toggles its letter in one reference, `…Decide.3.A,C`, and stays on the item so you can pick more; `Next ▶` or `Skip` moves on             |
-| `Skip`          | goes to the next item the draft doesn't answer                                                                                            |
-| `◀ Prev`        | goes to the previous item, wrapping round                                                                                                 |
-| `Next ▶`        | goes to the next item, wrapping round                                                                                                     |
-| `Reassess`      | submits the skill's `reassess` command, which works the open items out afresh; the one button that sends a prompt                         |
-| `✕`             | folds the band to a single `🧠` until a reply raises a Decide item it hasn't shown, until you click the `🧠`, or until you run `/answers` |
+| a checkbox item | toggles its letter in one reference, `…Decide.3.A,C`, and stays on the item so you can pick more; `⏩ Next` or `⏭️ Skip` moves on         |
+| `⏭️ Skip`       | goes to the next item the draft doesn't answer                                                                                            |
+| `⏪ Prev`       | goes to the previous item, wrapping round                                                                                                 |
+| `⏩ Next`       | goes to the next item, wrapping round                                                                                                     |
+| `🔄 Reassess`   | submits the skill's `reassess` command, which works the open items out afresh; the one button that sends a prompt                         |
+| `❎`            | folds the band to a single `🧠` until a reply raises a Decide item it hasn't shown, until you click the `🧠`, or until you run `/answers` |
 
-The marks after the buttons show which items the draft answers, `●` answered and `○` not, the shown item ringed, `◉` or `◎`, in the accent colour. The band refreshes when a reply finishes.
+The circles after the controls show which items the draft answers, `●` answered and `○` not, the shown item ringed, `◉` or `◎`, in the accent colour. Click a circle to go to its item. The band refreshes when a reply finishes.
 
-Once the band holds the keys (ctrl+x tab, or a click on it), `h`, `j`, `l` and `q` press `◀ Prev`, `Skip`, `Next ▶` and `✕`, as their labels show. Options have no hotkey, so they read exactly as the skill writes them; click them, or move the focus to one and press Enter.
+Once the band holds the keys (ctrl+x tab, or a click on it), `h`, `j`, `l` and `q` press `⏪ Prev`, `⏭️ Skip`, `⏩ Next` and `❎`, as their labels show. Options have no hotkey, so they read exactly as the skill writes them; click them, or move the focus to one and press Enter.
 
 ### Bringing the band back
 
-After `✕`, while any Decide item is open, the band leaves a single clickable `🧠` where it stood. Clicking it, or running `/answers`, shows the band again at the first item the draft doesn't answer, and re-reads the open items. With no item open, the `🧠` goes too, and `/answers` says there is nothing to answer.
+After `❎`, while any Decide item is open, the band leaves a single clickable `🧠` where it stood. Clicking it, or running `/answers`, shows the band again at the first item the draft doesn't answer, and re-reads the open items. With no item open, the `🧠` goes too, and `/answers` says there is nothing to answer.
 
 ### Buttons in the transcript
 

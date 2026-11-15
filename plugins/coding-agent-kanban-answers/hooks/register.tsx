@@ -291,20 +291,24 @@ export const register: Register = (on) => {
         position: position(current),
       }));
     const isFull = rowsOf(item).full + CHROME <= e.props.maxRows;
+    // A control's emoji, then its word underlined, so it reads as a link.
     const control = (
       key: string,
-      label: string,
+      emoji: string,
+      word: string,
       onPress: () => unknown,
       hotkey?: string,
     ) => (
       <Button
         key={key}
-        label={label}
+        label={word}
         plain
         dimColor
         {...(hotkey ? { hotkey } : {})}
         onPress={onPress}
-      />
+      >
+        {emoji} <Text underline>{word}</Text>
+      </Button>
     );
 
     return (
@@ -314,6 +318,43 @@ export const register: Register = (on) => {
         borderColor={COLOR.border}
         paddingX={1}
       >
+        <Box marginBottom={1} flexWrap="wrap" columnGap={2}>
+          {control("prev", "⏪", "Prev", move(prevPosition), KEYS.prev)}
+          {control(
+            "skip",
+            "⏭️",
+            "Skip",
+            move((current) => skipped(current, text)),
+            KEYS.skip,
+          )}
+          {control("next", "⏩", "Next", move(nextPosition), KEYS.next)}
+          {control("reassess", "🔄", "Reassess", () =>
+            $.prompt.submit({ text: REASSESS }),
+          )}
+          <Button
+            key="dismiss"
+            label="❎"
+            plain
+            dimColor
+            role="dismiss"
+            hotkey={KEYS.dismiss}
+            onPress={() => update($, band, dismissed)}
+          />
+          <Box columnGap={1}>
+            {progressMarks(b, text).map(({ mark, isShown }, n) => (
+              <Button
+                key={`mark-${n}`}
+                plain
+                dimColor={!isShown}
+                onPress={move(() => n)}
+              >
+                <Text color={isShown ? COLOR.title : undefined} bold={isShown}>
+                  {isShown ? (mark === "●" ? "◉" : "◎") : mark}
+                </Text>
+              </Button>
+            ))}
+          </Box>
+        </Box>
         {itemView({ Box, Button, Text }, item, {
           title: header(b),
           chosen: lettersFor(text, item),
@@ -321,41 +362,6 @@ export const register: Register = (on) => {
           keyOf: (letter) => `option-${letter}`,
           onPick: (letter) => answer($, item, letter),
         })}
-        <Box marginTop={1} flexWrap="wrap" columnGap={2}>
-          {control("prev", "◀ Prev", move(prevPosition), KEYS.prev)}
-          {control(
-            "skip",
-            "Skip",
-            move((current) => skipped(current, text)),
-            KEYS.skip,
-          )}
-          {control("next", "Next ▶", move(nextPosition), KEYS.next)}
-          {control("reassess", "Reassess", () =>
-            $.prompt.submit({ text: REASSESS }),
-          )}
-          <Button
-            key="dismiss"
-            label="✕"
-            plain
-            dimColor
-            role="dismiss"
-            hotkey={KEYS.dismiss}
-            onPress={() => update($, band, dismissed)}
-          />
-          <Text>
-            {progressMarks(b, text).map(({ mark, isShown }, n) => (
-              <Text
-                key={`mark-${n}`}
-                color={isShown ? COLOR.title : undefined}
-                dimColor={!isShown}
-                bold={isShown}
-              >
-                {n > 0 ? " " : ""}
-                {mark}
-              </Text>
-            ))}
-          </Text>
-        </Box>
       </Box>
     );
   });
@@ -489,16 +495,22 @@ const itemView = (
               dimColor={dim}
               onPress={() => view.onPick(option.letter)}
             >
-              <Text {...pick}>
-                {glyphOf(item, option.letter)} {option.letter}.{" "}
+              <Text {...pick}>{glyphOf(item, option.letter)} </Text>
+              <Text {...pick} underline>
+                {option.letter}.
               </Text>
+              <Text {...pick}> </Text>
               {inline(option.name, `${option.letter}-name`, {
                 ...pick,
                 bold: true,
+                underline: true,
               })}
               {option.consequence ? <Text {...pick}>: </Text> : null}
               {option.consequence
-                ? inline(option.consequence, `${option.letter}-then`, pick)
+                ? inline(option.consequence, `${option.letter}-then`, {
+                    ...pick,
+                    underline: true,
+                  })
                 : null}
             </Button>
             {view.isFull
