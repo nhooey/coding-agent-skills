@@ -124,6 +124,20 @@
                 touch $out
               '';
 
+          checks.plans-as-graph =
+            pkgs.runCommand "plans-as-graph-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.git
+                ];
+              }
+              ''
+                export HOME=$TMPDIR
+                python3 -I ${./skills/coding-agent-plans-as-graph}/scripts/test_plans.py
+                touch $out
+              '';
+
           # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
           # the module also surfaces a `checks.${system}.treefmt` so `nix flake
           # check` fails on any unformatted file. prettier's includes are pinned
