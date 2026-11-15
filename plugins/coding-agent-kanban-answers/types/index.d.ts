@@ -1,5 +1,17 @@
-/** One option of a Decide item: its capital letter and its bold name. */
-export type DecideOption = { letter: string; name: string };
+/**
+ * One option of a Decide item: its capital letter and bold name, and, as the
+ * skill writes it, its glyph, the consequence after the name, and the ➕, ➖
+ * and note lines under it. A tool call may leave out all but letter and name.
+ */
+export type DecideOption = {
+  letter: string;
+  name: string;
+  glyph?: string;
+  consequence?: string;
+  pros?: string[];
+  cons?: string[];
+  notes?: string[];
+};
 
 /** radio: exactly one letter; checkbox: any number; binary: Y or N. */
 export type DecideKind = "radio" | "checkbox" | "binary";
@@ -15,6 +27,8 @@ export type DecideItem = {
   summary: string;
   kind: DecideKind;
   ref: string;
+  /** The lines under the summary, before the options. */
+  note?: string[];
   options: DecideOption[];
 };
 

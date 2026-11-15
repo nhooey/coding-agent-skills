@@ -220,15 +220,57 @@ export const header = (band: Band): string => {
     : `🧠 ${position + 1}/${band.items.length} · ${item.summary}`;
 };
 
-/** One mark per item, `●` answered in the draft and `○` not, the shown one in brackets. */
-export const progress = (band: Band, draft: string): string =>
-  band.items
-    .map((item, n) => {
-      const mark = isAnswered(draft, item) ? "●" : "○";
+/** One mark per item, `●` answered in the draft and `○` not, with which one the band shows. */
+export const progressMarks = (
+  band: Band,
+  draft: string,
+): { mark: string; isShown: boolean }[] =>
+  band.items.map((item, n) => ({
+    mark: isAnswered(draft, item) ? "●" : "○",
+    isShown: n === positionIn(band),
+  }));
 
-      return n === positionIn(band) ? `[${mark}]` : mark;
-    })
+/** The marks as one line, the shown one drawn as `◉` answered or `◎` not. */
+export const progress = (band: Band, draft: string): string =>
+  progressMarks(band, draft)
+    .map(({ mark, isShown }) => (isShown ? (mark === "●" ? "◉" : "◎") : mark))
     .join(" ");
+
+/** The glyph an option is drawn with: its own, else its item kind's. */
+export const glyphOf = (item: DecideItem, letter: string): string =>
+  item.options.find((o) => o.letter === letter)?.glyph ||
+  (item.kind === "checkbox"
+    ? "🔲"
+    : item.kind === "binary"
+      ? letter === "N"
+        ? "👎"
+        : "👍"
+      : "🔘");
+
+/** A line split at its backticks: even parts are prose, odd parts code. */
+export const codeSpans = (line: string): { text: string; isCode: boolean }[] =>
+  line
+    .split("`")
+    .map((text, n) => ({
+      text: text.replaceAll("**", ""),
+      isCode: n % 2 === 1,
+    }))
+    .filter((part) => part.text !== "");
+
+/** How many rows an item takes drawn in full, and with its pros, cons and notes left out. */
+export const rowsOf = (item: DecideItem): { full: number; brief: number } => {
+  const brief = 1 + item.options.length;
+  const under = item.options.reduce(
+    (sum, o) =>
+      sum +
+      (o.pros?.length ?? 0) +
+      (o.cons?.length ?? 0) +
+      (o.notes?.length ?? 0),
+    0,
+  );
+
+  return { full: brief + (item.note?.length ?? 0) + under, brief };
+};
 
 /** The items a tool call or the script handed over, whatever else the JSON held. */
 export const itemsOf = (value: unknown): DecideItem[] => {

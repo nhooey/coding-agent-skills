@@ -224,13 +224,13 @@ test("a dismissed band stays hidden until a refresh raises a new item", async ($
   await ui.unmount();
 });
 
-test("Recheck submits the recheck command", async ($, on) => {
+test("Reassess submits the reassess command", async ($, on) => {
   const state = engine(on, () => ITEMS);
   await $.command.run(ANSWERS);
   const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
-  await ui.press({ key: "recheck" });
+  await ui.press({ key: "reassess" });
 
-  expect(state.sent).toEqual(["recheck"]);
+  expect(state.sent).toEqual(["reassess"]);
   expect(state.box).toBe("");
   await ui.unmount();
 });
