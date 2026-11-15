@@ -73,8 +73,9 @@ nix flake check  # runs the treefmt check (fails on any unformatted file)
 ```
 
 The dev shell provides `check`, `fmt`, and `update-flake` commands plus
-`reap-skills` / `update-skills-devshell`. Its own toolchain skills (the git/GitHub
-pack and skillspkgs' `authoring` combination) live in the runtime
+`reap-skills` / `update-skills-devshell`. Its own toolchain skills (the git,
+shell and Python packs, a few coding-agent skills, and skillspkgs' `authoring`
+combination) live in the runtime
 [`skills-devshell/`](skills-devshell/) sub-flake and are invoked at run time, so
 the root flake stays a leaf with zero skill inputs in its lock.
 
