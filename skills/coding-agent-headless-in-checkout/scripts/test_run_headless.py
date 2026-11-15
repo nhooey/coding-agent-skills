@@ -174,7 +174,7 @@ class Runs(unittest.TestCase):
         return json.loads((self.logs / f"{label}.outcome.json").read_text())
 
     def test_worktree_run_resumes_the_checkouts_session_and_leaves_it_untouched(self):
-        code, out = self.run_one(self.alpha)
+        code, out = self.run_one(self.alpha, "--session", "continue")
         self.assertEqual(code, 0)
         argv = self.recorded("alpha.worktrees_headless-t1")["argv"]
         self.assertEqual(argv[argv.index("--resume") + 1], str(self.alpha_session))
@@ -199,17 +199,37 @@ class Runs(unittest.TestCase):
         self.assertIsNone(self.outcome("beta")["resumed_from"])
 
     def test_checkout_run_uses_continue_where_there_is_a_session(self):
-        self.assertEqual(self.run_one(self.alpha, "--where", "checkout")[0], 0)
+        self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "continue")[0], 0)
         alpha = self.recorded("src_alpha")
         self.assertEqual(Path(alpha["cwd"]).resolve(), self.alpha)
         self.assertIn("--continue", alpha["argv"])
         self.assertIn("--fork-session", alpha["argv"])
-        self.assertEqual(self.run_one(self.beta, "--where", "checkout")[0], 0)
+        self.assertEqual(self.run_one(self.beta, "--where", "checkout", "--session", "continue")[0], 0)
         self.assertEqual(self.recorded("src_beta")["argv"][:2], ["-p", "do the thing"])
 
     def test_new_session_ignores_earlier_ones(self):
         self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "new")[0], 0)
         self.assertNotIn("--continue", self.recorded("src_alpha")["argv"])
+
+    def test_new_session_is_the_default(self):
+        self.assertEqual(self.run_one(self.alpha, "--where", "checkout")[0], 0)
+        self.assertNotIn("--continue", self.recorded("src_alpha")["argv"])
+        self.assertIsNone(self.outcome("alpha")["resumed_from"])
+
+    def test_continuing_a_recent_session_warns_that_it_may_be_live(self):
+        self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "continue")[0], 0)
+        self.assertIn("warning alpha: session 11111111 was written", self.stderr)
+        self.assertTrue(any("may still be running" in n for n in self.outcome("alpha")["notes"]))
+
+    def test_continuing_an_old_session_does_not_warn(self):
+        old = time.time() - 3600
+        os.utime(self.alpha_session, (old, old))
+        self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "continue")[0], 0)
+        self.assertNotIn("may still be running", self.stderr)
+        os.utime(self.alpha_session)
+        self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "continue",
+                                      "--live-within", "0")[0], 0)
+        self.assertNotIn("may still be running", self.stderr)
 
     def test_exit_status_says_how_it_ended(self):
         self.assertEqual(self.run_one(self.alpha, "--where", "checkout", mode="fail")[0], 1)
@@ -228,7 +248,7 @@ class Runs(unittest.TestCase):
 
     def test_dirty_checkout_continues_with_a_note_naming_its_uncommitted_paths(self):
         self.make_alpha_dirty()
-        self.assertEqual(self.run_one(self.alpha)[0], 0)
+        self.assertEqual(self.run_one(self.alpha, "--session", "continue")[0], 0)
         argv = self.recorded("alpha.worktrees_headless-t1")["argv"]
         prompt = argv[1]
         self.assertTrue(prompt.startswith("Note from the headless runner"), prompt)
@@ -239,14 +259,14 @@ class Runs(unittest.TestCase):
 
     def test_dirty_new_starts_a_fresh_session(self):
         self.make_alpha_dirty()
-        self.assertEqual(self.run_one(self.alpha, "--dirty", "new")[0], 0)
+        self.assertEqual(self.run_one(self.alpha, "--session", "continue", "--dirty", "new")[0], 0)
         argv = self.recorded("alpha.worktrees_headless-t1")["argv"]
         self.assertNotIn("--resume", argv)
         self.assertEqual(argv[1], "do the thing")
 
     def test_dirty_skip_does_not_run(self):
         self.make_alpha_dirty()
-        self.assertEqual(self.run_one(self.alpha, "--dirty", "skip")[0], 3)
+        self.assertEqual(self.run_one(self.alpha, "--session", "continue", "--dirty", "skip")[0], 3)
         self.assertEqual(self.outcome("alpha")["status"], "skipped")
         self.assertIn("uncommitted", self.outcome("alpha")["result"])
         self.assertFalse(run_headless.worktree_path(self.alpha, "t1").exists())
