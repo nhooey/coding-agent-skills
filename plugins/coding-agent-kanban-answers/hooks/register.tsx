@@ -3,8 +3,13 @@
 // row of the `kanban_options` tool the agent calls before its reply, and two
 // ways to bring a dismissed band back: the 🧠 it leaves in its place, and the
 // /answers command. A click writes the
-// item's reference into the prompt draft and never sends it; Recheck alone
-// sends a prompt, the skill's `recheck` command.
+// item's reference into the prompt draft and never sends it; Reassess alone
+// sends a prompt, the skill's `reassess` command.
+//
+// An item is drawn as the skill writes it: its summary, its note, then each
+// option as `glyph letter. name: consequence` with its ➕ and ➖ lines indented
+// under it, inside a rounded border. Backgrounds tell the parts apart: the
+// option the draft picks, the pros and the cons each have their own.
 
 import { atom, read, update } from "claude-code";
 import type { EngineInterface, Register } from "claude-code";
@@ -13,7 +18,9 @@ import type { Band, DecideItem } from "../types";
 import {
   afterAnswer,
   choose,
+  codeSpans,
   dismissed,
+  glyphOf,
   drawnByTool,
   emptyBand,
   header,
@@ -22,23 +29,36 @@ import {
   nextPosition,
   positionIn,
   prevPosition,
-  progress,
+  progressMarks,
   refOf,
   refreshed,
   reopened,
+  rowsOf,
   skipped,
 } from "./answers";
 
 const TOOL = "kanban_options";
 const TOOL_CALLED = "mcp__coding-agent-kanban-answers__kanban_options";
-const RECHECK = "recheck";
+const REASSESS = "reassess";
 const SCRIPT =
   "skills/coding-agent-kanban-turn-responses/scripts/outstanding.py";
 // Hotkeys for the band's controls, pressed while the band holds the keys
-// (ctrl+x tab or a click). Letters an option is unlikely to use, since an
-// option's own letter is its hotkey.
+// (ctrl+x tab or a click).
 const KEYS = { prev: "h", skip: "j", next: "l", dismiss: "q" } as const;
-const RESERVED: readonly string[] = Object.values(KEYS);
+
+// Theme colours, so each part keeps its contrast in light and dark themes.
+const COLOR = {
+  border: "promptBorder",
+  title: "claude",
+  code: "permission",
+  chosen: "diffAddedWord",
+  pro: "diffAddedDimmed",
+  con: "diffRemovedDimmed",
+} as const;
+// Columns an option sits in from its summary, and its ➕ and ➖ lines from it.
+const INDENT = 3;
+// The border's two rows and the controls' row and the gap above it.
+const CHROME = 4;
 
 // Change the tag when Band's fields change: it declines what an earlier
 // version stored, which outlives a reload.
@@ -265,65 +285,76 @@ export const register: Register = (on) => {
         </Box>
       );
     }
-    const chosen = lettersFor(text, item);
     const move = (position: (b: Band) => number) => () =>
       update($, band, (current) => ({
         ...current,
         position: position(current),
       }));
+    const isFull = rowsOf(item).full + CHROME <= e.props.maxRows;
+    const control = (
+      key: string,
+      label: string,
+      onPress: () => unknown,
+      hotkey?: string,
+    ) => (
+      <Button
+        key={key}
+        label={label}
+        plain
+        dimColor
+        {...(hotkey ? { hotkey } : {})}
+        onPress={onPress}
+      />
+    );
 
     return (
-      <Box flexDirection="column">
-        <Box>
-          <Text bold wrap="truncate-end">
-            {header(b)}
-          </Text>
-        </Box>
-        <Box flexWrap="wrap">
-          {item.options.map((option) => (
-            <Button
-              key={`option-${option.letter}`}
-              label={`${option.letter}. ${option.name}`}
-              variant={chosen.includes(option.letter) ? "primary" : "secondary"}
-              {...(RESERVED.includes(option.letter.toLowerCase())
-                ? {}
-                : { hotkey: option.letter.toLowerCase() })}
-              onPress={() => answer($, item, option.letter)}
-            />
-          ))}
-        </Box>
-        <Box flexWrap="wrap">
-          <Button
-            key="prev"
-            label="◀ Prev"
-            hotkey={KEYS.prev}
-            onPress={move(prevPosition)}
-          />
-          <Button
-            key="skip"
-            label="Skip"
-            hotkey={KEYS.skip}
-            onPress={move((current) => skipped(current, text))}
-          />
-          <Button
-            key="next"
-            label="Next ▶"
-            hotkey={KEYS.next}
-            onPress={move(nextPosition)}
-          />
-          <Button
-            key="recheck"
-            label="Recheck"
-            onPress={() => $.prompt.submit({ text: RECHECK })}
-          />
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={COLOR.border}
+        paddingX={1}
+      >
+        {itemView({ Box, Button, Text }, item, {
+          title: header(b),
+          chosen: lettersFor(text, item),
+          isFull,
+          keyOf: (letter) => `option-${letter}`,
+          onPick: (letter) => answer($, item, letter),
+        })}
+        <Box marginTop={1} flexWrap="wrap" columnGap={2}>
+          {control("prev", "◀ Prev", move(prevPosition), KEYS.prev)}
+          {control(
+            "skip",
+            "Skip",
+            move((current) => skipped(current, text)),
+            KEYS.skip,
+          )}
+          {control("next", "Next ▶", move(nextPosition), KEYS.next)}
+          {control("reassess", "Reassess", () =>
+            $.prompt.submit({ text: REASSESS }),
+          )}
           <Button
             key="dismiss"
             label="✕"
+            plain
+            dimColor
             role="dismiss"
             hotkey={KEYS.dismiss}
             onPress={() => update($, band, dismissed)}
           />
-          <Text dimColor> {progress(b, text)}</Text>
+          <Text>
+            {progressMarks(b, text).map(({ mark, isShown }, n) => (
+              <Text
+                key={`mark-${n}`}
+                color={isShown ? COLOR.title : undefined}
+                dimColor={!isShown}
+                bold={isShown}
+              >
+                {n > 0 ? " " : ""}
+                {mark}
+              </Text>
+            ))}
+          </Text>
         </Box>
       </Box>
     );
@@ -345,35 +376,143 @@ export const register: Register = (on) => {
         {row}
         {items.map((item) => {
           const isSettled = b.settledRefs.includes(refOf(item));
-          const chosen = lettersFor(text, item);
 
           return (
-            <Box key={refOf(item)} flexDirection="column">
-              <Text bold={!isSettled} dimColor={isSettled} wrap="truncate-end">
-                🧠 Decide.{item.number} · {item.summary}
-                {isSettled ? " (settled)" : ""}
-              </Text>
-              <Box flexWrap="wrap">
-                {item.options.map((option) => (
-                  <Button
-                    key={`${refOf(item)}.${option.letter}`}
-                    label={`${option.letter}. ${option.name}`}
-                    dimColor={isSettled}
-                    variant={
-                      !isSettled && chosen.includes(option.letter)
-                        ? "primary"
-                        : "secondary"
-                    }
-                    onPress={() =>
-                      isSettled ? undefined : answer($, item, option.letter)
-                    }
-                  />
-                ))}
-              </Box>
+            <Box
+              key={refOf(item)}
+              flexDirection="column"
+              borderStyle="round"
+              borderColor={COLOR.border}
+              borderDimColor={isSettled}
+              paddingX={1}
+            >
+              {itemView({ Box, Button, Text }, item, {
+                title: `🧠 Decide.${item.number} · ${item.summary}${isSettled ? " (settled)" : ""}`,
+                chosen: isSettled ? [] : lettersFor(text, item),
+                isFull: !isSettled,
+                isSettled,
+                keyOf: (letter) => `${refOf(item)}.${letter}`,
+                onPick: (letter) =>
+                  isSettled ? undefined : answer($, item, letter),
+              })}
             </Box>
           );
         })}
       </Box>
     );
   });
+};
+
+/** The elements an item is drawn with, from the surface's table. */
+type Elements = Pick<
+  ReturnType<EngineInterface["ui"]["resolve"]>,
+  "Box" | "Button" | "Text"
+>;
+
+/**
+ * One Decide item as the skill writes it: the title, the note, and each
+ * option a plain button reading `glyph letter. name: consequence`, its ➕ and
+ * ➖ lines indented under it. `isFull` false leaves out the note, pros, cons
+ * and option notes, for a band with few rows.
+ */
+const itemView = (
+  elements: Elements,
+  item: DecideItem,
+  view: {
+    title: string;
+    chosen: string[];
+    isFull: boolean;
+    isSettled?: boolean;
+    keyOf: (letter: string) => string;
+    onPick: (letter: string) => unknown;
+  },
+) => {
+  const { Box, Button, Text } = elements;
+  const dim = view.isSettled === true;
+  const inline = (
+    line: string,
+    key: string,
+    props: Record<string, unknown> = {},
+  ) =>
+    codeSpans(line).map((part, n) => (
+      <Text
+        key={`${key}-${n}`}
+        {...props}
+        {...(part.isCode ? { color: COLOR.code } : {})}
+      >
+        {part.text}
+      </Text>
+    ));
+  const lines = (
+    prefix: string,
+    texts: string[] | undefined,
+    background: string | undefined,
+    key: string,
+  ) =>
+    (texts ?? []).map((line, n) => (
+      <Box key={`${key}-${n}`} marginLeft={INDENT}>
+        <Text
+          dimColor={dim}
+          {...(background ? { backgroundColor: background } : {})}
+          wrap="wrap"
+        >
+          {prefix ? `${prefix} ` : ""}
+          {inline(line, `${key}-${n}`)}
+        </Text>
+      </Box>
+    ));
+
+  return (
+    <Box flexDirection="column">
+      <Text
+        bold={!dim}
+        dimColor={dim}
+        color={dim ? undefined : COLOR.title}
+        wrap="wrap"
+      >
+        {inline(view.title, "title")}
+      </Text>
+      {view.isFull ? lines("", item.note, undefined, "note") : null}
+      {item.options.map((option) => {
+        const isChosen = view.chosen.includes(option.letter);
+        const pick = isChosen ? { backgroundColor: COLOR.chosen } : {};
+
+        return (
+          <Box
+            key={`${view.keyOf(option.letter)}-box`}
+            flexDirection="column"
+            marginLeft={INDENT}
+          >
+            <Button
+              key={view.keyOf(option.letter)}
+              plain
+              dimColor={dim}
+              onPress={() => view.onPick(option.letter)}
+            >
+              <Text {...pick}>
+                {glyphOf(item, option.letter)} {option.letter}.{" "}
+              </Text>
+              {inline(option.name, `${option.letter}-name`, {
+                ...pick,
+                bold: true,
+              })}
+              {option.consequence ? <Text {...pick}>: </Text> : null}
+              {option.consequence
+                ? inline(option.consequence, `${option.letter}-then`, pick)
+                : null}
+            </Button>
+            {view.isFull
+              ? lines("➕", option.pros, COLOR.pro, `${option.letter}-pro`)
+              : null}
+            {view.isFull
+              ? lines("➖", option.cons, COLOR.con, `${option.letter}-con`)
+              : null}
+            {view.isFull
+              ? lines("", option.notes, undefined, `${option.letter}-note`)
+              : null}
+          </Box>
+        );
+      })}
+    </Box>
+  );
 };

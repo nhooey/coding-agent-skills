@@ -12,6 +12,7 @@ import {
   lettersFor,
   nextPosition,
   prevPosition,
+  codeSpans,
   progress,
   refreshed,
   reopened,
@@ -195,10 +196,21 @@ describe("what the band says", () => {
     expect(header({ ...band, position: 1 })).toBe("🧠 2/3 · Cleanups to start");
   });
 
-  test("the progress marks the answered items and brackets the shown one", () => {
+  test("the progress marks the answered items and rings the shown one", () => {
     expect(progress({ ...band, position: 1 }, "9efb08a1.Decide.1.A")).toBe(
-      "● [○] ○",
+      "● ◎ ○",
     );
+    expect(progress({ ...band, position: 0 }, "9efb08a1.Decide.1.A")).toBe(
+      "◉ ○ ○",
+    );
+  });
+
+  test("code spans split at backticks and lose their bold marks", () => {
+    expect(codeSpans("Keep **`old-forks`** as is")).toEqual([
+      { text: "Keep ", isCode: false },
+      { text: "old-forks", isCode: true },
+      { text: " as is", isCode: false },
+    ]);
   });
 });
 

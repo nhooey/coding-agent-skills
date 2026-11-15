@@ -28,13 +28,24 @@ It runs `python3` from your `PATH`.
 
 ### The band above the prompt
 
-The band shows one open Decide item at a time:
+The band shows one open Decide item at a time, inside a rounded border, laid out as the skill writes it:
 
 ```text
-🧠 2/5 · Which cache to keep for the loader
-[ A. Keep the disk cache ] [ B. Keep the memory cache ]
-[ ◀ Prev ] [ Skip ] [ Next ▶ ] [ Recheck ] [ ✕ ]  ● [○] ○ ○ ○
+╭──────────────────────────────────────────────────────────────────╮
+│ 🧠 2/5 · Which cache to keep for the loader                      │
+│    Both are already built; this only picks the default.          │
+│    🔘 A. Keep the disk cache: it survives restarts.              │
+│       ➕ Faster cold starts.                                     │
+│       ➖ Disk use.                                               │
+│    🔘 B. Keep the memory cache: simpler.                         │
+│       ➕ Less code.                                              │
+│       ➖ Slow cold starts.                                       │
+│                                                                  │
+│ h: ◀ Prev  j: Skip  l: Next ▶  Reassess  q: ✕  ● ◎ ○ ○ ○         │
+╰──────────────────────────────────────────────────────────────────╯
 ```
+
+Each part has its own colour from the theme, so it reads in light and dark themes alike: the title in the accent colour, code spans in another, the option the draft picks on a highlighted background, the ➕ lines on a faint green background and the ➖ lines on a faint red one. When the band has too few rows for the whole item, it leaves out the note and the ➕ and ➖ lines.
 
 | Control         | What it does                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -43,12 +54,12 @@ The band shows one open Decide item at a time:
 | `Skip`          | goes to the next item the draft doesn't answer                                                                                            |
 | `◀ Prev`        | goes to the previous item, wrapping round                                                                                                 |
 | `Next ▶`        | goes to the next item, wrapping round                                                                                                     |
-| `Recheck`       | submits the skill's `recheck` command, which works the open items out afresh; the one button that sends a prompt                          |
+| `Reassess`      | submits the skill's `reassess` command, which works the open items out afresh; the one button that sends a prompt                         |
 | `✕`             | folds the band to a single `🧠` until a reply raises a Decide item it hasn't shown, until you click the `🧠`, or until you run `/answers` |
 
-The marks after the buttons show which items the draft answers, `●` answered and `○` not, the shown item in brackets. The option the draft picks is drawn as the primary button. The band refreshes when a reply finishes.
+The marks after the buttons show which items the draft answers, `●` answered and `○` not, the shown item ringed, `◉` or `◎`, in the accent colour. The band refreshes when a reply finishes.
 
-Once the band holds the keys (ctrl+x tab, or a click on it), each option's letter presses it, and `h`, `j`, `l` and `q` press `◀ Prev`, `Skip`, `Next ▶` and `✕`. An option whose letter is one of those four has no hotkey.
+Once the band holds the keys (ctrl+x tab, or a click on it), `h`, `j`, `l` and `q` press `◀ Prev`, `Skip`, `Next ▶` and `✕`, as their labels show. Options have no hotkey, so they read exactly as the skill writes them; click them, or move the focus to one and press Enter.
 
 ### Bringing the band back
 
@@ -56,7 +67,7 @@ After `✕`, while any Decide item is open, the band leaves a single clickable `
 
 ### Buttons in the transcript
 
-The mod registers the tool `kanban_options`, listed as `mcp__coding-agent-kanban-answers__kanban_options`. The skill tells the agent to call it with the turn's Decide items right before writing its final response, so the tool's row, with a row of option buttons per item, sits just above the reply. Its buttons write the draft as the band's do. Once a refresh finds an item no longer open, its row is dimmed, marked `(settled)`, and its buttons do nothing.
+The mod registers the tool `kanban_options`, listed as `mcp__coding-agent-kanban-answers__kanban_options`. The skill tells the agent to call it with the turn's Decide items right before writing its final response, so the tool's row, with each item drawn in its own border as the band draws it, sits just above the reply. Its buttons write the draft as the band's do. Once a refresh finds an item no longer open, its row is dimmed, marked `(settled)`, and its buttons do nothing.
 
 ## Where the items come from
 
