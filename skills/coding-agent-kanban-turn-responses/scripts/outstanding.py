@@ -50,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import itertools
 import re
 import sys
 from dataclasses import dataclass, replace
@@ -413,6 +414,11 @@ _ANSWER_NUMBER = re.compile(r"^\s*(\d+)[.:]\s*[A-Z](?:\s*,\s*[A-Z])*\s*$")
 class DecideOption:
     letter: str
     name: str
+    glyph: str = ""
+    consequence: str = ""
+    pros: tuple[str, ...] = ()
+    cons: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -422,6 +428,7 @@ class DecideItem:
     summary: str
     kind: str
     options: tuple[DecideOption, ...]
+    note: tuple[str, ...] = ()
 
     @property
     def ref(self) -> str:
@@ -436,7 +443,19 @@ class DecideItem:
             "summary": self.summary,
             "kind": self.kind,
             "ref": self.ref,
-            "options": [{"letter": o.letter, "name": o.name} for o in self.options],
+            "note": list(self.note),
+            "options": [
+                {
+                    "letter": o.letter,
+                    "name": o.name,
+                    "glyph": o.glyph,
+                    "consequence": o.consequence,
+                    "pros": list(o.pros),
+                    "cons": list(o.cons),
+                    "notes": list(o.notes),
+                }
+                for o in self.options
+            ],
         }
 
 
@@ -445,17 +464,43 @@ def _kind(glyphs: tuple[str, ...]) -> str:
     return "checkbox" if "checkbox" in kinds else "binary" if "binary" in kinds else "radio"
 
 
+def _plain_lines(lines: tuple[str, ...]) -> tuple[str, ...]:
+    """Text lines with their indent and hard-break spaces gone, separator and blank lines dropped."""
+    return tuple(s for s in (line.strip().strip("\u2800").strip() for line in lines) if s)
+
+
+def _option(match: re.Match[str], lines: tuple[str, ...]) -> DecideOption:
+    """One option and the ➕, ➖ and note lines under it, up to the next option or the blank line ending the list."""
+    rest = match.string[match.end() :].split("\n", 1)[0].strip()
+    plain = _plain_lines(tuple(itertools.takewhile(lambda line: line.strip() != "", lines)))
+    return DecideOption(
+        match.group(2),
+        match.group(3).strip().rstrip(":").strip(),
+        match.group(1),
+        rest.lstrip(":").strip(),
+        tuple(s.removeprefix("➕").strip() for s in plain if s.startswith("➕")),
+        tuple(s.removeprefix("➖").strip() for s in plain if s.startswith("➖")),
+        tuple(s for s in plain if not s.startswith(("➕", "➖"))),
+    )
+
+
 def _decide_item(turn_id: str, chunk: str) -> DecideItem | None:
     """One numbered item of a Decide list, from its line to the next item's; None where it holds no option."""
     head = _DECIDE_ITEM.match(chunk)
-    options = tuple(_DECIDE_OPTION.findall(chunk))
+    found = tuple(_DECIDE_OPTION.finditer(chunk))
+    ends = (*(m.start() for m in found[1:]), len(chunk))
+    options = tuple(
+        _option(m, tuple(chunk[m.end() : end].split("\n")[1:])) for m, end in zip(found, ends)
+    )
+    note = _plain_lines(tuple(chunk[head.end() : found[0].start()].split("\n")[1:])) if head and found else ()
     return (
         DecideItem(
             turn_id,
             int(head.group(1)),
             head.group(2).strip().rstrip(":").strip(),
-            _kind(tuple(g for g, _, _ in options)),
-            tuple(DecideOption(letter, name.strip().rstrip(":").strip()) for _, letter, name in options),
+            _kind(tuple(o.glyph for o in options)),
+            options,
+            note,
         )
         if head and options
         else None

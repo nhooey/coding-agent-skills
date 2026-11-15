@@ -126,9 +126,37 @@ class DecideItemsOfTextTest(unittest.TestCase):
                 "summary": "Ship the release tonight?",
                 "kind": "binary",
                 "ref": "9efb08a1.Decide.3",
-                "options": [{"letter": "Y", "name": "Ship it"}, {"letter": "N", "name": "Hold it"}],
+                "note": [],
+                "options": [
+                    {
+                        "letter": "Y",
+                        "name": "Ship it",
+                        "glyph": "👍",
+                        "consequence": "it goes out.",
+                        "pros": ["Users get it."],
+                        "cons": ["Risk."],
+                        "notes": [],
+                    },
+                    {
+                        "letter": "N",
+                        "name": "Hold it",
+                        "glyph": "👎",
+                        "consequence": "it waits.",
+                        "pros": ["Safety."],
+                        "cons": ["Delay."],
+                        "notes": [],
+                    },
+                ],
             },
         )
+
+    def test_the_note_pros_and_cons_stop_at_the_item_and_list_ends(self) -> None:
+        first, last = self.items[0], self.items[2]
+        self.assertEqual(first.note, ("A note on the whole item.",))
+        self.assertEqual(first.options[0].pros, ("Faster cold starts.",))
+        self.assertEqual(first.options[1].cons, ("Slow cold starts.",))
+        self.assertEqual(first.options[1].notes, ())
+        self.assertEqual(last.options[1].notes, ())
 
     def test_an_item_without_options_is_left_out(self) -> None:
         text = "🧠 **Decide:**  \n▔▔▔▔▔▔▔▔▔▔\n1. **Something to think about**  \n   No options here.\n"
@@ -211,7 +239,10 @@ class CommandLineTest(unittest.TestCase):
         self.assertEqual(status, 0)
         found = json.loads(out.getvalue())
         self.assertEqual([i["ref"] for i in found["items"]], ["9efb08a1.Decide.1", "9efb08a1.Decide.3"])
-        self.assertEqual(found["items"][0]["options"][0], {"letter": "A", "name": "Keep the disk cache"})
+        self.assertEqual(
+            {k: found["items"][0]["options"][0][k] for k in ("letter", "name", "glyph")},
+            {"letter": "A", "name": "Keep the disk cache", "glyph": "🔘"},
+        )
 
 
 if __name__ == "__main__":
