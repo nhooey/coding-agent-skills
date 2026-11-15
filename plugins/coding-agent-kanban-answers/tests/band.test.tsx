@@ -175,6 +175,39 @@ test("dismiss hides the band, and /answers brings it back at the first unanswere
   await ui.unmount();
 });
 
+for (const surface of ["terminal", "desktop"] as const) {
+  test(`dismiss leaves a 🧠 that reopens the band at the first unanswered item, on ${surface}`, async ($, on) => {
+    const state = engine(on, () => ITEMS);
+    await $.command.run(ANSWERS);
+    const ui = await $.ui.mount({ ...BAND, surface });
+    await ui.press({ key: "option-A" });
+    await ui.press({ key: "dismiss" });
+
+    expect(await headerText(ui)).toBeUndefined();
+    expect((await ui.find({ type: "Button", key: "reopen" }))?.text).toBe("🧠");
+
+    await ui.press({ key: "reopen" });
+    expect(await headerText(ui)).toBe("🧠 2/3 · Cleanups to start");
+    expect(await ui.find({ type: "Button", key: "reopen" })).toBeUndefined();
+    expect(state.box).toBe("9efb08a1.Decide.1.A");
+    expect(state.sent).toEqual([]);
+    await ui.unmount();
+  });
+}
+
+test("with no open items a dismissed band leaves no 🧠", async ($, on) => {
+  const open: unknown[] = [...ITEMS];
+  engine(on, () => open);
+  await $.command.run(ANSWERS);
+  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
+  await ui.press({ key: "dismiss" });
+  open.splice(0, open.length);
+  await $.turn.complete(replyDone("t1"));
+
+  expect(await ui.find({ type: "Button", key: "reopen" })).toBeUndefined();
+  await ui.unmount();
+});
+
 test("a dismissed band stays hidden until a refresh raises a new item", async ($, on) => {
   const open: unknown[] = [...ITEMS];
   engine(on, () => open);

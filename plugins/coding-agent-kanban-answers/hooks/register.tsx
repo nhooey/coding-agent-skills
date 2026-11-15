@@ -1,7 +1,8 @@
 // Clickable answers to the kanban turn responses' Decide items: a band above
 // the prompt that walks the open items one at a time, the same buttons on the
-// row of the `kanban_options` tool the agent calls before its reply, and the
-// /answers command that brings a dismissed band back. A click writes the
+// row of the `kanban_options` tool the agent calls before its reply, and two
+// ways to bring a dismissed band back: the 🧠 it leaves in its place, and the
+// /answers command. A click writes the
 // item's reference into the prompt draft and never sends it; Recheck alone
 // sends a prompt, the skill's `recheck` command.
 
@@ -174,6 +175,13 @@ const answer = async (
   });
 };
 
+/** /answers and the 🧠 left after ✕: re-reads the open items and shows the band at the first unanswered one. */
+const reopen = async ($: EngineInterface): Promise<void> => {
+  await refresh($);
+  const text = await read($, draft);
+  await update($, band, (b) => reopened(b, text));
+};
+
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     const started = await next(e);
@@ -198,9 +206,7 @@ export const register: Register = (on) => {
   });
 
   on("command.run", { command: "answers" }, async ($) => {
-    await refresh($);
-    const text = await read($, draft);
-    await update($, band, (b) => reopened(b, text));
+    await reopen($);
     const shown = await read($, band);
 
     return {
@@ -246,11 +252,19 @@ export const register: Register = (on) => {
     const text = await read($, draft);
     const item = b.items[positionIn(b)];
 
-    if (e.props.hasSurvey || b.isDismissed || item === undefined) {
+    if (e.props.hasSurvey || item === undefined) {
       return next(e);
     }
 
     const { Box, Button, Text } = $.ui.resolve(e);
+
+    if (b.isDismissed) {
+      return (
+        <Box>
+          <Button key="reopen" label="🧠" plain onPress={() => reopen($)} />
+        </Box>
+      );
+    }
     const chosen = lettersFor(text, item);
     const move = (position: (b: Band) => number) => () =>
       update($, band, (current) => ({
