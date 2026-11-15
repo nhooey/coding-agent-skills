@@ -91,6 +91,25 @@ Progress goes to stderr, each line opening on the run's label: one when the sess
 
 The outcome goes to stdout as one JSON line, and to `<label>.outcome.json` in the log folder, `$XDG_STATE_HOME/coding-agent-headless/<job>/` by default: its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log` and its `notes`. The session's full stream-json output and stderr are beside it. The exit status says the same: 0 ok, 1 failed or timed out, 2 bad arguments, 3 skipped, 255 a usage limit.
 
+### The live status file
+
+While a run goes, the script keeps `<label>.status.json` beside the outcome, rewritten every `--status-every` seconds, 10 by default, and once more when the run ends. Each write goes to a temporary file that is then renamed over it, so a reader never sees half a record. The `coding-agent-headless-runs` mod in this repository draws these files in a pane. One JSON object:
+
+| Field                              | Holds                                                                                                                                                                                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`, `label`                     | the run's `--job` and `--label`                                                                                                                                                                                                                 |
+| `checkout`, `workdir`, `branch`    | the checkout, where the session works, and that directory's branch: `headless/<job>` in a worktree                                                                                                                                              |
+| `log`                              | the stream-json log's path                                                                                                                                                                                                                      |
+| `session_id`, `transcript`         | the session's id and its transcript's path, once the session has said its id; `null` before                                                                                                                                                     |
+| `state`                            | `waiting` (held by admission control), `running`, then `ok`, `failed`, `limit` or `skipped`                                                                                                                                                     |
+| `started`, `updated`, `ended`      | ISO 8601 date-times in UTC: when the runner began, the last write, and the end (`null` until then)                                                                                                                                              |
+| `turns`, `tool_calls`, `last_tool` | from the stream log so far; `turns` is the result's own count once the run ends                                                                                                                                                                 |
+| `eta`                              | the last `coding-agent-usage-line-report-eta` line the session wrote: `figure` (`4m`), `seconds`, `count` (how many it has written) and `at`, when; `null` before the first one                                                                 |
+| `pid`                              | the runner's process id                                                                                                                                                                                                                         |
+| `parent`                           | the session that started the runner: `session_id` and `pid` from the `CLAUDE_CODE_SESSION_ID` and `CLAUDE_PID` Claude Code exports to Bash (outside Claude Code, no id and the parent process's pid), and `cwd`, the runner's working directory |
+
+The ETA's `at` is the transcript entry's timestamp; where the transcript can't be read, it is the first write that saw the line, so it is late by at most `--status-every`. A `running` record whose `updated` has stopped moving belongs to a runner that was killed.
+
 Report each checkout's outcome to the user by its name, with the branch of any worktree that holds changes. A run's own work, such as a pull request it opened, is in its result text and log.
 
 ## Limits and billing
