@@ -14,4 +14,7 @@ nix flake check  # formatting and the skills' script tests
 check-mods       # in the dev shell: validate, type-check and test the mods under plugins/
 ```
 
-Run `nix fmt` and `nix flake check` before committing.
+Run `nix fmt` and `nix flake check` before committing: no CI runs them on push,
+so a formatting slip or a failing script test is otherwise caught by nothing.
+Run `check-mods` too when a change touches `plugins/`, since `nix flake check`
+doesn't cover the mods.
