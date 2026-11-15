@@ -175,9 +175,21 @@
           # name, motd, the install-skills startup that reconciles the runtime
           # `skills-devshell/` sub-flake at project scope, the ci/dev/maintenance
           # command trio (check / fmt / update-flake), and the skills commands
-          # (reap-skills / update-skills-devshell). This repo adds no dev-shell
-          # packages or commands of its own, so there is no `devshells.default`
-          # block here.
+          # (reap-skills / update-skills-devshell). This repo adds the mod
+          # checks below: they need `claude` itself and the Claude Code API
+          # types its running build writes, neither of which the Nix sandbox
+          # has, so they run here rather than in `nix flake check`.
+          devshells.default = {
+            packages = [ pkgs.typescript ];
+            commands = [
+              {
+                category = "ci";
+                name = "check-kanban-answers-mod";
+                help = "validate, type-check and test the coding-agent-kanban-answers mod";
+                command = ''bash "$PRJ_ROOT/plugins/coding-agent-kanban-answers/scripts/check.sh" "$@"'';
+              }
+            ];
+          };
         };
     };
 }

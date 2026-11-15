@@ -1,0 +1,3 @@
+# Laid by Claude Code when it loads the mod, and by scripts/check.sh: the
+# API declarations of whichever build ran last.
+.claude-plugin/types/
