@@ -1,0 +1,7 @@
+{
+  "name": "coding-agent-headless-runs",
+  "version": "0.1.0",
+  "description": "A pane of the headless Claude Code runs the coding-agent-headless-in-checkout skill starts: state, elapsed time, ETA, turns and tool calls, grouped by job",
+  "author": { "name": "Neil Hooey" },
+  "types": "./types/index.d.ts"
+}
