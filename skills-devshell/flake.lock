@@ -236,16 +236,15 @@
         "treefmt-nix": "treefmt-nix_2"
       },
       "locked": {
-        "lastModified": 1794776679,
-        "narHash": "sha256-I8NajD6QwkadVxlGA12kJpr3gvLP+gcWdRknnEDML8s=",
+        "lastModified": 1794833719,
+        "narHash": "sha256-6F2tQqmULLT787Av+PS0Tp9/BxHylMC345Sde9Fn2p4=",
         "owner": "nhooey",
         "repo": "coding-agent-skills",
-        "rev": "38f1f0acfc675584faea2cb74d7d88caacc35ade",
+        "rev": "36125864fa37bf4d945a89033231f68e45ff1401",
         "type": "github"
       },
       "original": {
         "owner": "nhooey",
-        "ref": "overnight-skills",
         "repo": "coding-agent-skills",
         "type": "github"
       }
@@ -740,16 +739,15 @@
         "treefmt-nix": "treefmt-nix_4"
       },
       "locked": {
-        "lastModified": 1794773950,
+        "lastModified": 1794824992,
         "narHash": "sha256-71i3iPpufuxf0mXgNoaU3V6EGqxesY2D7PARpVzgs0k=",
         "owner": "nhooey",
         "repo": "git-skills",
-        "rev": "114b1b91f649d664b265cf1a04dcd6716fe5b6af",
+        "rev": "1855be006cedad493a0557f15263e6233b192936",
         "type": "github"
       },
       "original": {
         "owner": "nhooey",
-        "ref": "overnight-skills",
         "repo": "git-skills",
         "type": "github"
       }
@@ -809,16 +807,15 @@
         "treefmt-nix": "treefmt-nix_6"
       },
       "locked": {
-        "lastModified": 1794774834,
+        "lastModified": 1794812272,
         "narHash": "sha256-xzXOC7tuLvOqXF0XprZ93VB9vZhB9QIEabTKS3uvyHI=",
         "owner": "nhooey",
         "repo": "nix-skills",
-        "rev": "c5060495cf7041f0104a879ed5469030916a4945",
+        "rev": "c7dc8249320a370952555a33748d7d23f6852734",
         "type": "github"
       },
       "original": {
         "owner": "nhooey",
-        "ref": "overnight-skills",
         "repo": "nix-skills",
         "type": "github"
       }
@@ -859,7 +856,6 @@
       },
       "original": {
         "owner": "nhooey",
-        "ref": "overnight-skills",
         "repo": "python-skills",
         "type": "github"
       }
@@ -889,16 +885,15 @@
         "treefmt-nix": "treefmt-nix_10"
       },
       "locked": {
-        "lastModified": 1794776627,
+        "lastModified": 1794833693,
         "narHash": "sha256-A4QUGwKYAQuBdM3oXaRQJ9Z/Tq/JhxhNRpLZAaYAJ3U=",
         "owner": "nhooey",
         "repo": "shell-skills",
-        "rev": "55d02d5cd67abd01ca76b53ff1e2b150954c122f",
+        "rev": "bef697c4f460967d2291e195d1f971896715969b",
         "type": "github"
       },
       "original": {
         "owner": "nhooey",
-        "ref": "overnight-skills",
         "repo": "shell-skills",
         "type": "github"
       }
