@@ -61,6 +61,8 @@ A review that is itself a choice goes in 🧠 Decide, and a task that is not a r
 
 [examples.md](examples.md#a-decide-list) draws a Decide list in this shape, and [two lists in one response](examples.md#two-lists-in-one-response). Before sending a final response, run `scripts/lint_reply.py` on the draft and fix every line it reports: a missing or misplaced separator, a whitespace line where one belongs, a blank line beside one inside a list, text after a numbered item's summary, a summary line with no hard line break, a list among a Decide item's options, a header underline of the wrong width, a header written directly under a list, a table inside a list item, or a table without a blank line above and below it.
 
+**The Stop hook.** In Claude Code, the `coding-agent-skills-hooks` plugin runs `scripts/reply-lint-hook.sh` when the main session stops, in a session that has loaded this skill: it runs the linter on the final response once it is sent; subagents are not checked. The `Reply lint` preference sets what it does with findings: `remind`, the default, shows them to the user and lets the turn end; `block` sends the session back to write the response again, once per turn; `off` turns it off. A response with no findings, or with no list header and no 📌 roll-up, passes at any setting. The hook checks after the response is out, so running the linter on the draft first still holds, and an agent without the hook runs it the same way.
+
 ## A Decide item
 
 - **Options:** they follow the item's summary and its note, recommended first, each on one line, as `glyph letter. **name**: consequence`. The letter is a capital, `A`, `B`, `C`, or `Y` and `N` for a yes-or-no question, never a number or a lower-case letter: an answer like `1.B` then cannot be misread, since the number always names the item and the capital the option, and a typo lands on no option instead of the wrong one. The AskUserQuestion picker, when it opens, lists the same options in the same order.
@@ -115,7 +117,7 @@ Read [commands.md](commands.md) before running any of them, and put their output
 
 ## Around the lists
 
-- **Turn ids and the scripts:** a turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line. The scripts sit in this skill's `scripts/` directory and use only the Python standard library: [`reply_turns.py`](scripts/reply_turns.py) reads turns and their sections, [`outstanding.py`](scripts/outstanding.py) works out the roll-up's interval, items and tags, [`box_table.py`](scripts/box_table.py) draws tab-separated rows from stdin as a box-drawing table, counting an emoji as two cells, and [`lint_reply.py`](scripts/lint_reply.py) checks a draft's separator, summary, option, underline and table lines; [scripts.md](scripts.md) lists their subcommands. Run them by their path under `~/.claude/skills/coding-agent-kanban-turn-responses/scripts/`.
+- **Turn ids and the scripts:** a turn id is the first 8 characters of the prompt's `promptId`, `0f311c94`, shown on the prompt's usage line. The scripts sit in this skill's `scripts/` directory and use only the Python standard library: [`reply_turns.py`](scripts/reply_turns.py) reads turns and their sections, [`outstanding.py`](scripts/outstanding.py) works out the roll-up's interval, items and tags, [`box_table.py`](scripts/box_table.py) draws tab-separated rows from stdin as a box-drawing table, counting an emoji as two cells, and [`lint_reply.py`](scripts/lint_reply.py) checks a draft's separator, summary, option, underline and table lines, which [`reply_lint_hook.py`](scripts/reply_lint_hook.py) runs as the Stop hook, through [`reply-lint-hook.sh`](scripts/reply-lint-hook.sh); [scripts.md](scripts.md) lists their subcommands. Run them by their path under `~/.claude/skills/coding-agent-kanban-turn-responses/scripts/`.
 - **Time:** say how long work takes, never when it lands or goes out, and set no deadline.
 - **Tables:** a plain Markdown table, as `markdown-hygiene-terminal-rendering` writes it, never a box table in a `text` block. A cell holding a state holds its emoji from the progress-update table, not a word.
 - **Links:** every URL, a local served page as much as a web page, is a Markdown link opened by 🔗 and a space, `🔗 [the trial projection](http://127.0.0.1:8765/…)`, kept out of `text` blocks as `markdown-hygiene-terminal-rendering` says. In a table's cell the link goes without the 🔗, its label short enough not to wrap.
@@ -139,6 +141,14 @@ If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-kanban-turn-responses.preferences.md` next to this skill's folder, then
 `.agents/skills/coding-agent-kanban-turn-responses.preferences.md` in the project. A project's
 file overrides the user's, and the user's overrides this skill's defaults.
+
+The keys this skill reads, with its own defaults:
+
+```markdown
+- Reply lint: remind
+```
+
+`Reply lint` is `remind`, `block` or `off`: what [the Stop hook](#the-shape) does with what `scripts/lint_reply.py` finds in a final response.
 
 ## Related skills
 
