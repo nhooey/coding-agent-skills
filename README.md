@@ -84,6 +84,10 @@ skill is loaded; the skill itself still installs through the packages above.
   - the PreToolUse (`Write|Edit`) hook `memory-write-reminder.sh`, with its
     helper `memory_write_reminder.py`, from
     [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md)
+  - the PreToolUse (`mcp__claude-in-chrome__.*`) and PostToolUse (`Bash`,
+    `select_browser`, `switch_browser`) hook `browser-check-hook.sh`, with its
+    helper `browser_check_hook.py`, from
+    [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)
 - **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
   `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
   `skills/` a second time under a namespaced name.
