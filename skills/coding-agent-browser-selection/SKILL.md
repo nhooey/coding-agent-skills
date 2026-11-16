@@ -147,17 +147,13 @@ With only a preferred app set, any window of it matches. With only apps to never
 
 !`cat "$(dirname "${CLAUDE_SKILL_DIR}")/coding-agent-browser-selection.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-browser-selection.preferences.md" 2>/dev/null || true`
 
-If your agent doesn't run the line above, read these files yourself if they
-exist: `coding-agent-browser-selection.preferences.md` next to this skill's folder, then
-`.agents/skills/coding-agent-browser-selection.preferences.md` in the project. A project's
-file overrides the user's, and the user's overrides this skill's defaults.
+If your agent doesn't run the line above, read these files yourself if they exist: `coding-agent-browser-selection.preferences.md` next to this skill's folder, then `.agents/skills/coding-agent-browser-selection.preferences.md` in the project.
+A project's file overrides the user's, and the user's overrides this skill's defaults.
 
 ## Related skills
 
-When one of these applies and it's in your skill listing, load it
-without asking. If it isn't in your listing, tell the user which skill is
-missing and ask whether to install it from the same collection this skill
-came from; don't apply it from memory.
+When one of these applies and it's in your skill listing, load it without asking.
+If it isn't in your listing, tell the user which skill is missing and ask whether to install it from the same collection this skill came from; don't apply it from memory.
 
 - `coding-agent-questions-as-first-class-prompts`: asks the user which browser to use through the structured-question tool, not prose.
 - `coding-agent-skill-references`: where this skill's preferences files live and who writes them.

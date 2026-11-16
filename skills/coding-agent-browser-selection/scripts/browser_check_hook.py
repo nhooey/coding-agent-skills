@@ -51,10 +51,17 @@ SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 LIFETIME = 3600.0
 
 PREFIX = "mcp__claude-in-chrome__"
-PAGE_ACTING = frozenset({"navigate", "computer", "form_input", "javascript_tool", "file_upload", "tabs_create_mcp"})
+PAGE_ACTING = frozenset(
+    {"navigate", "computer", "form_input", "javascript_tool", "file_upload", "tabs_create_mcp", "browser_batch"}
+)
 SWITCHING = frozenset({"select_browser", "switch_browser"})
-CHECK_RUN = re.compile(r"which_browser\.py(?![\w.])")
-LIST_RUN = re.compile(r"which_browser\.py\S*\s+(\S+\s+)*--list\b")
+# The script as the command run: first in the line or after a `;`, `&`, `|` or `(`, or a Python's
+# operand; never an argument of `cat`, `sed` or `grep` reading it.
+CHECK_RUN = re.compile(
+    r"""(?:^|[;&|(]|\bpython3?(?:\s+-\S+)*)\s*["']?[^\s"';&|()]*which_browser\.py["']?(?![\w.])""",
+    re.MULTILINE,
+)
+LIST_RUN = re.compile(r"which_browser\.py\S*\s+(\S+\s+)*(?:--list|--help|-h)\b")
 SUBCOMMAND_RUN = re.compile(r"""which_browser\.py\S*\s+['"]?(resolve|wake)\b""")
 
 CHECK = (

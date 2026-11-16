@@ -98,6 +98,7 @@ class Choice(unittest.TestCase):
                     self.assertEqual(run_steps(setting, (pre(tool),)), (None,))
 
     def test_every_page_acting_tool_is_caught(self):
+        self.assertIn("browser_batch", hook.PAGE_ACTING, "a batch of navigate and computer actions acts on a page")
         for tool in sorted(hook.PAGE_ACTING):
             with self.subTest(tool=tool):
                 (output,) = run_steps("remind", (pre(tool),))
@@ -133,7 +134,13 @@ class Choice(unittest.TestCase):
         self.assertEqual(context(outcome.output), hook.REMINDER)
 
     def test_only_a_marker_run_counts_as_a_check(self):
-        for command in (CHECK_COMMAND, "python3 scripts/which_browser.py abc && echo ok"):
+        for command in (
+            CHECK_COMMAND,
+            "python3 scripts/which_browser.py abc && echo ok",
+            "python3 -I scripts/which_browser.py abc",
+            "./scripts/which_browser.py abc",
+            "cd /tmp && ~/skills/scripts/which_browser.py abc",
+        ):
             with self.subTest(command=command):
                 self.assertTrue(hook.is_check_run(command))
         for command in (
@@ -144,7 +151,11 @@ class Choice(unittest.TestCase):
             "python3 scripts/which_browser.py resolve --app '/Applications/Google Chrome.app'",
             "python3 scripts/which_browser.py 'wake' --app 'Google Chrome'",
             'python3 scripts/which_browser.py "resolve" --app x',
+            "python3 scripts/which_browser.py --help",
             "cat scripts/which_browser.py.orig",
+            "sed -n 1,20p ~/.agents/skills/coding-agent-browser-selection/scripts/which_browser.py",
+            "cat scripts/which_browser.py",
+            "grep -n osascript scripts/which_browser.py",
             "ls",
         ):
             with self.subTest(command=command):
