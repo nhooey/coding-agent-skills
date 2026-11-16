@@ -1,5 +1,5 @@
 {
-  description = "coding-agent-session-build-limits: Coding-agent skill — a SessionStart hook that gives every Claude Code session a fixed share of the machine for make, cargo, pytest and the JVM";
+  description = "coding-agent-session-build-limits: Coding-agent skill — a SessionStart hook that gives every Claude Code session a fixed share of the machine for make, Cargo, pytest, the JVM, Go, npm, uv, CMake, .NET, Swift and Gradle";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
