@@ -35,10 +35,11 @@ It runs from any directory: the transcript is looked up under the working direct
 | `index [ID...] [--last N]`                              | each turn's relative index, as `-3` and `₋₃`; with no id, the last N turns                                                                       |
 | `items [--since ID] [--lists L] [--latest] [--width W]` | `id  ₋ₖ  list  summary`, one line per item                                                                                                       |
 | `grep PATTERN [...]`                                    | the same lines for items whose line matches the regex, ignoring case                                                                             |
+| `decide [--json] [--width W]`                           | every open Decide item with its options, one line each; `--json` prints `{"items": [...]}`, the shape the kanban-answers mod reads               |
 
 **What `due` measures.** The roll-up interval is min(30 min, 5 × the average duration of the last 5 completed turns, each from its prompt to the next), read as the 5 gaps between the last 6 prompts, the current turn's prompt closing the latest; under 2 prompts it is 30 min. The clock starts at the reply text that last printed the 📌 header with its `━` rule on the next line, by that text's own timestamp; a count line has no rule and never starts it. With no full roll-up in the transcript, `due` prints `full`.
 
-**What `render` drafts.** The draft is a starting point and the session prunes it, since which items are still open is a judgement the script cannot make. It never reaches back before the latest `reassess` turn, whose lists replace every item before it; `items` and `grep` still read every turn. Each item carries the turn that raised it: the turn that first printed it, or the first turn of the latest run whose text after the bold summary is unchanged, so a restatement with changed substance moves the tag and a reworded summary alone does not. A restatement inside a 📌 section is a roll-up, and keeps the turn its own 🔖 tag names.
+**What `render` drafts.** The draft is a starting point and the session prunes it, since which items are still open is a judgement the script cannot make. It never reaches back before the latest `recheck` (or `reassess`) turn, whose lists replace every item before it; `items` and `grep` still read every turn. Each item carries the turn that raised it: the turn that first printed it, or the first turn of the latest run whose text after the bold summary is unchanged, so a restatement with changed substance moves the tag and a reworded summary alone does not. A restatement inside a 📌 section is a roll-up, and keeps the turn its own 🔖 tag names.
 
 **How an item is matched across turns.** Within a list, 2 items are one when their subject keys match, so a reworded summary stays one item:
 
@@ -49,6 +50,8 @@ It runs from any directory: the transcript is looked up under the working direct
 | neither                                                                  | its first 3 words that are not articles or prepositions, lowercased: `landing alpha` for both _The landing of `alpha`_ and _Landing alpha!_ |
 
 The key reads the summary alone, the bold text before its colon. Different items in one list that name the same branch or entry, or open on the same 3 words, merge in the draft, and the session splits them when it prunes.
+
+**What `decide` counts as open.** A numbered item of a reply's own Decide list that carries at least one option line, read since the latest `recheck` turn, at its latest restatement by subject key, and answered by no later prompt. An answer is an option letter after the item's reference, on a line holding no question mark: `9efb08a1.Decide.2.B`, a turn-id prefix of 6 or more characters as good as the whole, `Decide.2: B,C of 9efb08a1`, or, in the prompt right after the reply, `Decide.2.B` or a line `2. B`. Each JSON item holds `turn`, `list` (`Decide`), `number`, `summary`, `kind` (`radio`, `checkbox` or `binary`, from the option glyphs), `ref` (`<turn>.Decide.<n>`) and `options`, each `{letter, name}`. Its tests run with `python3 -I scripts/test_outstanding.py`, and `nix flake check` runs them too.
 
 ## The `lint_reply.py` script
 

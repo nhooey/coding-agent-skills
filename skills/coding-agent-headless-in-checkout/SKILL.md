@@ -40,10 +40,9 @@ A run takes minutes to an hour, so a session running it follows `coding-agent-us
 
 ## Priority and admission control
 
-- **Priority:** on macOS each session starts under `taskpolicy -c utility`, so the scheduler favours interactive work and everything the session starts inherits the class. Elsewhere the run starts as it did before. `--no-admission` leaves the priority alone.
+- **Priority:** on macOS each session starts under `taskpolicy -c utility`, so the scheduler favours interactive work and everything the session starts inherits the class. Elsewhere it starts at normal priority. `--no-admission` keeps the utility class.
 - **Memory pressure:** before starting, the script reads `kern.memorystatus_vm_pressure_level`: 1 (normal) starts the run; 2 (warning) or 4 (critical) holds it, rechecking every few seconds and saying so on a progress line, `waiting <label> <time>: memory pressure level <n>`. A run already going is never stopped. A level that can't be read, or isn't 1, 2 or 4, counts as 1, with a note in the outcome. Off macOS there is nothing to read, so the run starts.
-- **Giving up:** `--admission-timeout <minutes>` ends the wait with status `skipped` and exit status 3, so a fan-out moves on; the checkout's work is untouched and no worktree is made. Without it the run waits as long as it takes.
-- **`--no-admission`:** start at once, for a run that must go whatever the pressure.
+- **Giving up:** `--admission-timeout <minutes>` ends the wait with status `skipped` and exit status 3, so a fan-out moves on; the checkout's work is untouched and no worktree is made. Without it the run waits as long as it takes; with `--no-admission` it doesn't wait at all, for a run that must go whatever the pressure.
 - **What it bounds:** Nix's `max-jobs` and `cores` apply to each client of the daemon, so holding a new run is what keeps builds across a fan-out near the machine's CPUs. Keep a fan-out's `-P` small anyway.
 - **Checking it:** `taskpolicy -G <pid>` on a started session shows the utility class.
 
@@ -91,6 +90,25 @@ Each run gets the checkout's environment the way a manual session does:
 Progress goes to stderr, each line opening on the run's label: one when the session starts, one every `--progress-every` seconds, 60 by default, with its time, its tool calls so far and the tool it called last, and one when it ends. When the agent runs a fan-out in the background, it reads that output only when the user asks how it's going.
 
 The outcome goes to stdout as one JSON line, and to `<label>.outcome.json` in the log folder, `$XDG_STATE_HOME/coding-agent-headless/<job>/` by default: its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log` and its `notes`. The session's full stream-json output and stderr are beside it. The exit status says the same: 0 ok, 1 failed or timed out, 2 bad arguments, 3 skipped, 255 a usage limit.
+
+### The live status file
+
+While a run goes, the script keeps `<label>.status.json` beside the outcome, rewritten every `--status-every` seconds, 10 by default, and once more when the run ends. Each write goes to a temporary file that is then renamed over it, so a reader never sees half a record. The `coding-agent-headless-runs` mod in this repository draws these files in a pane. One JSON object:
+
+| Field                              | Holds                                                                                                                                                                                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`, `label`                     | the run's `--job` and `--label`                                                                                                                                                                                                                 |
+| `checkout`, `workdir`, `branch`    | the checkout, where the session works, and that directory's branch: `headless/<job>` in a worktree                                                                                                                                              |
+| `log`                              | the stream-json log's path                                                                                                                                                                                                                      |
+| `session_id`, `transcript`         | the session's id and its transcript's path, once the session has said its id; `null` before                                                                                                                                                     |
+| `state`                            | `waiting` (held by admission control), `running`, then `ok`, `failed`, `limit` or `skipped`                                                                                                                                                     |
+| `started`, `updated`, `ended`      | ISO 8601 date-times in UTC: when the runner began, the last write, and the end (`null` until then)                                                                                                                                              |
+| `turns`, `tool_calls`, `last_tool` | from the stream log so far; `turns` is the result's own count once the run ends                                                                                                                                                                 |
+| `eta`                              | the last `coding-agent-usage-line-report-eta` line the session wrote: `figure` (`4m`), `seconds`, `count` (how many it has written) and `at`, when; `null` before the first one                                                                 |
+| `pid`                              | the runner's process id                                                                                                                                                                                                                         |
+| `parent`                           | the session that started the runner: `session_id` and `pid` from the `CLAUDE_CODE_SESSION_ID` and `CLAUDE_PID` Claude Code exports to Bash (outside Claude Code, no id and the parent process's pid), and `cwd`, the runner's working directory |
+
+The ETA's `at` is the transcript entry's timestamp; where the transcript can't be read, it is the first write that saw the line, so it is late by at most `--status-every`. A `running` record whose `updated` has stopped moving belongs to a runner that was killed.
 
 Report each checkout's outcome to the user by its name, with the branch of any worktree that holds changes. A run's own work, such as a pull request it opened, is in its result text and log.
 

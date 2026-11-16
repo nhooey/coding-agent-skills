@@ -53,6 +53,13 @@ status (ok, failed, limit or skipped), exit code, session_id, resumed_from,
 turns, the start of the final result, the log path and notes. The session's
 stream-json output and stderr are beside it.
 
+Live status: while it runs, the script keeps <log-dir>/<label>.status.json up
+to date, rewritten every --status-every seconds (default 10) and once more
+when the run ends, each time through a temporary file and a rename: the run's
+state (waiting, running, ok, failed, limit or skipped), its times, session,
+turns, tool calls, last tool, its last ETA line and the session that started
+the runner. The coding-agent-headless-runs mod draws these files in a pane.
+
 Exit status:
   0    the session ended without an error
   1    it failed, or timed out
@@ -96,6 +103,11 @@ PRESSURE_LEVELS = frozenset({1, 2, 4})
 ADMISSION_POLL_SECONDS = 5.0
 START, WAIT, GIVE_UP = "start", "wait", "give_up"
 EXIT = {"ok": 0, "failed": 1, "skipped": 3, "limit": 255}
+ETA_LINE = re.compile(
+    r"⛳ skills/coding-agent-usage-line-report-eta: ETA (\d+(?:\.\d+)?)([smh])(?![A-Za-z])"
+)
+ETA_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
+STATUS_EVERY_SECONDS = 10.0
 
 
 def project_key(path: Path) -> str:
@@ -342,6 +354,7 @@ def await_admission(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     poll: float = ADMISSION_POLL_SECONDS,
+    on_wait: Callable[[], None] = lambda: None,
 ) -> Admission:
     """The shell around admission_decision: read, say so while waiting, sleep, read again."""
     begin = clock()
@@ -354,6 +367,7 @@ def await_admission(
         if action != WAIT:
             break
         say(f"waiting {label} {elapsed(waited)}: memory pressure level {level}")
+        on_wait()
         sleep(poll)
         level, _ = read()
     held = (f"waited {elapsed(waited)} at memory pressure before starting",) if first_level != PRESSURE_NORMAL else ()
@@ -373,12 +387,196 @@ def say(line: str) -> None:
     print(line, file=sys.stderr, flush=True)
 
 
-def heartbeat(label: str, log: Path, start: float, every: float, done: threading.Event) -> None:
-    """Every `every` seconds until `done`, a line on how the session is going."""
-    while not done.wait(every):
-        calls, last = tool_calls(log)
-        say(f"...     {label} {elapsed(time.monotonic() - start)}, {calls} tools"
-            + (f", last {last}" if last else ""))
+def every(seconds: float, done: threading.Event, fn: Callable[[], None]) -> threading.Thread:
+    """A started thread calling `fn` every `seconds` until `done` is set."""
+    def loop() -> None:
+        while not done.wait(seconds):
+            fn()
+    thread = threading.Thread(target=loop, daemon=True)
+    thread.start()
+    return thread
+
+
+def heartbeat_line(label: str, log: Path, start: float) -> None:
+    """A line on how the session is going."""
+    calls, last = tool_calls(log)
+    say(f"...     {label} {elapsed(time.monotonic() - start)}, {calls} tools"
+        + (f", last {last}" if last else ""))
+
+
+# The live status file. Pure functions build the record from what the logs
+# hold; status_writer is the shell that reads them and writes the file.
+
+
+def iso(epoch: float) -> str:
+    """An ISO 8601 date-time in UTC, to the second."""
+    return dt.datetime.fromtimestamp(epoch, dt.timezone.utc).isoformat(timespec="seconds")
+
+
+def json_object(line: str) -> dict | None:
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def json_events(text: str) -> list[dict]:
+    """The JSON objects of a stream-json log or a transcript, one per line; other lines skipped."""
+    parsed = (json_object(line) for line in text.splitlines() if line.lstrip().startswith("{"))
+    return [event for event in parsed if event is not None]
+
+
+def content_blocks(event: dict) -> list[dict]:
+    """An assistant event's content blocks; none for any other event."""
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if event.get("type") != "assistant" or not isinstance(content, list):
+        return []
+    return [block for block in content if isinstance(block, dict)]
+
+
+def assistant_texts(event: dict) -> list[str]:
+    return [b["text"] for b in content_blocks(event)
+            if b.get("type") == "text" and isinstance(b.get("text"), str)]
+
+
+def last_eta(events: list[dict]) -> dict | None:
+    """The last ETA line the session wrote: its figure, in seconds, how many it has
+    written, and when, where the event carries a timestamp (a transcript's do)."""
+    found = [(match, event) for event in events
+             for text in assistant_texts(event) for match in ETA_LINE.finditer(text)]
+    if not found:
+        return None
+    match, event = found[-1]
+    number, unit = match.group(1), match.group(2)
+    stamp = event.get("timestamp")
+    return {
+        "figure": f"{number}{unit}",
+        "seconds": float(number) * ETA_UNIT_SECONDS[unit],
+        "count": len(found),
+        "at": stamp if isinstance(stamp, str) else None,
+    }
+
+
+def eta_with_time(eta: dict | None, previous: dict | None, now: float) -> dict | None:
+    """The ETA with its `at` filled in: the event's own time, else the time an earlier
+    record gave the same line, else now, the first tick that saw it."""
+    if eta is None or eta["at"] is not None:
+        return eta
+    same = previous is not None and previous.get("count") == eta["count"] and previous.get("at")
+    return {**eta, "at": previous["at"] if same else iso(now)}
+
+
+def stream_progress(events: list[dict]) -> dict:
+    """The session id, turns, tool calls and last tool a stream-json log shows so far."""
+    session = next((e["session_id"] for e in events if isinstance(e.get("session_id"), str)), None)
+    assistant = [e for e in events if content_blocks(e)]
+    messages = {(e.get("message") or {}).get("id") or f"#{n}" for n, e in enumerate(assistant)}
+    tools = [b.get("name") for e in assistant for b in content_blocks(e) if b.get("type") == "tool_use"]
+    result = next((e for e in reversed(events) if e.get("type") == "result"), {})
+    turns = result.get("num_turns")
+    return {
+        "session_id": session,
+        "turns": turns if isinstance(turns, int) else len(messages),
+        "tool_calls": len(tools),
+        "last_tool": tools[-1] if tools else None,
+    }
+
+
+def transcript_path(projects_root: Path, workdir: Path, session_id: str | None) -> str | None:
+    """Where Claude Code writes the session's transcript, once its id is known."""
+    if session_id is None:
+        return None
+    return str(projects_root / project_key(workdir) / f"{session_id}.jsonl")
+
+
+def parent_of(environ: dict, ppid: int, cwd: str) -> dict:
+    """What identifies the session that started the runner: Claude Code exports its
+    session id and pid to the Bash commands it runs; elsewhere the parent's pid alone."""
+    pid = environ.get("CLAUDE_PID", "")
+    return {
+        "session_id": environ.get("CLAUDE_CODE_SESSION_ID") or None,
+        "pid": int(pid) if pid.isdigit() else ppid,
+        "cwd": cwd,
+    }
+
+
+def status_record(
+    base: dict,
+    state: str,
+    *,
+    progress: dict,
+    eta: dict | None,
+    previous: dict,
+    started: float,
+    now: float,
+    ended: float | None = None,
+    final: dict | None = None,
+) -> dict:
+    """The status file's whole record at one moment. `final` holds what the outcome
+    knows better than the logs, its values winning where they are set."""
+    known = {k: v for k, v in (final or {}).items() if v is not None}
+    return {
+        **base,
+        "state": state,
+        "session_id": None,
+        "transcript": None,
+        "turns": None,
+        "tool_calls": 0,
+        "last_tool": None,
+        **{k: v for k, v in progress.items() if v is not None},
+        **known,
+        "eta": eta_with_time(eta, previous.get("eta"), now),
+        "started": iso(started),
+        "updated": iso(now),
+        "ended": iso(ended) if ended is not None else None,
+    }
+
+
+def write_status(path: Path, record: dict) -> None:
+    """Writes the record through a temporary file and a rename, so no reader sees half of it."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(record) + "\n")
+    os.replace(tmp, path)
+
+
+def read_or_empty(path: Path | None) -> str:
+    try:
+        return path.read_text(errors="replace") if path is not None else ""
+    except OSError:
+        return ""
+
+
+StatusWriter = Callable[..., None]
+
+
+def status_writer(path: Path, base: dict, *, log: Path, projects_root: Path) -> StatusWriter:
+    """The shell around status_record: `write(state, ended=None, final=None)` reads
+    the logs, builds the record from the last one written, and writes it."""
+    started, lock, last = time.time(), threading.Lock(), {"record": {}}
+
+    def write(state: str, ended: float | None = None, final: dict | None = None) -> None:
+        # Until the session starts, the log there is an earlier run's, under the same label.
+        is_started = state == "running" or last["record"].get("state") == "running"
+        events = json_events(read_or_empty(log)) if is_started else []
+        progress = stream_progress(events)
+        session = (final or {}).get("session_id") or progress["session_id"]
+        transcript = transcript_path(projects_root, Path(base["workdir"]), session)
+        eta = last_eta(json_events(read_or_empty(Path(transcript) if transcript else None)))
+        with lock:
+            record = status_record(
+                base, state, progress={**progress, "transcript": transcript},
+                eta=eta or last_eta(events), previous=last["record"],
+                started=started, now=time.time(), ended=ended, final=final,
+            )
+            try:
+                write_status(path, record)
+            except OSError as err:
+                say(f"warning {base['label']}: could not write {path}: {err}")
+            last["record"] = record
+
+    return write
 
 
 def live_note(session: Path | None, within_minutes: float) -> str | None:
@@ -426,7 +624,11 @@ def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) 
                 command, notes, skip, taskpolicy_prefix(sys.platform))
 
 
-def run(plan: Plan, args: argparse.Namespace) -> Outcome:
+def no_status(state: str, ended: float | None = None, final: dict | None = None) -> None:
+    return None
+
+
+def run(plan: Plan, args: argparse.Namespace, status: StatusWriter = no_status) -> Outcome:
     checkout = Path(plan.checkout)
     outcome = Outcome(plan.label, plan.checkout, plan.workdir, "skipped",
                       resumed_from=plan.resume, notes=list(plan.notes))
@@ -435,8 +637,9 @@ def run(plan: Plan, args: argparse.Namespace) -> Outcome:
         return outcome
     if not args.no_admission:
         timeout = args.admission_timeout * 60 if args.admission_timeout is not None else None
+        status("waiting")
         admission = await_admission(plan.label, timeout, read=read_pressure_level,
-                                    poll=args.admission_poll)
+                                    poll=args.admission_poll, on_wait=lambda: status("waiting"))
         outcome.notes.extend(admission.notes)
         if admission.action == GIVE_UP:
             outcome.result = (f"not started: memory pressure level {admission.level} for "
@@ -461,9 +664,15 @@ def run(plan: Plan, args: argparse.Namespace) -> Outcome:
     command = plan.prefix + env_wrapper(workdir) + plan.command
     say(f"start   {plan.label}")
     start, done = time.monotonic(), threading.Event()
-    if args.progress_every > 0:
-        threading.Thread(target=heartbeat, daemon=True,
-                         args=(plan.label, log, start, args.progress_every, done)).start()
+    with log.open("w"):
+        pass  # the last run's log, under the same label, must not feed this run's status
+    status("running")
+    ticks = [
+        *([every(args.progress_every, done, lambda: heartbeat_line(plan.label, log, start))]
+          if args.progress_every > 0 else []),
+        *([every(args.status_every, done, lambda: status("running"))]
+          if args.status_every > 0 else []),
+    ]
     try:
         with log.open("w") as out, err_log.open("w") as err:
             proc = subprocess.run(
@@ -479,6 +688,8 @@ def run(plan: Plan, args: argparse.Namespace) -> Outcome:
         return outcome
     finally:
         done.set()
+        for tick in ticks:
+            tick.join()
         took = time.monotonic() - start
 
     stream, stderr = log.read_text(errors="replace"), err_log.read_text(errors="replace")
@@ -533,6 +744,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="one more argument for claude; repeat as needed")
     p.add_argument("--progress-every", type=float, default=60,
                    help="seconds between progress lines; 0 for none (default: 60)")
+    p.add_argument("--status-every", type=float, default=STATUS_EVERY_SECONDS,
+                   help="seconds between rewrites of <label>.status.json while the session runs; "
+                        "0 to write it only when the state changes (default: 10)")
     p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-headless/<job>")
     p.add_argument("--no-admission", action="store_true",
                    help="start at once, whatever the memory pressure (the utility priority still applies)")
@@ -592,7 +806,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     args.log_dir.mkdir(parents=True, exist_ok=True)
-    outcome = run(plan, args)
+    log = args.log_dir / f"{plan.label}.stream.jsonl"
+    branch = (branch_name(args.job) if args.where == "worktree"
+              else git("branch", "--show-current", cwd=checkout).stdout.strip() or None)
+    base = {
+        "job": args.job, "label": plan.label, "checkout": plan.checkout,
+        "workdir": plan.workdir, "branch": branch, "log": str(log), "pid": os.getpid(),
+        "parent": parent_of(dict(os.environ), os.getppid(), os.getcwd()),
+    }
+    status = status_writer(args.log_dir / f"{plan.label}.status.json", base,
+                           log=log, projects_root=args.projects_root)
+    outcome = run(plan, args, status)
+    status(outcome.status, ended=time.time(),
+           final={"session_id": outcome.session_id, "turns": outcome.turns})
     first = outcome.result.splitlines()[0][:120] if outcome.result else ""
     turns = f" ({outcome.turns} turns)" if outcome.turns is not None else ""
     say(f"{outcome.status:7} {outcome.label}{turns}: {first}")

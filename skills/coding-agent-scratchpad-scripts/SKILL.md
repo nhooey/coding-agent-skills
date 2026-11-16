@@ -1,6 +1,6 @@
 ---
 name: coding-agent-scratchpad-scripts
-description: Keeps an agent from filling its scratchpad with cryptic throwaway scripts. An edit to a file goes through the Edit or Write tool, never a generated script; a one-off check runs inline in the Bash call, a heredoc to `python3 -` included, with no file written; anything run, or expected to run, a second time becomes a named, documented tool committed in the project, or in a skill's scripts/ when it isn't specific to the project, and so does code whose output a committed claim or file rests on, even if it ran once; a generated file is never `source`d; and a scratchpad file that is kept gets a name saying what it holds. Use it before writing any file to a scratchpad or temporary directory, before writing a script to change a file, and before briefing a subagent that will run commands. Main agents and subagents alike.
+description: Keep an agent's scratchpad free of cryptic throwaway scripts. Edit a file with the Edit or Write tool, never a generated script; run a one-off check inline in the Bash call, a heredoc to `python3 -` included, with no file written; make anything run, or expected to run, a second time into a named, documented tool committed in the project, or in a skill's scripts/ when it isn't specific to the project, and the same for code whose output a committed claim or file rests on, even if it ran once; never `source` a generated file; and give a kept scratchpad file a name saying what it holds. Use before writing any file to a scratchpad or temporary directory, before writing a script to change a file, and before briefing a subagent that will run commands, as a main agent or a subagent.
 ---
 
 # Scratchpad scripts
@@ -21,11 +21,7 @@ _A script an agent writes to its scratchpad is read once, by nobody, and run onc
 
    Pick a heredoc delimiter that can't occur in the body, such as `PYEOF`, not `EOF`.
 
-3. **Anything run, or expected to run, a second time becomes a named, documented tool in the project,** committed like other code: under `tools/`, `scripts/` or wherever the project keeps them, or as a dev-shell command. Its name says what it does (`rerun-until-failure`, `diff-fixtures-against-base`), not `loop.py` or `t.py`, and it opens with a usage docstring: what it does, its arguments, an example. A tool that isn't specific to the project goes in a skill's `scripts/` instead.
-
-   Before writing one, check whether the project already does the job: rerunning the test suite, timing a command, diffing fixtures against a base commit and rendering a component are usually a test-runner flag, a `make` target or a dev-shell command already.
-
-   Code whose output a committed claim or file rests on stays in the project too, even if it ran once: a probe behind a documented behaviour becomes a test or an eval example, and a script that built a committed file becomes a tool. A check under rule 2 that a claim ends up resting on is kept the same way.
+3. **Anything run, or expected to run, a second time leaves the scratchpad and becomes a tool in the project,** in the shape `shell-hygiene-commands-as-cli-tools` gives: commands and options, `--help`, tests and a dev shell entry, grown into the project's existing tool where there is one. A tool that isn't specific to the project goes in a skill's `scripts/` instead. So does code whose output a committed claim or file rests on, even if it ran once: a probe behind a documented behaviour becomes a test or an eval example, and a script that built a committed file becomes a tool. A check under rule 2 that a claim ends up resting on is kept the same way.
 
 4. **Never `source` a generated file,** in your own commands or in a subagent's. A sourced file runs unseen in the current shell, and hooks such as CC Safety Net refuse it ("shell execution source cannot be verified safely"), which interrupts the user. Write the commands into the Bash call, or make a tool of them under rule 3. Give every subagent this rule in its brief.
 5. **A scratchpad file that is kept gets a name saying what it holds:** captured output, a data sample, a draft. `pr-78-body.md`, `ci-run-4412-log.txt` and `rulesets-before-garnix-removal/`, not `out.txt`, `a.json` or `s3.ts`. Never a numbered series: a new version replaces the file, or gets a name saying how it differs.
@@ -48,3 +44,4 @@ missing and ask whether to install it from the same collection this skill
 came from; don't apply it from memory.
 
 - `coding-agent-route-feedback-to-skills-over-memory`: a correction about where scripts or scratch files belong lands in this skill, not in memory.
+- `shell-hygiene-commands-as-cli-tools`: the shape a command run twice takes once it leaves the scratchpad.

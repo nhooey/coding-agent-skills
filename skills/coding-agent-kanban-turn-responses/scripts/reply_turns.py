@@ -2,7 +2,7 @@
 """Find the turns of this session and pull their prompts and reply sections out of the transcript.
 
 Why it exists: a reply names the turn it answers by id, `Decide.2 of 0f311c94`, and
-the `open` and `reassess` commands read every earlier turn's Review, Todo and Decide sections; doing that with
+the `open` and `recheck` commands read every earlier turn's Review, Todo and Decide sections; doing that with
 ad-hoc grep and jq over the session's JSONL was slow and drifted. This script is the one reader.
 
 Takes: the session transcript, `~/.claude/projects/<slug>/<session>.jsonl`. The slug is the main

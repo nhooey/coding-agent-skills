@@ -25,12 +25,19 @@ Subcommands:
   grep PATTERN [...]         the same lines for items whose line matches the regex, ignoring case
   render [...] [--counts]    a DRAFT 📌 section, each item ending `🔖 <id>₋ₖ`, for the session to prune; by
                              default only the last 20 turns (`--last N`, or `--since ID`), and never a
-                             turn before the latest `reassess` turn, whose lists replace
+                             turn before the latest `recheck` (or `reassess`) turn, whose lists replace
                              every earlier item; `--counts` prints the draft's one count line instead.
                              Which items are still open is a judgement this script cannot make
   due [--now ISO]            `full` or `counts <time left>`: full once min(30 min, 5 x the average gap
                              of the last 5 completed turns) has passed since the last reply text that
                              printed the 📌 header with its rule; a count line never resets the clock
+  decide [--json]            every open Decide item with its options, one line each, or with `--json`
+                             one object `{"items": [...]}`, each item its turn id, list, number,
+                             summary, kind (radio, checkbox or binary), reference and options (letter
+                             and name); the shape the kanban-answers mod reads and its tool takes.
+                             Open: raised since the latest `recheck` (or `reassess`) turn, its latest restatement
+                             only, and answered by no later prompt with an option letter (a line
+                             holding a question mark answers nothing)
 `--latest` keeps each item's latest occurrence. `render` gives each item the turn that first printed it,
 or, where later replies restated it with changed substance (the text after its bold summary), the turn
 that restated it: the first turn of the latest run of identical texts. A restatement in a 📌 section is a
@@ -41,6 +48,7 @@ Global: `--transcript FILE` and `--session ID`, as `reply_turns.py` takes them.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -71,9 +79,9 @@ _PREFIX = re.compile(r"^🔖\s*\w+[₀-₉₋]*:\s*")
 _SUFFIX = re.compile(r"\s*🔖\s+([0-9a-f]{8})[₀-₉₋]*\s*$")
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _RULE = re.compile(r"^\s*[━▀]{3,}\s*$")
-_REASSESS = re.compile(
-    r"^\s*(?:/(?:reply-block|coding-agent-kanban-turn-responses)\s+)?reassess\b"
-    r"|<command-name>/(?:reply-block|coding-agent-kanban-turn-responses)</command-name>\s*<command-args>\s*reassess\b"
+_RECHECK = re.compile(
+    r"^\s*(?:/(?:reply-block|coding-agent-kanban-turn-responses)\s+)?(?:recheck|reassess)\b"
+    r"|<command-name>/(?:reply-block|coding-agent-kanban-turn-responses)</command-name>\s*<command-args>\s*(?:recheck|reassess)\b"
 )
 _ENTRY = re.compile(r"\bentr(?:y|ies)\s+(\d{3,4})\b", re.IGNORECASE)
 _SPAN = re.compile(r"`([^`]+)`")
@@ -216,9 +224,9 @@ def latest_only(items: tuple[Item, ...]) -> tuple[Item, ...]:
     return tuple(i for n, i in enumerate(items) if last[(i.list_key, i.subject)] == n)
 
 
-def reassess_start(turns: tuple[rt.Turn, ...]) -> int:
-    """The position of the latest `reassess` turn, whose lists replace every item before it; else 0."""
-    return next((n for n in reversed(range(len(turns))) if _REASSESS.search(turns[n].prompt)), 0)
+def recheck_start(turns: tuple[rt.Turn, ...]) -> int:
+    """The position of the latest `recheck` (or `reassess`) turn, whose lists replace every item before it; else 0."""
+    return next((n for n in reversed(range(len(turns))) if _RECHECK.search(turns[n].prompt)), 0)
 
 
 def raised_by(turns: tuple[rt.Turn, ...], occurrences: tuple[Item, ...]) -> tuple[str, int]:
@@ -388,6 +396,138 @@ def render_due(turns: tuple[rt.Turn, ...], now: datetime) -> str:
     return f"counts {duration(left)}  {reason}" if left > timedelta() else f"full  {reason}"
 
 
+# --- open Decide items with their options --------------------------------------------------
+
+_DECIDE_ITEM = re.compile(r"^ {0,3}(\d+)[.)]\s+\*\*(.+?)\*\*", re.MULTILINE)
+_DECIDE_OPTION = re.compile(r"^\s*(🔘|🔲|👍|👎)\s+([A-Z])\.\s+\*\*(.+?)\*\*", re.MULTILINE)
+_KIND_OF_GLYPH = {"🔘": "radio", "🔲": "checkbox", "👍": "binary", "👎": "binary"}
+# An answer naming its turn: `9efb08a1.Decide.2.B`, `9efb08a.Decide.2: B,C`, or `Decide.2.B of 9efb08a1`.
+_ANSWER_WITH_ID = re.compile(r"\b([0-9a-f]{6,8})\.Decide\.(\d+)(?:\.|:\s*|\s+)[A-Z](?:\s*,\s*[A-Z])*\b")
+_ANSWER_ID_AFTER = re.compile(r"\bDecide\.(\d+)(?:\.|:\s*|\s+)[A-Z](?:\s*,\s*[A-Z])*\s+(?:of|from)\s+([0-9a-f]{6,8})\b")
+# An answer to the last final response, naming no turn: `Decide.2.B`, `Decide.2: B`, or `2. B` opening a line.
+_ANSWER_BARE = re.compile(r"(?<![0-9a-f]\.)\bDecide\.(\d+)(?:\.|:\s*|\s+)[A-Z](?:\s*,\s*[A-Z])*\b(?!\s+(?:of|from)\s)")
+_ANSWER_NUMBER = re.compile(r"^\s*(\d+)[.:]\s*[A-Z](?:\s*,\s*[A-Z])*\s*$")
+
+
+@dataclass(frozen=True)
+class DecideOption:
+    letter: str
+    name: str
+
+
+@dataclass(frozen=True)
+class DecideItem:
+    turn_id: str
+    number: int
+    summary: str
+    kind: str
+    options: tuple[DecideOption, ...]
+
+    @property
+    def ref(self) -> str:
+        """The reference an answer names it by, `<turn id>.Decide.<n>`; the option letter follows it."""
+        return f"{self.turn_id}.Decide.{self.number}"
+
+    def as_json(self) -> dict:
+        return {
+            "turn": self.turn_id,
+            "list": "Decide",
+            "number": self.number,
+            "summary": self.summary,
+            "kind": self.kind,
+            "ref": self.ref,
+            "options": [{"letter": o.letter, "name": o.name} for o in self.options],
+        }
+
+
+def _kind(glyphs: tuple[str, ...]) -> str:
+    kinds = frozenset(_KIND_OF_GLYPH[g] for g in glyphs)
+    return "checkbox" if "checkbox" in kinds else "binary" if "binary" in kinds else "radio"
+
+
+def _decide_item(turn_id: str, chunk: str) -> DecideItem | None:
+    """One numbered item of a Decide list, from its line to the next item's; None where it holds no option."""
+    head = _DECIDE_ITEM.match(chunk)
+    options = tuple(_DECIDE_OPTION.findall(chunk))
+    return (
+        DecideItem(
+            turn_id,
+            int(head.group(1)),
+            head.group(2).strip().rstrip(":").strip(),
+            _kind(tuple(g for g, _, _ in options)),
+            tuple(DecideOption(letter, name.strip().rstrip(":").strip()) for _, letter, name in options),
+        )
+        if head and options
+        else None
+    )
+
+
+def decide_items_of_text(turn_id: str, text: str) -> tuple[DecideItem, ...]:
+    """The Decide items of one reply text that carry options; a 📌 roll-up's bullets are not numbered and carry none."""
+    bodies = tuple(body for name, body in rt.sections(text) if name in rt.DECISIONS)
+    starts = tuple((body, tuple(m.start() for m in _DECIDE_ITEM.finditer(body))) for body in bodies)
+    chunks = tuple(
+        body[start:end] for body, found in starts for start, end in zip(found, (*found[1:], len(body)))
+    )
+    return tuple(item for item in (_decide_item(turn_id, c) for c in chunks) if item)
+
+
+def _answers_of_line(line: str, previous_id: str) -> frozenset[tuple[str, int]]:
+    """The (turn id or prefix, item number) pairs one prompt line answers; none where the line asks a question."""
+    return (
+        frozenset()
+        if "?" in line
+        else frozenset(
+            (
+                *((m.group(1), int(m.group(2))) for m in _ANSWER_WITH_ID.finditer(line)),
+                *((m.group(2), int(m.group(1))) for m in _ANSWER_ID_AFTER.finditer(line)),
+                *((previous_id, int(m.group(1))) for m in _ANSWER_BARE.finditer(line)),
+                *((previous_id, int(m.group(1))) for m in _ANSWER_NUMBER.finditer(line)),
+            )
+        )
+    )
+
+
+def answered(turns: tuple[rt.Turn, ...]) -> frozenset[tuple[str, int]]:
+    """Every (turn id or prefix, item number) a prompt answers with an option; a bare answer means the turn before it."""
+    return frozenset(
+        pair
+        for previous, turn in zip(turns, turns[1:])
+        for line in turn.prompt.splitlines()
+        for pair in _answers_of_line(line, previous.id)
+    )
+
+
+def _is_answered(item: DecideItem, answers: frozenset[tuple[str, int]]) -> bool:
+    return any(item.turn_id.startswith(ident) and number == item.number for ident, number in answers)
+
+
+def open_decide_items(turns: tuple[rt.Turn, ...]) -> tuple[DecideItem, ...]:
+    """The open Decide items, oldest first: raised since the latest `recheck` (or `reassess`) turn, each subject's latest
+    restatement only, none a later prompt answered with an option."""
+    kept = turns[recheck_start(turns) :]
+    raised = tuple(item for t in kept for text in t.replies for item in decide_items_of_text(t.id, text))
+    last = {subject_key(item.summary): n for n, item in enumerate(raised)}
+    answers = answered(turns)
+    return tuple(
+        item
+        for n, item in enumerate(raised)
+        if last[subject_key(item.summary)] == n and not _is_answered(item, answers)
+    )
+
+
+def render_decide(items: tuple[DecideItem, ...], as_json: bool, width: int) -> str:
+    return (
+        json.dumps({"items": [i.as_json() for i in items]}, ensure_ascii=False)
+        if as_json
+        else "\n".join(
+            f"{i.ref}  {i.kind}  {_cut(i.summary, width)}  "
+            + " ".join(f"{o.letter}. {o.name}" for o in i.options)
+            for i in items
+        )
+    )
+
+
 # --- command line --------------------------------------------------------------------------
 
 
@@ -415,6 +555,9 @@ def parser() -> argparse.ArgumentParser:
     rd.add_argument("--counts", action="store_true", help="print the draft's one count line instead of its items")
     du = sub.add_parser("due", help="`full` or `counts <time left>`: whether this reply prints the full roll-up")
     du.add_argument("--now", metavar="ISO", help="the time to judge at, instead of the clock")
+    de = sub.add_parser("decide", help="every open Decide item with its options")
+    de.add_argument("--json", action="store_true", help='print one object, {"items": [...]}, for the kanban-answers mod')
+    de.add_argument("--width", type=int, default=_DEFAULT_WIDTH, help="cut summaries to this width")
     return p
 
 
@@ -423,6 +566,8 @@ def run(args: argparse.Namespace, turns: tuple[rt.Turn, ...]) -> str:
         out = render_index(turns, tuple(args.ids), args.last)
     elif args.command == "due":
         out = render_due(turns, instant(args.now) if args.now else datetime.now(timezone.utc))
+    elif args.command == "decide":
+        out = render_decide(open_decide_items(turns), args.json, args.width)
     else:
         rendering = args.command == "render"
         since = args.since or (turns[-args.last].id if rendering and 0 < args.last <= len(turns) else None)
@@ -432,7 +577,7 @@ def run(args: argparse.Namespace, turns: tuple[rt.Turn, ...]) -> str:
             parse_lists(args.lists),
             args.latest and not rendering,
             getattr(args, "pattern", None),
-            reassess_start(turns) if rendering else 0,
+            recheck_start(turns) if rendering else 0,
         )
         out = (
             (render_counts if args.counts else lambda items: render_draft(items, args.width))(with_origins(turns, found))

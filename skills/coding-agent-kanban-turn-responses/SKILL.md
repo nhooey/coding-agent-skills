@@ -1,6 +1,6 @@
 ---
 name: coding-agent-kanban-turn-responses
-description: "Every response in a turn is kanban-shaped. A progress update between tool calls is one line whose state emoji show what is done, running and next. The final response is up to 8 underlined, numbered lists of what is new this turn, in a fixed order: Done, Pending, Logged, Waiting, Answers to the user's questions, Review (pull requests to merge among them, which a Done item points at rather than repeats), Todo and Decide, each numbered item's bold summary on its own line, then what earlier turns left open under 📌, in full on an interval and otherwise as one count line. Decide items and their capital-lettered options each read alone, with pros and cons; an answer that asks a question is answered in its item, restated, never taken as a choice; multi-line items are parted by a separator line; `scripts/lint_reply.py` checks the summaries, separators, options, header underlines and table placement. `open` (or `pending`) reprints open decisions as written, `reassess` works them out afresh, and `Expand <item>` reprints one item in depth. Load at the start of every turn, before the first response the user will read."
+description: "Every response in a turn is kanban-shaped. A progress update between tool calls is one line whose state emoji show what is done, running and next. The final response is up to 8 underlined, numbered lists of what is new this turn, in a fixed order: Done, Pending, Logged, Waiting, Answers to the user's questions, Review (pull requests to merge among them, which a Done item points at rather than repeats), Todo and Decide, each numbered item's bold summary on its own line, then what earlier turns left open under 📌, in full on an interval and otherwise as one count line. Decide items and their capital-lettered options each read alone, with pros and cons; an answer that asks a question is answered in its item, restated, never taken as a choice; multi-line items are parted by a separator line; `scripts/lint_reply.py` checks the summaries, separators, options, header underlines and table placement. `open` (or `pending`) reprints open decisions as written, `recheck` (or `reassess`) works them out afresh, and `Expand <item>` reprints one item in depth. Load at the start of every turn, before the first response the user will read."
 ---
 
 # Kanban turn responses
@@ -74,9 +74,11 @@ A review that is itself a choice goes in 🧠 Decide, and a task that is not a r
 | 🔲        | checkbox: any number chosen, including none                                  | A, B, C |
 | 👍 and 👎 | binary: one yes-or-no question, both lines written                           | Y and N |
 
+**Buttons for the options.** When the tool `mcp__coding-agent-kanban-answers__kanban_options` is in the agent's listing, from the coding-agent-kanban-answers mod, the agent calls it once, right before writing a final response that holds Decide items, so their buttons sit just above the reply. Its input is `{"items": [...]}`, one entry per Decide item of that response, in the shape `scripts/outstanding.py decide --json` prints: the turn id from `scripts/reply_turns.py id`, the item's number and summary, its kind (`radio`, `checkbox` or `binary`, from its glyphs) and each option's letter and name. A click on a button writes the answer's reference, `0f311c94.Decide.2.B`, into the user's draft and sends nothing. The final response is written exactly as it would be without the tool, and a reply without the tool reads as before.
+
 ## The user's answers
 
-- **By reference:** the user names an item by its list and number, `Decide.2`, an option by its letter, `Decide.2: B` or `2. B`, and either by its name. An item of an earlier turn carries that turn's id, from its usage line, before or after: `0f311c94.Decide.2` or `Decide.2 of 0f311c94`; with no id, the last final response is meant. An answer to an item of a turn that `reassess` replaced is read against the reassessed item that took it in.
+- **By reference:** the user names an item by its list and number, `Decide.2`, an option by its letter, `Decide.2: B` or `2. B`, and either by its name. An item of an earlier turn carries that turn's id, from its usage line, before or after: `0f311c94.Decide.2` or `Decide.2 of 0f311c94`; with no id, the last final response is meant. An answer to an item of a turn that `recheck` replaced is read against the rechecked item that took it in.
 - **A question is never a choice.** An answer holding a question mark or any question, `Decide.1?`, `B?`, "how would B work?", "why not C?", asks about the item and picks nothing, even when it names an option. Restate the item in its own list, whatever the list, with the answer as the note under its summary and its options rewritten where the answer changes them; the item stays open until the user answers it without a question. A question goes in ❓ Answers only when it names no listed item.
 - **A Review item stays open until the user's reply shows they reviewed it:** they comment on it, answer from it, or say they looked; a reply that only answers something else leaves it open.
 
@@ -101,15 +103,15 @@ The final response closes, before any ETA line, on what earlier turns left open 
 - **The turn id** is the first 8 characters of the `promptId` of the turn whose final response first printed the item; where an item was restated with changed substance, it is the turn that restated it.
 - **The relative index** is that turn's position counting back from the current turn, 0, every turn the user sees a usage line for counted. It prints as `₋` U+208B then the digits `₀`-`₉` U+2080 to U+2089: `₋₁₇` is 17 turns back.
 
-**Nothing open, nothing printed.** With nothing open the final response has neither the full roll-up nor the count line. A reassessing turn prints neither, since its lists replace every earlier turn's.
+**Nothing open, nothing printed.** With nothing open the final response has neither the full roll-up nor the count line. A rechecking turn prints neither, since its lists replace every earlier turn's.
 
 ## The commands
 
-| The user writes                                                      | The final response                                                        |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `open` (or `pending`), or `/coding-agent-kanban-turn-responses open` | reprints the open 🔍, 👉 and 🧠 items of earlier turns as written         |
-| `reassess`, or `/coding-agent-kanban-turn-responses reassess`        | works out afresh which are still open, and prints them in their own lists |
-| `Expand <list>.<n>[.<letter>]`, or an item from 📌 by its subject    | reprints that item or option at the depth its list needs                  |
+| The user writes                                                             | The final response                                                        |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `open` (or `pending`), or `/coding-agent-kanban-turn-responses open`        | reprints the open 🔍, 👉 and 🧠 items of earlier turns as written         |
+| `recheck` (or `reassess`), or `/coding-agent-kanban-turn-responses recheck` | works out afresh which are still open, and prints them in their own lists |
+| `Expand <list>.<n>[.<letter>]`, or an item from 📌 by its subject           | reprints that item or option at the depth its list needs                  |
 
 Read [commands.md](commands.md) before running any of them, and put their output into the 🔍 Review, 👉 Todo and 🧠 Decide lists, never ❓ Answers.
 
