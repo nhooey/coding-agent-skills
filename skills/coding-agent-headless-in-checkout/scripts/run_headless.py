@@ -737,9 +737,6 @@ def plan_for(
     resume = newest_session(checkout, args.projects_root) if args.session == "continue" else None
     workdir = worktree_path(checkout, args.job) if args.where == "worktree" else checkout
     notes, skip = [], None
-    live = live_note(resume, args.live_within)
-    if live:
-        notes.append(live)
     dirty = uncommitted(checkout) if args.where == "worktree" and resume else []
     if dirty:
         if args.dirty == "tell":
@@ -750,7 +747,11 @@ def plan_for(
             notes.append(f"{len(dirty)} uncommitted paths in the checkout; starting a new session")
         else:
             skip = f"{len(dirty)} uncommitted paths in the checkout; commit or stash them and rerun"
-    command = claude_command(
+    # Only a session this run will really fork, once `--dirty` has had its say.
+    live = None if skip else live_note(resume, args.live_within)
+    if live:
+        notes.insert(0, live)
+    command =claude_command(
         prompt,
         f"headless {args.job}",
         where=args.where,
