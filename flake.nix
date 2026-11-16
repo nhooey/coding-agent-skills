@@ -166,6 +166,21 @@
                 touch $out
               '';
 
+          # The scratchpad guard over its table of hook inputs, and end to end
+          # through bash with real files and preferences.
+          checks.scratchpad-guard =
+            pkgs.runCommand "scratchpad-guard-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
+              ''
+                python3 -I ${./skills/coding-agent-scratchpad-scripts}/scripts/test_scratchpad_guard.py
+                touch $out
+              '';
+
           # The browser finder's parsing and output, with no osascript.
           checks.browser-selection =
             pkgs.runCommand "browser-selection-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
