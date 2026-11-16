@@ -66,7 +66,7 @@ import reply_turns as rt  # noqa: E402
 # replies carry
 LISTS = {
     "pending": (("Pending", "Unfinished", "Open"), "🚧", "Pending"),
-    "waiting": (("Waiting",), "🤔", "Waiting"),
+    "waiting": (("Waiting",), "⏳", "Waiting"),
     "review": (("Review", "To review"), "🔍", "Review"),
     "todo": (("Todo", "To do"), "👉", "Todo"),
     "decide": (("Decide", "Decisions", "Blocked"), "🧠", "Decide"),

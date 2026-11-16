@@ -26,7 +26,7 @@ run. Once it scrolls away, it is gone. This skill fixes that:
 
 - **Progress you can watch.** Each step carries a state emoji (✅ done, 🏃
   running, 💤 not started, ❌ failed), so a glance shows where the turn is.
-- **The same order every time.** ✅ Done, 🚧 Pending, 📝 Logged, 🤔
+- **The same order every time.** ✅ Done, 🚧 Pending, 📝 Logged, ⏳
   Waiting, ❓ Answers, 🔍 Review, 👉 Todo, 🧠 Decide. Each list holds only
   what is new this turn, and empty lists are left out.
 - **Choices you answer by reference.** Each Decide item names the thing it
@@ -79,7 +79,7 @@ Each list asks something different of you. Lists you only read need no reply; th
 | ✅ Done       | nothing                                                         | a record of the turn; it never rolls up                                 |
 | 🚧 Pending | nothing                                                         | the agent finishes its own work later; it stays under 📌 until then     |
 | 📝 Logged     | nothing                                                         | the entry waits in the backlog for the next agent                       |
-| 🤔 Waiting    | nothing                                                         | the agent reports when it lands; it stays under 📌 until then           |
+| ⏳ Waiting    | nothing                                                         | the agent reports when it lands; it stays under 📌 until then           |
 | ❓ Answers    | nothing                                                         | your question, with its answer; it never rolls up                       |
 | 🔍 Review     | comment on it, or say you looked: `Review.1 looks right`        | it closes once your reply shows you reviewed it                         |
 | 👉 Todo       | do it, then say so: `Todo.1 done`                               | it closes, and the agent starts the work it freed                       |

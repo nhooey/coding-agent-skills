@@ -24,7 +24,7 @@ in agent-output-skills.
 | [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Pending/Waiting/Answers/Review/Todo/Decide lists closing on what earlier turns left open.                                             |
 | [`coding-agent-questions-as-first-class-prompts`](skills/coding-agent-questions-as-first-class-prompts/SKILL.md)         | Routes any question for the user through the agent's structured-question primitive (e.g. `AskUserQuestion`) instead of free-text prose that waits for a reply.                                                                                                |
 | [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson into the right existing skill with draft wording, falling back to memory only if no skill fits.                                                                                                |
-| [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools and one-off checks inline, and turns anything run twice into a named, documented tool in the project instead of a cryptic scratchpad script.                                                                          |
+| [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools, one-off checks inline and only named data in the scratchpad; anything run twice goes to `shell-hygiene-commands-as-cli-tools`.                                                                                       |
 | [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)                                 | A SessionStart hook that gives every Claude Code session a fixed share of the machine for make, cargo, Rust tests, pytest-xdist and the JVM, leaving variables the user already set alone.                                                                    |
 | [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md)                                         | How a skill names other skills (bare names, a closing Related skills section) and reads its user and project preferences files.                                                                                                                               |
 | [`coding-agent-vpn-blocked-domains`](skills/coding-agent-vpn-blocked-domains/SKILL.md)                                   | When a domain blocks a request, checks whether it went through the VPN and suggests excluding the domain from it, or connecting it if it was off.                                                                                                             |
@@ -63,6 +63,69 @@ Package outputs:
 - `agent-skill-nhooey-coding-agent-session-build-limits`
 - `agent-skill-nhooey-coding-agent-skill-references`
 - `agent-skill-nhooey-coding-agent-vpn-blocked-domains`
+- `hooks-plugin` — the hooks plugin, below
+
+## Hooks plugin
+
+A skill whose rule a script can decide in every session ships its hook in
+`coding-agent-skills-hooks`, this repository's one hooks-only Claude Code
+plugin. A plugin hook runs in every session and subagent, whether or not the
+skill is loaded; the skill itself still installs through the packages above.
+
+- **What's in it:**
+  - the SessionStart hook `session-build-limits.sh`, from
+    [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)
+  - the PreToolUse (`Bash|Write|Edit`) and SubagentStart hook
+    `scratchpad-guard.sh`, with its helper `scratchpad_guard.py`, from
+    [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)
+  - the PostToolUse (`Write|Edit`) hook `plans-check-hook.sh`, with its
+    helpers `plans_check_hook.py` and `plans.py`, from
+    [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)
+  - the PreToolUse (`Write|Edit`) hook `memory-write-reminder.sh`, with its
+    helper `memory_write_reminder.py`, from
+    [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md)
+  - the PreToolUse (`mcp__claude-in-chrome__.*`) and PostToolUse (`Bash`,
+    `select_browser`, `switch_browser`) hook `browser-check-hook.sh`, with its
+    helper `browser_check_hook.py`, from
+    [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)
+- **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
+  `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
+  `skills/` a second time under a namespaced name.
+- **The package:** `nix build .#hooks-plugin` copies `plugin/` and adds each
+  hook script from its skill's `scripts/` to the plugin's `scripts/`. It is
+  built by [`nix/hooks-plugin.nix`](nix/hooks-plugin.nix), the same derivation
+  as agent-plugins-nixpkgs' `mkClaudePlugin`, built here because
+  agent-plugins-nixpkgs takes this flake as an input.
+- **Adding a hook:** keep the script and its tests in
+  `skills/<skill>/scripts/`, where the skill documents it; list the script in
+  `hookScripts` in [`flake.nix`](flake.nix); and add it to `hooks/hooks.json`
+  as `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, since a store file has no
+  executable bit to rely on. Wire its tests into `nix flake check`, and keep it
+  under about 50 ms, exiting at once when it has nothing to do.
+- **A setting for blocking hooks:** a hook that can deny or block reads a
+  setting that turns it down to a reminder or off, since a plugin enabled in
+  managed settings can't be disabled in a session. The setting lives in the
+  skill's preferences file, as
+  [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md)
+  describes: `.agents/skills/<skill>.preferences.md` in the project
+  (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
+  The skill documents the setting's line.
+  `session-build-limits.sh` only adds to the environment and
+  `memory-write-reminder.sh` only adds context, so they have none;
+  `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, and is
+  at `remind` unless set.
+- **Checks:** `nix flake check` runs each hook script's tests and
+  `checks.hooks-plugin`, which builds the plugin and runs
+  [`check_hooks_plugin.py`](scripts/check_hooks_plugin.py): every hook is a
+  command hook running one of the plugin's scripts through `bash`, every
+  script is run by a hook or named by one as its helper and parses, and the
+  manifest has a name and version.
+  `claude plugin validate` on the built plugin checks it as Claude Code reads
+  it.
+- **Installing it:** agent-plugins-nixpkgs passes `hooks-plugin` through, and a
+  nix-darwin configuration adds it to `services.agent-plugins.plugins`, which
+  enables it in managed settings. To try it in one session, pass the store path
+  to `claude --plugin-dir`.
 
 ## Development
 
@@ -92,6 +155,8 @@ skills/                  one directory per skill (SKILL.md + per-skill flake.nix
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
 scripts/                 `skills-dev`, the dev shell's tool for this repository, and its tests
 plugins/                 Claude Code mods, checked by `skills-dev mods check`
+plugin/                  the hooks plugin's manifest and hooks.json; scripts come from skills/
+nix/                     the hooks plugin's builder
 agents/plans/            the project's plans, as a graph of Markdown nodes
 source.nix               the upstream owner, shared by the root and every skill flake
 flake.nix                builds skills via agent-skill-flake; wires the dev shell + treefmt

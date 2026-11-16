@@ -92,21 +92,74 @@
         '';
       };
       perSystem =
-        { system, pkgs, ... }:
         {
-          packages = base.packages.${system};
+          config,
+          system,
+          pkgs,
+          ...
+        }:
+        {
+          # The skills, and the hooks plugin `coding-agent-skills-hooks`: plugin/
+          # with each hook script copied in from its skill. A skill adds a hook
+          # by listing its script here and running it from plugin/hooks/hooks.json.
+          packages = base.packages.${system} // {
+            hooks-plugin = import ./nix/hooks-plugin.nix {
+              inherit pkgs;
+              src = ./plugin;
+              hookScripts = [
+                ./skills/coding-agent-session-build-limits/scripts/session-build-limits.sh
+                ./skills/coding-agent-scratchpad-scripts/scripts/scratchpad-guard.sh
+                ./skills/coding-agent-scratchpad-scripts/scripts/scratchpad_guard.py
+                ./skills/coding-agent-plans-as-graph/scripts/plans-check-hook.sh
+                ./skills/coding-agent-plans-as-graph/scripts/plans_check_hook.py
+                ./skills/coding-agent-plans-as-graph/scripts/plans.py
+                ./skills/coding-agent-route-feedback-to-skills-over-memory/scripts/memory-write-reminder.sh
+                ./skills/coding-agent-route-feedback-to-skills-over-memory/scripts/memory_write_reminder.py
+                ./skills/coding-agent-browser-selection/scripts/browser-check-hook.sh
+                ./skills/coding-agent-browser-selection/scripts/browser_check_hook.py
+                ./skills/coding-agent-kanban-turn-responses/scripts/reply-lint-hook.sh
+                ./skills/coding-agent-kanban-turn-responses/scripts/reply_lint_hook.py
+                ./skills/coding-agent-kanban-turn-responses/scripts/lint_reply.py
+                ./skills/coding-agent-kanban-turn-responses/scripts/reply_turns.py
+              ];
+            };
+          };
+
+          # The built hooks plugin's manifest, hooks.json and scripts, and the
+          # checker's own tests.
+          checks.hooks-plugin =
+            pkgs.runCommand "hooks-plugin-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
+              ''
+                python3 -I ${./scripts}/test_check_hooks_plugin.py
+                python3 -I ${./scripts}/check_hooks_plugin.py ${config.packages.hooks-plugin}
+                touch $out
+              '';
 
           apps = base.apps.${system};
 
           # The kanban skill's reply linter, against its fixtures and the
-          # skill's own examples, and its transcript readers' and table drawer's tests.
+          # skill's own examples, its transcript readers' and table drawer's
+          # tests, and its Stop hook at each setting, end to end through bash.
           checks.kanban-lint-reply =
-            pkgs.runCommand "kanban-lint-reply-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+            pkgs.runCommand "kanban-lint-reply-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
               ''
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_lint_reply.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_turns.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_outstanding.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_box_table.py
+                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_lint_hook.py
                 touch $out
               '';
 
@@ -134,11 +187,34 @@
                 touch $out
               '';
 
-          # The browser finder's parsing and output, with no osascript.
+          # The scratchpad guard over its table of hook inputs, and end to end
+          # through bash with real files and preferences.
+          checks.scratchpad-guard =
+            pkgs.runCommand "scratchpad-guard-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
+              ''
+                python3 -I ${./skills/coding-agent-scratchpad-scripts}/scripts/test_scratchpad_guard.py
+                touch $out
+              '';
+
+          # The browser finder's parsing and output, with no osascript, and the
+          # browser check hook at each setting, end to end through bash.
           checks.browser-selection =
-            pkgs.runCommand "browser-selection-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+            pkgs.runCommand "browser-selection-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
               ''
                 python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_which_browser.py
+                python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_browser_check_hook.py
                 touch $out
               '';
 
@@ -149,17 +225,35 @@
             touch $out
           '';
 
+          # plans.py, and its PostToolUse hook end to end through bash.
           checks.plans-as-graph =
             pkgs.runCommand "plans-as-graph-tests"
               {
                 nativeBuildInputs = [
                   pkgs.python3
                   pkgs.git
+                  pkgs.bash
                 ];
               }
               ''
                 export HOME=$TMPDIR
                 python3 -I ${./skills/coding-agent-plans-as-graph}/scripts/test_plans.py
+                python3 -I ${./skills/coding-agent-plans-as-graph}/scripts/test_plans_check_hook.py
+                touch $out
+              '';
+
+          # The memory write reminder against its fixture of Claude Code's
+          # memory path, and end to end through bash.
+          checks.memory-write-reminder =
+            pkgs.runCommand "memory-write-reminder-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
+              ''
+                python3 -I ${./skills/coding-agent-route-feedback-to-skills-over-memory}/scripts/test_memory_write_reminder.py
                 touch $out
               '';
 
