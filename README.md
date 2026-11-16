@@ -63,6 +63,51 @@ Package outputs:
 - `agent-skill-nhooey-coding-agent-session-build-limits`
 - `agent-skill-nhooey-coding-agent-skill-references`
 - `agent-skill-nhooey-coding-agent-vpn-blocked-domains`
+- `hooks-plugin` — the hooks plugin, below
+
+## Hooks plugin
+
+A skill whose rule a script can decide in every session ships its hook in
+`coding-agent-skills-hooks`, this repository's one hooks-only Claude Code
+plugin. A plugin hook runs in every session and subagent, whether or not the
+skill is loaded; the skill itself still installs through the packages above.
+
+- **What's in it:** the SessionStart hook `session-build-limits.sh`, from
+  [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md).
+- **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
+  `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
+  `skills/` a second time under a namespaced name.
+- **The package:** `nix build .#hooks-plugin` copies `plugin/` and adds each
+  hook script from its skill's `scripts/` to the plugin's `scripts/`. It is
+  built by [`nix/hooks-plugin.nix`](nix/hooks-plugin.nix), the same derivation
+  as agent-plugins-nixpkgs' `mkClaudePlugin`, built here because
+  agent-plugins-nixpkgs takes this flake as an input.
+- **Adding a hook:** keep the script and its tests in
+  `skills/<skill>/scripts/`, where the skill documents it; list the script in
+  `hookScripts` in [`flake.nix`](flake.nix); and add it to `hooks/hooks.json`
+  as `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, since a store file has no
+  executable bit to rely on. Wire its tests into `nix flake check`, and keep it
+  under about 50 ms, exiting at once when it has nothing to do.
+- **A setting for blocking hooks:** a hook that can deny or block reads a
+  setting that turns it down to a reminder or off, since a plugin enabled in
+  managed settings can't be disabled in a session. The setting lives in the
+  skill's preferences file, as
+  [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md)
+  describes: `.agents/skills/<skill>.preferences.md` in the project
+  (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
+  The skill documents the setting's line.
+  `session-build-limits.sh` only adds to the environment, so it has none.
+- **Checks:** `nix flake check` runs each hook script's tests and
+  `checks.hooks-plugin`, which builds the plugin and runs
+  [`check_hooks_plugin.py`](scripts/check_hooks_plugin.py): every hook is a
+  command hook running one of the plugin's scripts through `bash`, every
+  script is run by a hook and parses, and the manifest has a name and version.
+  `claude plugin validate` on the built plugin checks it as Claude Code reads
+  it.
+- **Installing it:** agent-plugins-nixpkgs passes `hooks-plugin` through, and a
+  nix-darwin configuration adds it to `services.agent-plugins.plugins`, which
+  enables it in managed settings. To try it in one session, pass the store path
+  to `claude --plugin-dir`.
 
 ## Development
 
@@ -92,6 +137,8 @@ skills/                  one directory per skill (SKILL.md + per-skill flake.nix
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
 scripts/                 `skills-dev`, the dev shell's tool for this repository, and its tests
 plugins/                 Claude Code mods, checked by `skills-dev mods check`
+plugin/                  the hooks plugin's manifest and hooks.json; scripts come from skills/
+nix/                     the hooks plugin's builder
 agents/plans/            the project's plans, as a graph of Markdown nodes
 source.nix               the upstream owner, shared by the root and every skill flake
 flake.nix                builds skills via agent-skill-flake; wires the dev shell + treefmt
