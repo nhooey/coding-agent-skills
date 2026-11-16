@@ -466,6 +466,14 @@ class Runs(unittest.TestCase):
         self.assertNotIn("--resume", argv)
         self.assertEqual(argv[1], "do the thing")
 
+    def test_dirty_new_and_skip_warn_of_no_fork(self):
+        for dirty in ("new", "skip"):
+            with self.subTest(dirty=dirty):
+                self.make_alpha_dirty()
+                self.run_one(self.alpha, "--session", "continue", "--dirty", dirty)
+                self.assertNotIn("may still be running", self.stderr)
+                self.assertFalse(any("may still be running" in n for n in self.outcome("alpha")["notes"]))
+
     def test_dirty_skip_does_not_run(self):
         self.make_alpha_dirty()
         self.assertEqual(self.run_one(self.alpha, "--session", "continue", "--dirty", "skip")[0], 3)
