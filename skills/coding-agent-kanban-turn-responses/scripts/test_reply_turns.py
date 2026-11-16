@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Tests for reply_turns.py's transcript lookup, run from anywhere: `python3 -I scripts/test_reply_turns.py`.
+"""Tests for reply_turns.py, run from anywhere: `python3 -I scripts/test_reply_turns.py`.
 
-Standard library only.
+Standard library only. The turn reader, the lookups and the section splitter are tested on records
+in memory; the command line runs on a transcript file.
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import pathlib
 import sys
 import tempfile
@@ -60,6 +64,175 @@ class TranscriptPathTest(unittest.TestCase):
     def test_transcript_flag_wins(self) -> None:
         self.write("-Users-a-repo")
         self.assertEqual(self.lookup("/Users/a/repo", "/x/y.jsonl"), pathlib.Path("/x/y.jsonl"))
+
+
+def prompt(prompt_id: str, text: str, origin: str = "human", **extra: object) -> dict:
+    return {
+        "type": "user",
+        "turnOrigin": origin,
+        "promptId": prompt_id,
+        "uuid": UUIDS[prompt_id],
+        "timestamp": "2026-11-16T10:00:00Z",
+        "message": {"content": text},
+        **extra,
+    }
+
+
+def reply(text: str, **extra: object) -> dict:
+    return {
+        "type": "assistant",
+        "timestamp": "2026-11-16T10:00:30Z",
+        "message": {"content": [{"type": "text", "text": text}, {"type": "tool_use", "id": "t", "name": "Bash"}]},
+        **extra,
+    }
+
+
+def tool_result() -> dict:
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}}
+
+
+FIRST = "aaaa1111-0000-4000-8000-000000000000"
+SECOND = "bbbb2222-0000-4000-8000-000000000000"
+THIRD = "aaaa1199-0000-4000-8000-000000000000"
+# The prompt records' uuids, unrelated to their prompt ids; earlier replies named a turn by the last 6.
+UUIDS = {FIRST: "5e1d-0c3f9e", SECOND: "77aa-d4b081", THIRD: "9b02-e6c27a"}
+
+RECORDS = (
+    {"type": "assistant", "message": {"content": [{"type": "text", "text": "before any prompt"}]}},
+    prompt(FIRST, "first prompt\nsecond line"),
+    reply("one"),
+    tool_result(),
+    reply("two"),
+    reply("sidechain", isSidechain=True),
+    prompt(SECOND, "a sidechain prompt", isSidechain=True),
+    prompt(SECOND, "a summary", isCompactSummary=True),
+    prompt(SECOND, "<agent-message from x>", origin="peer"),
+    reply("   "),
+    reply("three"),
+    prompt(THIRD, "<task-notification>", origin="task_notification"),
+)
+
+
+class TurnsOfTest(unittest.TestCase):
+    def test_human_peer_and_task_notification_prompts_open_turns(self) -> None:
+        turns = reply_turns.turns_of(RECORDS)
+        self.assertEqual([t.id for t in turns], ["aaaa1111", "bbbb2222", "aaaa1199"])
+
+    def test_a_reply_is_its_turn_s_non_sidechain_text_blocks(self) -> None:
+        turns = reply_turns.turns_of(RECORDS)
+        self.assertEqual([t.replies for t in turns], [("one", "two"), ("three",), ()])
+        self.assertEqual(turns[0].reply_times, ("2026-11-16T10:00:30Z",) * 2)
+        self.assertEqual(turns[0].prompt, "first prompt\nsecond line")
+
+    def test_human_only_folds_other_prompts_into_the_turn_under_way(self) -> None:
+        turns = reply_turns.turns_of(RECORDS, human_only=True)
+        self.assertEqual([(t.id, t.replies) for t in turns], [("aaaa1111", ("one", "two", "three"))])
+
+
+class FindTest(unittest.TestCase):
+    turns = reply_turns.turns_of(RECORDS)
+
+    def test_a_prompt_id_prefix_finds_its_turn(self) -> None:
+        self.assertEqual(reply_turns.find(self.turns, "bbbb").id, "bbbb2222")
+
+    def test_the_uuid_s_last_six_characters_find_its_turn(self) -> None:
+        self.assertEqual(reply_turns.find(self.turns, "d4b081").id, "bbbb2222")
+        self.assertEqual(reply_turns.find(self.turns, "0c3f9e").id, "aaaa1111")
+
+    def test_an_ambiguous_id_names_the_candidates(self) -> None:
+        with self.assertRaisesRegex(reply_turns.TurnError, r"ambiguous, matching aaaa1111 \(\w+\), aaaa1199"):
+            reply_turns.find(self.turns, "aaaa11")
+
+    def test_an_unknown_or_empty_id_matches_nothing(self) -> None:
+        for ident in ("ffff", ""):
+            with self.subTest(ident=ident), self.assertRaisesRegex(reply_turns.TurnError, "matches no turn of 3"):
+                reply_turns.find(self.turns, ident)
+
+    def test_current_is_the_last_turn(self) -> None:
+        self.assertEqual(reply_turns.current(self.turns).id, "aaaa1199")
+        with self.assertRaisesRegex(reply_turns.TurnError, "no turn"):
+            reply_turns.current(())
+
+
+REPLY = """Opening prose, in no section.
+
+✅ **Done:**  
+▔▔▔▔▔▔▔▔
+1. **Fixed the loader**
+
+📋 **To review:**  
+- **The pull request**
+
+🧠 **Decisions:**  
+1. **Which cache**
+
+Still open from earlier
+🧠 **Decide:**  
+- **An old one**
+"""
+
+
+class SectionsTest(unittest.TestCase):
+    def test_each_header_opens_a_section_and_the_stop_line_closes_one(self) -> None:
+        self.assertEqual(
+            reply_turns.sections(REPLY),
+            (
+                ("Done", "✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **Fixed the loader**"),
+                ("To review", "📋 **To review:**  \n- **The pull request**"),
+                ("Decisions", "🧠 **Decisions:**  \n1. **Which cache**"),
+                ("Decide", "🧠 **Decide:**  \n- **An old one**"),
+            ),
+        )
+
+    def test_a_header_is_matched_by_name_not_glyph(self) -> None:
+        self.assertEqual(reply_turns.sections("🙃 **Todo:**  \n1. **x**")[0][0], "Todo")
+        self.assertEqual(reply_turns.sections("🙃 **Nothing:**  \n1. **x**"), ())
+
+    def test_render_sections_gathers_named_sections_under_each_turn_id(self) -> None:
+        turns = reply_turns.turns_of((prompt(FIRST, "go"), reply(REPLY), prompt(SECOND, "more"), reply("prose only")))
+        self.assertEqual(
+            reply_turns.render_sections(turns, None, reply_turns.DECISIONS),
+            "== aaaa1111 ==\n🧠 **Decide:**  \n- **An old one**\n\n🧠 **Decisions:**  \n1. **Which cache**",
+        )
+        self.assertEqual(reply_turns.render_sections(turns, "bbbb", reply_turns.DECISIONS), "")
+
+
+class CommandLineTest(unittest.TestCase):
+    def run_main(self, *args: str) -> tuple[int, str, str]:
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "session.jsonl"
+            path.write_text("\n".join(json.dumps(r) for r in RECORDS), encoding="utf-8")
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                status = reply_turns.main(["--transcript", str(path), *args])
+        return status, out.getvalue(), err.getvalue()
+
+    def test_id_prints_the_current_turn(self) -> None:
+        self.assertEqual(self.run_main("id")[:2], (0, "aaaa1199\n"))
+
+    def test_list_prints_each_turn_s_first_prompt_line(self) -> None:
+        status, out, _ = self.run_main("list", "-n", "2")
+        self.assertEqual(
+            (status, out.splitlines()),
+            (0, ["bbbb2222  2026-11-16T10:00:00Z  <agent-message from x>", "aaaa1199  2026-11-16T10:00:00Z  <task-notification>"]),
+        )
+        self.assertEqual(self.run_main("list", "--grep", "FIRST")[1], "aaaa1111  2026-11-16T10:00:00Z  first prompt\n")
+
+    def test_show_prints_the_prompt_then_the_reply(self) -> None:
+        self.assertEqual(self.run_main("show", "aaaa1111")[1], "first prompt\nsecond line\n\n--- reply ---\n\none\n\ntwo\n")
+        self.assertEqual(self.run_main("show", "aaaa1111", "--prompt-only")[1], "first prompt\nsecond line\n")
+
+    def test_a_bad_id_exits_1_naming_it(self) -> None:
+        status, out, err = self.run_main("show", "ffff")
+        self.assertEqual((status, out), (1, ""))
+        self.assertIn("'ffff' matches no turn", err)
+
+    def test_a_missing_transcript_exits_1(self) -> None:
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            status = reply_turns.main(["--transcript", "/nonexistent/x.jsonl", "id"])
+        self.assertEqual(status, 1)
+        self.assertIn("no transcript at /nonexistent/x.jsonl", err.getvalue())
 
 
 if __name__ == "__main__":

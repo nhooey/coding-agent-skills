@@ -1,0 +1,1 @@
+- Push mode: Mode 2, pull requests always; never push master

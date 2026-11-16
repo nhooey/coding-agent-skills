@@ -78,11 +78,18 @@ check "no JAVA_TOOL_OPTIONS line" lacks_line '^export JAVA_TOOL_OPTIONS=' "$f"
 check "CARGO_MAKEFLAGS still set" has_line '^export CARGO_MAKEFLAGS=' "$f"
 check "RUST_TEST_THREADS still set" test "$(loaded "$f" RUST_TEST_THREADS)" = "3"
 
-# 4. CLAUDE_ENV_FILE unset: exits 0 and writes no file.
-mkdir "$tmp/cwd"
-(cd "$tmp/cwd" && run_hook "" >/dev/null 2>&1)
-check "unset: exits 0" test $? -eq 0
-check "unset: writes nothing" test -z "$(ls -A "$tmp/cwd")"
+# 4. CLAUDE_ENV_FILE unset or empty: exits 0, prints nothing, and writes no
+# file under its working directory, HOME, TMPDIR or XDG directories.
+for how in unset empty; do
+  box="$tmp/box-$how"
+  mkdir -p "$box/cwd" "$box/home" "$box/tmp"
+  if [ "$how" = empty ]; then extra=(CLAUDE_ENV_FILE=); else extra=(); fi
+  out=$(cd "$box/cwd" && run_hook "" "${extra[@]}" HOME="$box/home" TMPDIR="$box/tmp" \
+    XDG_STATE_HOME="$box/home/.local/state" XDG_CONFIG_HOME="$box/home/.config" 2>&1)
+  check "$how: exits 0" test $? -eq 0
+  check "$how: prints nothing" test -z "$out"
+  check "$how: writes nothing" test -z "$(find "$box" -mindepth 2 -print)"
+done
 
 echo "$passed passed, $failed failed"
 test "$failed" -eq 0

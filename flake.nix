@@ -62,8 +62,8 @@
         # skillspkgs / nur-packages' last-write-wins `//` merge; the
         # owner+topic name is resolvable and unique, mirroring git-skills's
         # `agent-skills-nhooey-git-all`. The aggregate carries the home-manager
-        # `isFlakeSkillsEnv` passthru itself (agent-skill-flake #47), so
-        # `default` is directly installable — no hand-rolled pack.
+        # `isFlakeSkillsEnv` passthru itself, so `default` is directly
+        # installable.
         name = "agent-skills-nhooey-coding-agent-all";
       };
     in
@@ -99,13 +99,14 @@
           apps = base.apps.${system};
 
           # The kanban skill's reply linter, against its fixtures and the
-          # skill's own examples, and its transcript readers' tests.
+          # skill's own examples, and its transcript readers' and table drawer's tests.
           checks.kanban-lint-reply =
             pkgs.runCommand "kanban-lint-reply-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
               ''
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_lint_reply.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_turns.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_outstanding.py
+                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_box_table.py
                 touch $out
               '';
 
@@ -132,6 +133,21 @@
                 bash ${./skills/coding-agent-session-build-limits}/scripts/test_session_build_limits.sh
                 touch $out
               '';
+
+          # The browser finder's parsing and output, with no osascript.
+          checks.browser-selection =
+            pkgs.runCommand "browser-selection-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+              ''
+                python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_which_browser.py
+                touch $out
+              '';
+
+          # The repository's own dev tool: its argument parsing, test discovery
+          # and mod lookup, with the commands it would run recorded, not run.
+          checks.skills-dev = pkgs.runCommand "skills-dev-tests" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+            python3 -I ${./scripts}/test_skills_dev.py
+            touch $out
+          '';
 
           checks.plans-as-graph =
             pkgs.runCommand "plans-as-graph-tests"
@@ -175,18 +191,21 @@
           # name, motd, the install-skills startup that reconciles the runtime
           # `skills-devshell/` sub-flake at project scope, the ci/dev/maintenance
           # command trio (check / fmt / update-flake), and the skills commands
-          # (reap-skills / update-skills-devshell). This repo adds the mod
-          # checks below: they need `claude` itself and the Claude Code API
+          # (reap-skills / update-skills-devshell). This repo adds `skills-dev`,
+          # whose `mods check` needs `claude` itself and the Claude Code API
           # types its running build writes, neither of which the Nix sandbox
-          # has, so they run here rather than in `nix flake check`.
+          # has, so it runs here rather than in `nix flake check`.
           devshells.default = {
-            packages = [ pkgs.typescript ];
+            packages = [
+              pkgs.python3
+              pkgs.typescript
+            ];
             commands = [
               {
-                category = "ci";
-                name = "check-mods";
-                help = "validate, type-check and test the mods under plugins/, or the ones named";
-                command = ''bash "$PRJ_ROOT/plugins/check-mods.sh" "$@"'';
+                category = "dev";
+                name = "skills-dev";
+                help = "test: run the skills' script tests; mods check|try: check or try the mods under plugins/";
+                command = ''python3 "$PRJ_ROOT/scripts/skills_dev.py" "$@"'';
               }
             ];
           };

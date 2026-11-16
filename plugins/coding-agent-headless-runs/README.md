@@ -51,13 +51,13 @@ The mod reads `<state>/coding-agent-headless/*/*.status.json`, where `<state>` i
 From the repository's dev shell:
 
 ```bash
-check-mods coding-agent-headless-runs
+skills-dev mods check coding-agent-headless-runs
 ```
 
-It runs `claude plugin validate`, `tsc -p` and `claude plugin test` on the mod, through [`../check-mods.sh`](../check-mods.sh); with no name it checks every mod in the repository. To try the mod without installing it:
+It runs `claude plugin validate`, `tsc -p` and `claude plugin test` on the mod, through [`skills-dev`](../../scripts/skills_dev.py); with no name it checks every mod in the repository. To try the mod without installing it:
 
 ```bash
-claude --plugin-dir plugins/coding-agent-headless-runs
+skills-dev mods try coding-agent-headless-runs
 ```
 
 | File                                       | Holds                                                                         |

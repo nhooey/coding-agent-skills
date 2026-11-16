@@ -220,15 +220,84 @@ export const header = (band: Band): string => {
     : `🧠 ${position + 1}/${band.items.length} · ${item.summary}`;
 };
 
-/** One mark per item, `●` answered in the draft and `○` not, the shown one in brackets. */
-export const progress = (band: Band, draft: string): string =>
-  band.items
-    .map((item, n) => {
-      const mark = isAnswered(draft, item) ? "●" : "○";
+/** One mark per item, `●` answered in the draft and `○` not, with which one the band shows. */
+export const progressMarks = (
+  band: Band,
+  draft: string,
+): { mark: string; isShown: boolean }[] =>
+  band.items.map((item, n) => ({
+    mark: isAnswered(draft, item) ? "●" : "○",
+    isShown: n === positionIn(band),
+  }));
 
-      return n === positionIn(band) ? `[${mark}]` : mark;
-    })
+/** The marks as one line, the shown one drawn as `◉` answered or `◎` not. */
+export const progress = (band: Band, draft: string): string =>
+  progressMarks(band, draft)
+    .map(({ mark, isShown }) => (isShown ? (mark === "●" ? "◉" : "◎") : mark))
     .join(" ");
+
+/** The glyph an option is drawn with: its own, else its item kind's. */
+export const glyphOf = (item: DecideItem, letter: string): string =>
+  item.options.find((o) => o.letter === letter)?.glyph ||
+  (item.kind === "checkbox"
+    ? "🔲"
+    : item.kind === "binary"
+      ? letter === "N"
+        ? "👎"
+        : "👍"
+      : "🔘");
+
+/** A line split at its backticks: even parts are prose, odd parts code. */
+export const codeSpans = (line: string): { text: string; isCode: boolean }[] =>
+  line
+    .split("`")
+    .map((text, n) => ({
+      text: text.replaceAll("**", ""),
+      isCode: n % 2 === 1,
+    }))
+    .filter((part) => part.text !== "");
+
+/** Rows a line takes wrapped into `width` columns, at least one. */
+const wrappedRows = (line: string, width: number): number =>
+  Math.max(1, Math.ceil([...line].length / Math.max(10, width)));
+
+/**
+ * Rows an item takes drawn in full in a bordered box `columns` wide: the
+ * border, the controls and the gap under them, the title, the note, and each
+ * option with its ➕, ➖ and note lines, every line wrapped at its indent.
+ */
+export const rowsNeeded = (item: DecideItem, columns: number): number => {
+  const inner = columns - 4;
+  const optionRows = item.options.map(
+    (o) =>
+      wrappedRows(
+        `🔘 ${o.letter}. ${o.name}: ${o.consequence ?? ""}`,
+        inner - 3,
+      ) +
+      [...(o.pros ?? []), ...(o.cons ?? []), ...(o.notes ?? [])].reduce(
+        (sum, line) => sum + wrappedRows(`➕ ${line}`, inner - 6),
+        0,
+      ),
+  );
+
+  return (
+    4 +
+    wrappedRows(`🧠 99/99 · ${item.summary}`, inner) +
+    (item.note ?? []).reduce(
+      (sum, line) => sum + wrappedRows(line, inner - 3),
+      0,
+    ) +
+    optionRows.reduce((sum, rows) => sum + rows, 0)
+  );
+};
+
+/** Whether every open item fits the band, so paging through them never moves between band and pane. */
+export const fitsBand = (
+  items: DecideItem[],
+  layout: { rows: number; columns: number },
+): boolean =>
+  layout.rows > 0 &&
+  items.every((item) => rowsNeeded(item, layout.columns) <= layout.rows);
 
 /** The items a tool call or the script handed over, whatever else the JSON held. */
 export const itemsOf = (value: unknown): DecideItem[] => {

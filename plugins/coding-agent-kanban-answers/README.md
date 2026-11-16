@@ -26,37 +26,48 @@ It runs `python3` from your `PATH`.
 
 ## What it draws
 
-### The band above the prompt
+### The band above the prompt, or a pane
 
-The band shows one open Decide item at a time:
+The band shows one open Decide item at a time, inside a rounded border, laid out as the skill writes it, when every open item fits the rows it has. In fullscreen that's at most half the terminal, the prompt included. When an item is too tall, the band folds to `🧠 3 open decisions, too tall for here 🪟 Open in a pane`, and the button opens a pane beside the transcript with the same drawing at full height. `/answers` always opens the pane. A render hook can't open a pane by itself, so the band can't move an item there unasked.
 
 ```text
-🧠 2/5 · Which cache to keep for the loader
-[ A. Keep the disk cache ] [ B. Keep the memory cache ]
-[ ◀ Prev ] [ Skip ] [ Next ▶ ] [ Recheck ] [ ✕ ]  ● [○] ○ ○ ○
+╭──────────────────────────────────────────────────────────────────╮
+│ h: ⏪ Prev  j: ⏭️ Skip  l: ⏩ Next  🔄 Reassess  q: ❎  ● ◎ ○ ○ ○  │
+│                                                                  │
+│ 🧠 2/5 · Which cache to keep for the loader                      │
+│    Both are already built; this only picks the default.          │
+│    🔘 A. Keep the disk cache: it survives restarts.              │
+│       ➕ Faster cold starts.                                     │
+│       ➖ Disk use.                                               │
+│    🔘 B. Keep the memory cache: simpler.                         │
+│       ➕ Less code.                                              │
+│       ➖ Slow cold starts.                                       │
+╰──────────────────────────────────────────────────────────────────╯
 ```
+
+Each part has its own colour from the theme, so it reads in light and dark themes alike: the title in the accent colour, code spans in another and the option the draft picks on a highlighted background. The ➕ and ➖ lines are plain text, as in a reply. The controls sit on top, so they stay put whatever the item's length, and the controls' words are underlined. Every item is drawn in full, its note and every ➕ and ➖ line, however many rows that takes.
 
 | Control         | What it does                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | an option       | writes `<turn>.Decide.<n>.<letter>` into the draft, replacing the item's earlier answer there, and moves to the next unanswered item      |
-| a checkbox item | toggles its letter in one reference, `…Decide.3.A,C`, and stays on the item so you can pick more; `Next ▶` or `Skip` moves on             |
-| `Skip`          | goes to the next item the draft doesn't answer                                                                                            |
-| `◀ Prev`        | goes to the previous item, wrapping round                                                                                                 |
-| `Next ▶`        | goes to the next item, wrapping round                                                                                                     |
-| `Recheck`       | submits the skill's `recheck` command, which works the open items out afresh; the one button that sends a prompt                          |
-| `✕`             | folds the band to a single `🧠` until a reply raises a Decide item it hasn't shown, until you click the `🧠`, or until you run `/answers` |
+| a checkbox item | toggles its letter in one reference, `…Decide.3.A,C`, and stays on the item so you can pick more; `⏩ Next` or `⏭️ Skip` moves on         |
+| `⏭️ Skip`       | goes to the next item the draft doesn't answer                                                                                            |
+| `⏪ Prev`       | goes to the previous item, wrapping round                                                                                                 |
+| `⏩ Next`       | goes to the next item, wrapping round                                                                                                     |
+| `🔄 Reassess`   | submits the skill's `reassess` command, which works the open items out afresh; the one button that sends a prompt                         |
+| `❎`            | folds the band to a single `🧠` until a reply raises a Decide item it hasn't shown, until you click the `🧠`, or until you run `/answers` |
 
-The marks after the buttons show which items the draft answers, `●` answered and `○` not, the shown item in brackets. The option the draft picks is drawn as the primary button. The band refreshes when a reply finishes.
+The circles after the controls show which items the draft answers, `●` answered and `○` not, the shown item ringed, `◉` or `◎`, in the accent colour. Click a circle to go to its item. The band refreshes when a reply finishes.
 
-Once the band holds the keys (ctrl+x tab, or a click on it), each option's letter presses it, and `h`, `j`, `l` and `q` press `◀ Prev`, `Skip`, `Next ▶` and `✕`. An option whose letter is one of those four has no hotkey.
+The hotkeys work only where the keyboard is. The prompt holds it by default, so letters typed there stay in the prompt. The pane takes the keyboard as it opens, from `🪟 Open in a pane` or `/answers`; for the band, press ctrl+x then tab, or click it. Then `h`, `j`, `l` and `q` press `⏪ Prev`, `⏭️ Skip`, `⏩ Next` and `❎`, as their labels show, and Escape gives the keyboard back to the prompt. Options have no hotkey, so they read exactly as the skill writes them; click them, or move the focus to one and press Enter.
 
 ### Bringing the band back
 
-After `✕`, while any Decide item is open, the band leaves a single clickable `🧠` where it stood. Clicking it, or running `/answers`, shows the band again at the first item the draft doesn't answer, and re-reads the open items. With no item open, the `🧠` goes too, and `/answers` says there is nothing to answer.
+After `❎`, which also closes the pane, while any Decide item is open, the band leaves a single clickable `🧠` where it stood. Clicking it shows the band again, and `/answers` opens the pane, at the first item the draft doesn't answer, and re-reads the open items. With no item open, the `🧠` goes too, and `/answers` says there is nothing to answer.
 
 ### Buttons in the transcript
 
-The mod registers the tool `kanban_options`, listed as `mcp__coding-agent-kanban-answers__kanban_options`. The skill tells the agent to call it with the turn's Decide items right before writing its final response, so the tool's row, with a row of option buttons per item, sits just above the reply. Its buttons write the draft as the band's do. Once a refresh finds an item no longer open, its row is dimmed, marked `(settled)`, and its buttons do nothing.
+The mod registers the tool `kanban_options`, listed as `mcp__coding-agent-kanban-answers__kanban_options`. The skill tells the agent to call it with the turn's Decide items right before writing its final response, so the tool's row, with each item drawn in its own border as the band draws it, sits just above the reply. Its buttons write the draft as the band's do. Once a refresh finds an item no longer open, its row is dimmed, marked `(settled)`, and its buttons do nothing.
 
 ## Where the items come from
 
@@ -81,13 +92,13 @@ under `{"items": [...]}`. The `kanban_options` tool takes the same object. The s
 From the repository's dev shell:
 
 ```bash
-check-mods coding-agent-kanban-answers
+skills-dev mods check coding-agent-kanban-answers
 ```
 
-It runs [`../check-mods.sh`](../check-mods.sh), which with no name checks every mod in the repository: `claude plugin validate`, `tsc -p` and `claude plugin test`. `tsc` needs the Claude Code API declarations in `.claude-plugin/types/`, which the engine lays there when it loads the mod from a folder it watches; where none has, the script copies the running build's from the files its `plugin-authoring` skill wrote. To try the mod without installing it:
+It runs [`skills-dev`](../../scripts/skills_dev.py), which with no name checks every mod in the repository: `claude plugin validate`, `tsc -p` and `claude plugin test`. `tsc` needs the Claude Code API declarations in `.claude-plugin/types/`, which the engine lays there when it loads the mod from a folder it watches; where none has, the tool copies the running build's from the files its `plugin-authoring` skill wrote. To try the mod without installing it:
 
 ```bash
-claude --plugin-dir plugins/coding-agent-kanban-answers
+skills-dev mods try coding-agent-kanban-answers
 ```
 
 | File                                       | Holds                                                                                            |

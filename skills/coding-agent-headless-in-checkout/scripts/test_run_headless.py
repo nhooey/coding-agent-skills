@@ -267,9 +267,6 @@ class Admission(unittest.TestCase):
 
 class Runs(unittest.TestCase):
     def setUp(self):
-        self.level = mock.patch.object(run_headless, "read_pressure_level", return_value=(1, None))
-        self.level.start()
-        self.addCleanup(self.level.stop)
         self.tmp = tempfile.TemporaryDirectory()
         base = Path(self.tmp.name).resolve()
         self.alpha, self.beta = (make_repo(base / "src" / n) for n in ("alpha", "beta"))
@@ -302,8 +299,19 @@ class Runs(unittest.TestCase):
         return ["--prompt", "do the thing", "--job", "t1", "--progress-every", "0",
                 "--projects-root", str(self.projects), "--log-dir", str(self.logs)]
 
-    def run_one(self, checkout: Path, *extra: str, mode: str = "ok") -> tuple[int, str]:
-        """main() in this process, for one checkout; returns its exit status and stdout."""
+    def run_one(self, checkout: Path, *extra: str, mode: str = "ok",
+                levels: tuple[int, ...] = (1,), platform: str = "linux") -> tuple[int, str]:
+        """main() in this process, for one checkout; returns its exit status and stdout.
+
+        The memory pressure reader gives `levels` in turn, then repeats the last; `self.reads`
+        counts its calls. `platform` stands in for sys.platform.
+        """
+        self.reads = 0
+
+        def read() -> tuple[int, None]:
+            self.reads += 1
+            return levels[min(self.reads, len(levels)) - 1], None
+
         env = {**self.env, "FAKE_CLAUDE_MODE": mode}
         old = {k: os.environ.get(k) for k in [*env, "ANTHROPIC_API_KEY"]}
         os.environ.update(env)
@@ -311,7 +319,8 @@ class Runs(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                code = run_headless.main([*self.common(), *extra, str(checkout)])
+                code = run_headless.main([*self.common(), *extra, str(checkout)],
+                                         read=read, platform=platform)
         finally:
             for k, v in old.items():
                 if v is None:
@@ -361,54 +370,53 @@ class Runs(unittest.TestCase):
         self.assertEqual(self.run_one(self.beta, "--where", "checkout", "--session", "continue")[0], 0)
         self.assertEqual(self.recorded("src_beta")["argv"][:2], ["-p", "do the thing"])
 
-    def test_new_session_ignores_earlier_ones(self):
-        self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "new")[0], 0)
-        self.assertNotIn("--continue", self.recorded("src_alpha")["argv"])
+    def test_new_session_is_the_default_and_ignores_earlier_ones(self):
+        for chosen in ([], ["--session", "new"]):
+            with self.subTest(session=chosen or "default"):
+                self.assertEqual(self.run_one(self.alpha, "--where", "checkout", *chosen)[0], 0)
+                argv = self.recorded("src_alpha")["argv"]
+                self.assertNotIn("--continue", argv)
+                self.assertNotIn("--resume", argv)
+                self.assertIsNone(self.outcome("alpha")["resumed_from"])
 
     def test_pressure_holds_a_run_until_it_eases(self):
-        with mock.patch.object(run_headless, "read_pressure_level",
-                               side_effect=[(2, None), (2, None), (1, None)]):
-            code, out = self.run_one(self.beta, "--admission-poll", "0")
+        code, out = self.run_one(self.beta, "--admission-poll", "0", levels=(2, 2, 1))
         self.assertEqual(code, 0)
         self.assertEqual(self.stderr.count("waiting beta"), 2)
         self.assertIn("waited", " ".join(json.loads(out)["notes"]))
 
     def test_admission_timeout_skips_the_run(self):
-        with mock.patch.object(run_headless, "read_pressure_level", return_value=(4, None)):
-            code, out = self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0")
+        code, out = self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0",
+                                 levels=(4,))
         self.assertEqual(code, 3)
         self.assertEqual(json.loads(out)["status"], "skipped")
         self.assertIn("level 4", json.loads(out)["result"])
         self.assertFalse(any(self.record.iterdir()), "claude must not have started")
         self.assertFalse(run_headless.worktree_path(self.beta, "t1").exists())
 
-    def test_no_admission_starts_at_once_and_never_reads_the_level(self):
-        with mock.patch.object(run_headless, "read_pressure_level", return_value=(4, None)) as read:
-            code, _ = self.run_one(self.beta, "--no-admission")
-        self.assertEqual(code, 0)
-        read.assert_not_called()
+    def test_no_admission_starts_under_pressure_that_would_skip_the_run(self):
+        code, out = self.run_one(self.beta, "--no-admission", "--admission-timeout", "0",
+                                 levels=(4,))
+        self.assertEqual((code, json.loads(out)["status"]), (0, "ok"))
+        self.assertTrue((self.record / "beta.worktrees_headless-t1.json").is_file(),
+                        "claude must have started")
+        self.assertNotIn("waiting", self.stderr)
+        self.assertNotIn("pressure", " ".join(json.loads(out)["notes"]))
+        self.assertEqual(self.reads, 0)
 
     def test_run_carries_the_priority_prefix_ahead_of_claude(self):
-        with mock.patch.object(run_headless.sys, "platform", "darwin"):
-            code, _ = self.run_one(self.beta)
+        code, _ = self.run_one(self.beta, platform="darwin")
         self.assertEqual(code, 0)
         self.assertEqual((self.record / "taskpolicy.txt").read_text(), "-c utility\n")
         self.assertEqual(self.recorded("beta.worktrees_headless-t1")["argv"][:2], ["-p", "do the thing"])
 
     def test_dry_run_shows_the_prefix_and_the_level_it_read(self):
-        with mock.patch.object(run_headless.sys, "platform", "darwin"), \
-                mock.patch.object(run_headless, "read_pressure_level", return_value=(2, None)):
-            code, out = self.run_one(self.beta, "--dry-run")
+        code, out = self.run_one(self.beta, "--dry-run", levels=(2,), platform="darwin")
         plan = json.loads(out)
         self.assertEqual((code, plan["prefix"], plan["pressure_level"]),
                          (0, ["taskpolicy", "-c", "utility"], 2))
         code, out = self.run_one(self.beta, "--dry-run", "--no-admission")
         self.assertIsNone(json.loads(out)["pressure_level"])
-
-    def test_new_session_is_the_default(self):
-        self.assertEqual(self.run_one(self.alpha, "--where", "checkout")[0], 0)
-        self.assertNotIn("--continue", self.recorded("src_alpha")["argv"])
-        self.assertIsNone(self.outcome("alpha")["resumed_from"])
 
     def test_continuing_a_recent_session_warns_that_it_may_be_live(self):
         self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "continue")[0], 0)
@@ -542,8 +550,7 @@ class Runs(unittest.TestCase):
         self.assertEqual(seen[-1]["branch"], "main")
 
     def test_status_file_shows_waiting_then_skipped(self):
-        with mock.patch.object(run_headless, "read_pressure_level", return_value=(4, None)):
-            self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0")
+        self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0", levels=(4,))
         status = self.status("beta")
         self.assertEqual((status["state"], status["session_id"], status["tool_calls"]),
                          ("skipped", None, 0))

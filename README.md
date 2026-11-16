@@ -69,20 +69,30 @@ Package outputs:
 ```bash
 nix develop      # enter the dev shell; run `menu` to list commands
 nix fmt          # nixfmt over *.nix, prettier over *.md / *.yaml
-nix flake check  # runs the treefmt check (fails on any unformatted file)
+nix flake check  # the treefmt check and the skills' script tests
 ```
 
 The dev shell provides `check`, `fmt`, and `update-flake` commands plus
-`reap-skills` / `update-skills-devshell`. Its own toolchain skills (the git/GitHub
-pack and skillspkgs' `authoring` combination) live in the runtime
-[`skills-devshell/`](skills-devshell/) sub-flake and are invoked at run time, so
-the root flake stays a leaf with zero skill inputs in its lock.
+`reap-skills` / `update-skills-devshell`, and this repository's own tool,
+[`skills-dev`](scripts/skills_dev.py): `skills-dev test` runs the skills' script
+tests outside the sandbox, `skills-dev mods check` validates, type-checks and
+tests the Claude Code mods under [`plugins/`](plugins/), and `skills-dev mods
+try` starts Claude Code with one mod loaded. `mods check` runs outside
+`nix flake check` because it needs `claude` itself and the API types its
+running build writes. The dev shell's own toolchain skills (the git, shell and
+Python packs, a few coding-agent skills, and skillspkgs' `authoring`
+combination) live in the runtime [`skills-devshell/`](skills-devshell/)
+sub-flake and are invoked at run time, so the root flake stays a leaf with zero
+skill inputs in its lock.
 
 ## Layout
 
 ```
 skills/                  one directory per skill (SKILL.md + per-skill flake.nix)
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
+scripts/                 `skills-dev`, the dev shell's tool for this repository, and its tests
+plugins/                 Claude Code mods, checked by `skills-dev mods check`
+agents/plans/            the project's plans, as a graph of Markdown nodes
 source.nix               the upstream owner, shared by the root and every skill flake
 flake.nix                builds skills via agent-skill-flake; wires the dev shell + treefmt
 ```

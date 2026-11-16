@@ -9,8 +9,8 @@ reads transcripts through `reply_turns.py` (imported, not copied).
 The relative index counts the turns `reply_turns.py list` prints, which are every turn the user sees a usage
 line for, an agent message (`<agent-message`) or a task notification included: the current turn is
 0 (`₀`), the one before it -1 (`₋₁`), and so on. Items are the top-level bullet or numbered lines of
-the Pending (once Unfinished, before that Open), Waiting, Review (once To review), Todo (once To do) and Decide
-(once Decisions, before that Blocked) lists of every reply, and of the 📌 section's subsections ("Still open from earlier" or
+the Pending, Waiting, Review, Todo and Decide lists of every reply (or their aliases in older replies: Unfinished or
+Open, To review, To do, Decisions or Blocked), and of the 📌 section's subsections ("Still open from earlier" or
 "Outstanding from previous turns"), which carry the same list headers. An item's summary is its bold text without a trailing colon, else the line. A summary
 alone on its line is joined to the line beneath it, its body.
 
@@ -50,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import itertools
 import re
 import sys
 from dataclasses import dataclass, replace
@@ -61,8 +62,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lint_reply  # noqa: E402
 import reply_turns as rt  # noqa: E402
 
-# list key -> (reply header names, glyph, header text), in the skill's order; the later names are the headers earlier
-# turns carry, from before the user's renames
+# list key -> (reply header names, glyph, header text), in the skill's order; the later names are aliases that older
+# replies carry
 LISTS = {
     "pending": (("Pending", "Unfinished", "Open"), "🚧", "Pending"),
     "waiting": (("Waiting",), "🤔", "Waiting"),
@@ -70,7 +71,7 @@ LISTS = {
     "todo": (("Todo", "To do"), "👉", "Todo"),
     "decide": (("Decide", "Decisions", "Blocked"), "🧠", "Decide"),
 }
-# `--lists` keys from before the renames
+# `--lists` aliases, the keys named after those older headers
 _OLD_KEYS = {"open": "pending", "unfinished": "pending", "blocked": "decide", "decisions": "decide"}
 _KEY_OF_NAME = {name: key for key, (names, _, _) in LISTS.items() for name in names}
 _PIN = re.compile(r"^\s*📌\s+\*\*(Still open from earlier|Outstanding from previous turns):\*\*")
@@ -413,6 +414,11 @@ _ANSWER_NUMBER = re.compile(r"^\s*(\d+)[.:]\s*[A-Z](?:\s*,\s*[A-Z])*\s*$")
 class DecideOption:
     letter: str
     name: str
+    glyph: str = ""
+    consequence: str = ""
+    pros: tuple[str, ...] = ()
+    cons: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -422,6 +428,7 @@ class DecideItem:
     summary: str
     kind: str
     options: tuple[DecideOption, ...]
+    note: tuple[str, ...] = ()
 
     @property
     def ref(self) -> str:
@@ -436,7 +443,19 @@ class DecideItem:
             "summary": self.summary,
             "kind": self.kind,
             "ref": self.ref,
-            "options": [{"letter": o.letter, "name": o.name} for o in self.options],
+            "note": list(self.note),
+            "options": [
+                {
+                    "letter": o.letter,
+                    "name": o.name,
+                    "glyph": o.glyph,
+                    "consequence": o.consequence,
+                    "pros": list(o.pros),
+                    "cons": list(o.cons),
+                    "notes": list(o.notes),
+                }
+                for o in self.options
+            ],
         }
 
 
@@ -445,17 +464,43 @@ def _kind(glyphs: tuple[str, ...]) -> str:
     return "checkbox" if "checkbox" in kinds else "binary" if "binary" in kinds else "radio"
 
 
+def _plain_lines(lines: tuple[str, ...]) -> tuple[str, ...]:
+    """Text lines with their indent and hard-break spaces gone, separator and blank lines dropped."""
+    return tuple(s for s in (line.strip().strip("\u2800").strip() for line in lines) if s)
+
+
+def _option(match: re.Match[str], lines: tuple[str, ...]) -> DecideOption:
+    """One option and the ➕, ➖ and note lines under it, up to the next option or the blank line ending the list."""
+    rest = match.string[match.end() :].split("\n", 1)[0].strip()
+    plain = _plain_lines(tuple(itertools.takewhile(lambda line: line.strip() != "", lines)))
+    return DecideOption(
+        match.group(2),
+        match.group(3).strip().rstrip(":").strip(),
+        match.group(1),
+        rest.lstrip(":").strip(),
+        tuple(s.removeprefix("➕").strip() for s in plain if s.startswith("➕")),
+        tuple(s.removeprefix("➖").strip() for s in plain if s.startswith("➖")),
+        tuple(s for s in plain if not s.startswith(("➕", "➖"))),
+    )
+
+
 def _decide_item(turn_id: str, chunk: str) -> DecideItem | None:
     """One numbered item of a Decide list, from its line to the next item's; None where it holds no option."""
     head = _DECIDE_ITEM.match(chunk)
-    options = tuple(_DECIDE_OPTION.findall(chunk))
+    found = tuple(_DECIDE_OPTION.finditer(chunk))
+    ends = (*(m.start() for m in found[1:]), len(chunk))
+    options = tuple(
+        _option(m, tuple(chunk[m.end() : end].split("\n")[1:])) for m, end in zip(found, ends)
+    )
+    note = _plain_lines(tuple(chunk[head.end() : found[0].start()].split("\n")[1:])) if head and found else ()
     return (
         DecideItem(
             turn_id,
             int(head.group(1)),
             head.group(2).strip().rstrip(":").strip(),
-            _kind(tuple(g for g, _, _ in options)),
-            tuple(DecideOption(letter, name.strip().rstrip(":").strip()) for _, letter, name in options),
+            _kind(tuple(o.glyph for o in options)),
+            options,
+            note,
         )
         if head and options
         else None
