@@ -590,7 +590,9 @@ def live_note(session: Path | None, within_minutes: float) -> str | None:
             "this run forks it and won't see what it does next")
 
 
-def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) -> Plan:
+def plan_for(
+    checkout: Path, label: str, prompt: str, args: argparse.Namespace, platform: str = sys.platform
+) -> Plan:
     resume = newest_session(checkout, args.projects_root) if args.session == "continue" else None
     workdir = worktree_path(checkout, args.job) if args.where == "worktree" else checkout
     notes, skip = [], None
@@ -621,14 +623,19 @@ def plan_for(checkout: Path, label: str, prompt: str, args: argparse.Namespace) 
     if args.session == "continue" and resume is None and not dirty:
         notes.append("no earlier session; starting a new one")
     return Plan(label, str(checkout), str(workdir), str(resume) if resume else None,
-                command, notes, skip, taskpolicy_prefix(sys.platform))
+                command, notes, skip, taskpolicy_prefix(platform))
 
 
 def no_status(state: str, ended: float | None = None, final: dict | None = None) -> None:
     return None
 
 
-def run(plan: Plan, args: argparse.Namespace, status: StatusWriter = no_status) -> Outcome:
+def run(
+    plan: Plan,
+    args: argparse.Namespace,
+    status: StatusWriter = no_status,
+    read: Callable[[], tuple[int, str | None]] = read_pressure_level,
+) -> Outcome:
     checkout = Path(plan.checkout)
     outcome = Outcome(plan.label, plan.checkout, plan.workdir, "skipped",
                       resumed_from=plan.resume, notes=list(plan.notes))
@@ -638,7 +645,7 @@ def run(plan: Plan, args: argparse.Namespace, status: StatusWriter = no_status) 
     if not args.no_admission:
         timeout = args.admission_timeout * 60 if args.admission_timeout is not None else None
         status("waiting")
-        admission = await_admission(plan.label, timeout, read=read_pressure_level,
+        admission = await_admission(plan.label, timeout, read=read,
                                     poll=args.admission_poll, on_wait=lambda: status("waiting"))
         outcome.notes.extend(admission.notes)
         if admission.action == GIVE_UP:
@@ -776,7 +783,15 @@ def read_prompt(args: argparse.Namespace) -> str:
     return args.prompt_file.read_text()
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    read: Callable[[], tuple[int, str | None]] | None = None,
+    platform: str = sys.platform,
+) -> int:
+    """The command line. `read` gives the memory pressure level, by default through sysctl on
+    `platform`; tests pass both rather than patching the module."""
+    read = read or (lambda: read_pressure_level(platform))
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if os.environ.get("ANTHROPIC_API_KEY") and not args.allow_api_key and not args.dry_run:
         print("ANTHROPIC_API_KEY is set, so `claude -p` would bill the API instead of your "
@@ -791,13 +806,13 @@ def main(argv: list[str] | None = None) -> int:
     if checkout is None:
         print(f"not a git checkout: {args.checkout}", file=sys.stderr)
         return 2
-    plan = plan_for(checkout, args.label or checkout.name, prompt, args)
+    plan = plan_for(checkout, args.label or checkout.name, prompt, args, platform)
     for note in plan.notes:
         if "may still be running" in note:
             say(f"warning {plan.label}: {note}")
 
     if args.dry_run:
-        level, note = (None, None) if args.no_admission else read_pressure_level()
+        level, note = (None, None) if args.no_admission else read()
         print(json.dumps(asdict(plan) | {
             "command": plan.command[:2] + ["<prompt>"] + plan.command[3:],
             "pressure_level": level,
@@ -816,7 +831,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     status = status_writer(args.log_dir / f"{plan.label}.status.json", base,
                            log=log, projects_root=args.projects_root)
-    outcome = run(plan, args, status)
+    outcome = run(plan, args, status, read)
     status(outcome.status, ended=time.time(),
            final={"session_id": outcome.session_id, "turns": outcome.turns})
     first = outcome.result.splitlines()[0][:120] if outcome.result else ""
