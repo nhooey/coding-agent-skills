@@ -117,6 +117,10 @@
                 ./skills/coding-agent-route-feedback-to-skills-over-memory/scripts/memory_write_reminder.py
                 ./skills/coding-agent-browser-selection/scripts/browser-check-hook.sh
                 ./skills/coding-agent-browser-selection/scripts/browser_check_hook.py
+                ./skills/coding-agent-kanban-turn-responses/scripts/reply-lint-hook.sh
+                ./skills/coding-agent-kanban-turn-responses/scripts/reply_lint_hook.py
+                ./skills/coding-agent-kanban-turn-responses/scripts/lint_reply.py
+                ./skills/coding-agent-kanban-turn-responses/scripts/reply_turns.py
               ];
             };
           };
@@ -140,14 +144,22 @@
           apps = base.apps.${system};
 
           # The kanban skill's reply linter, against its fixtures and the
-          # skill's own examples, and its transcript readers' and table drawer's tests.
+          # skill's own examples, its transcript readers' and table drawer's
+          # tests, and its Stop hook at each setting, end to end through bash.
           checks.kanban-lint-reply =
-            pkgs.runCommand "kanban-lint-reply-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+            pkgs.runCommand "kanban-lint-reply-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
               ''
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_lint_reply.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_turns.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_outstanding.py
                 python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_box_table.py
+                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_lint_hook.py
                 touch $out
               '';
 
