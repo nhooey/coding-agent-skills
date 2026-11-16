@@ -218,6 +218,21 @@
                 touch $out
               '';
 
+          # The memory write reminder against its fixture of Claude Code's
+          # memory path, and end to end through bash.
+          checks.memory-write-reminder =
+            pkgs.runCommand "memory-write-reminder-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
+              ''
+                python3 -I ${./skills/coding-agent-route-feedback-to-skills-over-memory}/scripts/test_memory_write_reminder.py
+                touch $out
+              '';
+
           # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
           # the module also surfaces a `checks.${system}.treefmt` so `nix flake
           # check` fails on any unformatted file. prettier's includes are pinned
