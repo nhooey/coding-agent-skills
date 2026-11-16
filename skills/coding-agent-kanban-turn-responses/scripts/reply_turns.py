@@ -13,8 +13,9 @@ holding `<session>.jsonl` is used. The session is `CLAUDE_CODE_SESSION_ID`, over
 `python3 scripts/reply_turns.py <subcommand>`. Standard library only.
 
 A turn starts at a `user` record with `turnOrigin` `human`, `peer` (an agent's `<agent-message`
-report) or `task_notification`, not a sidechain and not a compaction summary: the user sees a usage line
-for each, so each counts as a turn. Its reply is the `text` blocks of the `assistant` records, not
+report) or `task_notification`, or one carrying `pluginPrompt` (a prompt a mod submitted, such as the
+kanban-answers band's `reassess`, read as the text the mod sent), not a sidechain and not a compaction
+summary: the user sees a usage line for each, so each counts as a turn. Its reply is the `text` blocks of the `assistant` records, not
 sidechain, up to the next such prompt; tool results belong to the turn under way. The global
 `--human-only` flag keeps the earlier reading, where only a `human` prompt opens a turn and a peer or
 task-notification record belongs to the turn under way. A turn id is the first 8
@@ -75,6 +76,7 @@ class Turn:
     prompt: str
     replies: tuple[str, ...] = ()
     reply_times: tuple[str, ...] = ()  # each reply text's record timestamp, parallel to replies
+    asides: tuple[str, ...] = ()  # what the user sent while the turn ran, each message whole
 
     @property
     def id(self) -> str:
@@ -113,12 +115,36 @@ def _text_of(content: object) -> str:
     )
 
 
+def _plugin_text(record: dict) -> str | None:
+    """A prompt a plugin submitted, such as the kanban-answers band's `reassess`: the text it sent."""
+    text = (record.get("pluginPrompt") or {}).get("text")
+    return text if isinstance(text, str) else None
+
+
 def _is_prompt(record: dict, origins: frozenset[str] = _ALL_ORIGINS) -> bool:
     return (
         record.get("type") == "user"
-        and record.get("turnOrigin") in origins
+        and (record.get("turnOrigin") in origins or _plugin_text(record) is not None)
         and not record.get("isSidechain")
         and not record.get("isCompactSummary")
+    )
+
+
+def _prompt_of(record: dict) -> str:
+    """A plugin's prompt reads as the text it sent, not the wrapper Claude Code puts round it."""
+    plugin = _plugin_text(record)
+    return plugin if plugin is not None else _text_of(record.get("message", {}).get("content", ""))
+
+
+def _is_aside(record: dict) -> bool:
+    """A message the user sent while a turn ran: the transcript keeps it as a queued_command attachment."""
+    attachment = record.get("attachment") or {}
+    return (
+        record.get("type") == "attachment"
+        and not record.get("isSidechain")
+        and attachment.get("type") == "queued_command"
+        and (attachment.get("origin") or {}).get("kind") == "human"
+        and isinstance(attachment.get("prompt"), str)
     )
 
 
@@ -135,7 +161,7 @@ def _step(turns: tuple[Turn, ...], record: dict, origins: frozenset[str] = _ALL_
                 prompt_id=record.get("promptId", ""),
                 uuid=record.get("uuid", ""),
                 timestamp=record.get("timestamp", ""),
-                prompt=_text_of(record.get("message", {}).get("content", "")),
+                prompt=_prompt_of(record),
             ),
         )
         if _is_prompt(record, origins)
@@ -149,7 +175,11 @@ def _step(turns: tuple[Turn, ...], record: dict, origins: frozenset[str] = _ALL_
                 ),
             )
             if _is_reply(record) and turns and text.strip()
-            else turns
+            else (
+                (*turns[:-1], replace(turns[-1], asides=(*turns[-1].asides, record["attachment"]["prompt"])))
+                if _is_aside(record) and turns
+                else turns
+            )
         )
     )
 

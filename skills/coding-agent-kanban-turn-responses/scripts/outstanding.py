@@ -402,11 +402,23 @@ def render_due(turns: tuple[rt.Turn, ...], now: datetime) -> str:
 _DECIDE_ITEM = re.compile(r"^ {0,3}(\d+)[.)]\s+\*\*(.+?)\*\*", re.MULTILINE)
 _DECIDE_OPTION = re.compile(r"^\s*(🔘|🔲|👍|👎)\s+([A-Z])\.\s+\*\*(.+?)\*\*", re.MULTILINE)
 _KIND_OF_GLYPH = {"🔘": "radio", "🔲": "checkbox", "👍": "binary", "👎": "binary"}
-# An answer naming its turn: `9efb08a1.Decide.2.B`, `9efb08a.Decide.2: B,C`, or `Decide.2.B of 9efb08a1`.
-_ANSWER_WITH_ID = re.compile(r"\b([0-9a-f]{6,8})\.Decide\.(\d+)(?:\.|:\s*|\s+)[A-Z](?:\s*,\s*[A-Z])*\b")
-_ANSWER_ID_AFTER = re.compile(r"\bDecide\.(\d+)(?:\.|:\s*|\s+)[A-Z](?:\s*,\s*[A-Z])*\s+(?:of|from)\s+([0-9a-f]{6,8})\b")
-# An answer to the last final response, naming no turn: `Decide.2.B`, `Decide.2: B`, or `2. B` opening a line.
-_ANSWER_BARE = re.compile(r"(?<![0-9a-f]\.)\bDecide\.(\d+)(?:\.|:\s*|\s+)[A-Z](?:\s*,\s*[A-Z])*\b(?!\s+(?:of|from)\s)")
+# What follows an item's reference in an answer: its letters after a dot, `.B` or `.A,C`, a note or
+# not after them; its letters after a colon or a space, `: B` or ` A, C`, only where they end the line
+# or another reference or `of <turn>` follows, so `Decide.2: A red one` is not option A; or, after a
+# colon, words, `Decide.2: I'd rather wait`, an answer in the user's own words.
+_LETTERS = r"[A-Z](?:\s*,\s*[A-Z])*"
+_AFTER_REF = (
+    rf"(?:\.{_LETTERS}(?!\w)"
+    rf"|(?::\s*|\s+){_LETTERS}(?=\s*$|\s+(?:of|from)\s|\s+(?:[0-9a-f]{{6,8}}\.)?Decide\.)"
+    r"|:\s*(?=\S))"
+)
+# An answer naming its turn: `9efb08a1.Decide.2.B`, `9efb08a.Decide.2: B,C`, `9efb08a1.Decide.2: <words>`,
+# or `Decide.2.B of 9efb08a1`.
+_ANSWER_WITH_ID = re.compile(rf"\b([0-9a-f]{{6,8}})\.Decide\.(\d+){_AFTER_REF}")
+_ANSWER_ID_AFTER = re.compile(rf"\bDecide\.(\d+)(?:\.|:\s*|\s+){_LETTERS}\s+(?:of|from)\s+([0-9a-f]{{6,8}})\b")
+# An answer to the last final response, naming no turn: `Decide.2.B`, `Decide.2: B`, `Decide.2: <words>`,
+# or `2. B` opening a line.
+_ANSWER_BARE = re.compile(rf"(?<![0-9a-f]\.)\bDecide\.(\d+){_AFTER_REF}(?!\s+(?:of|from)\s)")
 _ANSWER_NUMBER = re.compile(r"^\s*(\d+)[.:]\s*[A-Z](?:\s*,\s*[A-Z])*\s*$")
 
 
@@ -534,11 +546,13 @@ def _answers_of_line(line: str, previous_id: str) -> frozenset[tuple[str, int]]:
 
 
 def answered(turns: tuple[rt.Turn, ...]) -> frozenset[tuple[str, int]]:
-    """Every (turn id or prefix, item number) a prompt answers with an option; a bare answer means the turn before it."""
+    """Every (turn id or prefix, item number) a prompt, or a message sent while its turn ran, answers with an option
+    or in words; a bare answer means the turn before it."""
     return frozenset(
         pair
         for previous, turn in zip(turns, turns[1:])
-        for line in turn.prompt.splitlines()
+        for text in (turn.prompt, *turn.asides)
+        for line in text.splitlines()
         for pair in _answers_of_line(line, previous.id)
     )
 
