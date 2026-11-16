@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from typing import Callable
 
 APPS = (
     "Google Chrome",
@@ -102,11 +103,11 @@ def is_running(app: str) -> bool:
     return (osascript(f'application "{app}" is running') or "").strip() == "true"
 
 
-def windows(app: str) -> list[tuple[str, str, str, list[str]]] | None:
-    """Return (id, given name, title, tab URLs) for each window of a running app."""
-    out = osascript(WINDOWS_SCRIPT.format(app=app))
-    if out is None:
-        return None
+Window = tuple[str, str, str, list[str]]  # id, given name, title, tab URLs
+
+
+def parse_windows(out: str) -> list[Window]:
+    """Each window of WINDOWS_SCRIPT's output: one tab-separated line per window, blank lines skipped."""
     rows = []
     for line in out.splitlines():
         if not line:
@@ -117,7 +118,13 @@ def windows(app: str) -> list[tuple[str, str, str, list[str]]] | None:
     return rows
 
 
-def running_apps() -> list[tuple[str, list[tuple[str, str, str, list[str]]]]]:
+def windows(app: str) -> list[Window] | None:
+    """Return (id, given name, title, tab URLs) for each window of a running app."""
+    out = osascript(WINDOWS_SCRIPT.format(app=app))
+    return None if out is None else parse_windows(out)
+
+
+def running_apps() -> list[tuple[str, list[Window]]]:
     found = []
     for app in APPS:
         if not is_running(app):
@@ -130,31 +137,47 @@ def running_apps() -> list[tuple[str, list[tuple[str, str, str, list[str]]]]]:
     return found
 
 
-def main(argv: list[str]) -> int:
-    if sys.platform != "darwin":
+def list_lines(found: list[tuple[str, list[Window]]], urls: bool) -> list[str]:
+    """`--list` output: one line per window, and under `--urls` each tab's URL after a tab."""
+    return [
+        line
+        for app, rows in found
+        for wid, gname, title, tabs in rows
+        for line in (f"{app}\t{wid}\t{gname}\t{title}", *((f"\t{url}" for url in tabs) if urls else ()))
+    ]
+
+
+def marker_lines(found: list[tuple[str, list[Window]]], marker: str) -> list[str]:
+    """One line per window holding a tab whose URL contains the marker."""
+    return [
+        f"{app}\t{wid}\t{gname}\t{title}"
+        for app, rows in found
+        for wid, gname, title, tabs in rows
+        if any(marker in url for url in tabs)
+    ]
+
+
+def main(
+    argv: list[str],
+    platform: str = sys.platform,
+    apps: Callable[[], list[tuple[str, list[Window]]]] = running_apps,
+) -> int:
+    """The command line; `platform` and `apps`, the windows of the running browsers, are passed in by tests."""
+    if platform != "darwin":
         print("which_browser: macOS only (it uses AppleScript)", file=sys.stderr)
         return 2
     args = argv[1:]
     if args and args[0] == "--list":
-        urls = "--urls" in args[1:]
-        for app, rows in running_apps():
-            for wid, gname, title, tabs in rows:
-                print(f"{app}\t{wid}\t{gname}\t{title}")
-                if urls:
-                    for url in tabs:
-                        print(f"\t{url}")
+        for line in list_lines(apps(), "--urls" in args[1:]):
+            print(line)
         return 0
     if len(args) != 1 or not args[0] or args[0].startswith("-"):
         print(__doc__.split("Usage:")[1].split("Output")[0].rstrip(), file=sys.stderr)
         return 2
-    marker = args[0]
-    hit = False
-    for app, rows in running_apps():
-        for wid, gname, title, tabs in rows:
-            if any(marker in url for url in tabs):
-                print(f"{app}\t{wid}\t{gname}\t{title}")
-                hit = True
-    return 0 if hit else 1
+    hits = marker_lines(apps(), args[0])
+    for line in hits:
+        print(line)
+    return 0 if hits else 1
 
 
 if __name__ == "__main__":
