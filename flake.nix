@@ -169,6 +169,26 @@
             '';
           };
 
+          # `check-hooks-plugin PLUGIN`: the hooks plugin's rules, each enforced
+          # by an existing tool: check-jsonschema, bash, shfmt, ruff and python3.
+          checkHooksPlugin = pkgs.writeShellApplication {
+            name = "check-hooks-plugin";
+            runtimeInputs = [
+              pkgs.bash
+              pkgs.check-jsonschema
+              pkgs.gawk
+              pkgs.jq
+              pkgs.python3
+              pkgs.ruff
+              pkgs.shfmt
+            ];
+            runtimeEnv.HOOKS_PLUGIN_SCHEMAS = lib.fileset.toSource {
+              root = ./nix/hooks-plugin-check;
+              fileset = lib.fileset.fileFilter (file: file.hasExt "json") ./nix/hooks-plugin-check;
+            };
+            text = builtins.readFile ./nix/hooks-plugin-check/check-hooks-plugin.sh;
+          };
+
           # One check per language, running `skill-tests <language>` on a
           # writable copy of the skills, the dev tools and their tests.
           testCheck =
@@ -218,20 +238,13 @@
             };
           };
 
-          # The built hooks plugin's manifest, hooks.json and scripts. The
-          # checker's own tests run in python-tests.
-          checks.hooks-plugin =
-            pkgs.runCommand "hooks-plugin-check"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.bash
-                ];
-              }
-              ''
-                python3 -I ${./scripts}/check_hooks_plugin.py ${config.packages.hooks-plugin}
-                touch $out
-              '';
+          # The built hooks plugin's manifest, hooks.json and scripts, each rule
+          # checked by the tool that owns it, as check-hooks-plugin.sh lists.
+          checks.hooks-plugin = pkgs.runCommand "hooks-plugin-check" { } ''
+            export HOME=$TMPDIR
+            ${lib.getExe checkHooksPlugin} ${config.packages.hooks-plugin}
+            touch $out
+          '';
 
           apps = base.apps.${system};
 

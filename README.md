@@ -86,8 +86,15 @@ A plugin hook runs in every session and subagent, whether or not the skill is lo
   The setting lives in the skill's preferences file, as [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md) describes: `.agents/skills/<skill>.preferences.md` in the project (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
   The skill documents the setting's line.
   `session-build-limits.sh` only adds to the environment and `memory-write-reminder.sh` only adds context, so they have none; `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, and is at `remind` unless set.
-- **Checks:** `nix flake check` runs each hook script's tests and `checks.hooks-plugin`, which builds the plugin and runs [`check_hooks_plugin.py`](scripts/check_hooks_plugin.py): every hook is a command hook running one of the plugin's scripts through `bash`, every script is run by a hook or named by one as its helper and parses, and the manifest has a name and version.
+- **Checks:** `nix flake check` runs each hook script's tests and `checks.hooks-plugin`, which builds the plugin and runs [`check-hooks-plugin.sh`](nix/hooks-plugin-check/check-hooks-plugin.sh) on it.
   `claude plugin validate` on the built plugin checks it as Claude Code reads it.
+  `check-hooks-plugin.sh` enforces each rule with an existing tool:
+  - check-jsonschema, against [`plugin.schema.json`](nix/hooks-plugin-check/plugin.schema.json) and [`hooks.schema.json`](nix/hooks-plugin-check/hooks.schema.json): the manifest has a name and version, and every hook is a command hook running one of the plugin's scripts through `bash`
+  - `bash -n`: every script a hook runs is there and parses
+  - shfmt's syntax tree: every Python helper a hook script names, outside its comments, is there
+  - ruff's `PLC0415`: every import in the plugin's Python is at the top of its module
+  - `python3 -E -s -S`: importing each `.py` compiles it and finds every module it imports, in the standard library or beside it, since the hooks run Python with `-I -S`
+  - `python3 -X importtime`: every script is a hook, a helper a hook names, or a module such a helper imports
 - **Installing it:** agent-plugins-nixpkgs passes `hooks-plugin` through, and a nix-darwin configuration adds it to `services.agent-plugins.plugins`, which enables it in managed settings.
   To try it in one session, pass the store path to `claude --plugin-dir`.
 
@@ -111,10 +118,10 @@ The dev shell's own toolchain skills (the git, shell and Python packs, a few cod
 skills/                  one directory per skill (SKILL.md + per-skill flake.nix)
 tests/                   each skill's tests in tests/<skill>/, and the layout test
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
-scripts/                 `skills-dev mods`, the hooks plugin's checker, and their tests
+scripts/                 `skills-dev mods` and its tests
 plugins/                 Claude Code mods, checked by `skills-dev mods check`
 plugin/                  the hooks plugin's manifest and hooks.json; scripts come from skills/
-nix/                     the hooks plugin's builder
+nix/                     the hooks plugin's builder and its check
 agents/plans/            the project's plans, as a graph of Markdown nodes
 source.nix               the upstream owner, shared by the root and every skill flake
 flake.nix                builds skills via agent-skill-flake; wires the dev shell + treefmt

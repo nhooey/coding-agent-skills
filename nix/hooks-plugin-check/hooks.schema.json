@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The hooks plugin's hooks/hooks.json",
+  "description": "Every hook is a command hook that runs one of the plugin's own scripts through bash, since a store file has no executable bit to rely on.",
+  "type": "object",
+  "required": ["hooks"],
+  "properties": {
+    "description": { "type": "string" },
+    "hooks": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "enum": [
+          "PreToolUse",
+          "PostToolUse",
+          "PostToolUseFailure",
+          "PermissionRequest",
+          "Notification",
+          "UserPromptSubmit",
+          "SessionStart",
+          "SessionEnd",
+          "Stop",
+          "SubagentStart",
+          "SubagentStop",
+          "PreCompact"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["hooks"],
+          "properties": {
+            "matcher": { "type": "string" },
+            "hooks": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["type", "command"],
+                "properties": {
+                  "type": { "const": "command" },
+                  "command": {
+                    "type": "string",
+                    "pattern": "^bash \"\\$\\{CLAUDE_PLUGIN_ROOT\\}/scripts/[^\"/]+\"$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
