@@ -75,6 +75,22 @@ class CheckHooksPlugin(unittest.TestCase):
         found = self.problems(session_start(), scripts=scripts)
         self.assertTrue(any(p.startswith("scripts/helper.py:") for p in found), found)
 
+    def test_a_module_a_helper_imports_passes(self):
+        scripts = {
+            "hook.sh": 'exec python3 -I -S "$(dirname "$0")/helper.py"\n',
+            "helper.py": "import json\nfrom lib import thing\n",
+            "lib.py": "thing = 1\n",
+        }
+        self.assertEqual(self.problems(session_start(), scripts=scripts), [])
+
+    def test_a_module_a_helper_imports_but_the_plugin_lacks_is_reported(self):
+        scripts = {
+            "hook.sh": '# helper.py hands its graph work to lib.py\nexec python3 -I -S "$(dirname "$0")/helper.py"\n',
+            "helper.py": "import lib\n",
+        }
+        found = self.problems(session_start(), scripts=scripts)
+        self.assertIn("scripts/helper.py: imports lib, but there is no scripts/lib.py", found)
+
     def test_a_script_bash_cannot_parse_is_reported(self):
         found = self.problems(session_start(), scripts={"hook.sh": "if then fi (\n"})
         self.assertTrue(any(p.startswith("scripts/hook.sh:") for p in found), found)

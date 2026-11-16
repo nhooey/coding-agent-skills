@@ -6,10 +6,13 @@ Usage: check_hooks_plugin.py <plugin folder>
 Every hook must be a command hook that runs one of the plugin's own scripts as
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, and each such script must parse
 as bash. Every other file under scripts/ must be a helper that a hook's script
-names, such as the Python a bash hook hands its work to, and a `.py` helper must
-compile. Prints one line per problem and exits 1 if there are any.
+names, such as the Python a bash hook hands its work to, or a module such a
+helper imports. A `.py` helper must compile, and every module it imports from
+outside the standard library must be a helper beside it, since the hooks run
+Python with `-I -S`. Prints one line per problem and exits 1 if there are any.
 """
 
+import ast
 import json
 import pathlib
 import re
@@ -92,18 +95,43 @@ def check_hooks(root, problems):
     return run
 
 
+def imported_modules(text):
+    """The top-level names of the modules a Python source imports, outside the standard library."""
+    names = set()
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, ast.Import):
+            names.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            names.add(node.module.split(".")[0])
+    return names - set(sys.stdlib_module_names) - {"__future__"}
+
+
 def check_scripts(root, run, problems):
     scripts = root / "scripts"
     present = {p.name for p in scripts.iterdir() if p.is_file()} if scripts.is_dir() else set()
     hook_texts = [(scripts / name).read_text() for name in sorted(present & run)]
-    for name in sorted(present - run):
-        if not any(name in text for text in hook_texts):
-            problems.append(f"scripts/{name}: no hook runs it")
-        elif name.endswith(".py"):
-            try:
-                compile((scripts / name).read_text(), name, "exec")
-            except SyntaxError as err:
-                problems.append(f"scripts/{name}: {err}")
+    named = {name for name in present - run if any(name in text for text in hook_texts)}
+    imported = set()
+    pending, seen = sorted(n for n in named if n.endswith(".py")), set()
+    while pending:
+        name = pending.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            modules = imported_modules((scripts / name).read_text())
+        except SyntaxError as err:
+            problems.append(f"scripts/{name}: {err}")
+            continue
+        for module in sorted(modules):
+            helper = f"{module}.py"
+            if helper in present:
+                imported.add(helper)
+                pending.append(helper)
+            else:
+                problems.append(f"scripts/{name}: imports {module}, but there is no scripts/{helper}")
+    for name in sorted(present - run - named - imported):
+        problems.append(f"scripts/{name}: no hook runs it")
     for name in sorted(present & run):
         parsed = subprocess.run(["bash", "-n", str(scripts / name)], capture_output=True, text=True)
         if parsed.returncode != 0:
