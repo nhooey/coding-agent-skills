@@ -124,6 +124,27 @@ class TurnsOfTest(unittest.TestCase):
         self.assertEqual(turns[0].reply_times, ("2026-11-16T10:00:30Z",) * 2)
         self.assertEqual(turns[0].prompt, "first prompt\nsecond line")
 
+    def test_a_message_sent_while_a_turn_ran_is_one_of_its_asides(self) -> None:
+        aside = {
+            "type": "attachment",
+            "attachment": {"type": "queued_command", "prompt": "Decide.1.Y", "origin": {"kind": "human"}},
+        }
+        peer = {"type": "attachment", "attachment": {**aside["attachment"], "origin": {"kind": "peer"}}}
+        turns = reply_turns.turns_of((prompt(FIRST, "go"), reply("one"), aside, peer))
+        self.assertEqual(turns[0].asides, ("Decide.1.Y",))
+
+    def test_a_prompt_a_plugin_submitted_opens_a_turn_with_the_text_it_sent(self) -> None:
+        submitted = prompt(
+            SECOND,
+            "The coding-agent-kanban-answers plugin sent a message:\nreassess\n\nThis is how Claude Code…",
+            origin="system",
+            pluginPrompt={"name": "coding-agent-kanban-answers", "text": "reassess"},
+        )
+        system = prompt(THIRD, "a system prompt", origin="system")
+        turns = reply_turns.turns_of((prompt(FIRST, "go"), reply("one"), submitted, reply("two"), system))
+        self.assertEqual([(t.id, t.prompt) for t in turns], [("aaaa1111", "go"), ("bbbb2222", "reassess")])
+        self.assertEqual(turns[1].replies, ("two",))
+
     def test_human_only_folds_other_prompts_into_the_turn_under_way(self) -> None:
         turns = reply_turns.turns_of(RECORDS, human_only=True)
         self.assertEqual([(t.id, t.replies) for t in turns], [("aaaa1111", ("one", "two", "three"))])

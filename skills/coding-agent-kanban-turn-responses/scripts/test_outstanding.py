@@ -196,6 +196,26 @@ class OpenDecideItemsTest(unittest.TestCase):
         )
         self.assertEqual(refs, ["9efb08a1.Decide.1", "9efb08a1.Decide.2", "9efb08a1.Decide.3"])
 
+    def test_an_answer_sent_while_a_turn_ran_settles_its_item(self) -> None:
+        aside = {
+            "type": "attachment",
+            "attachment": {"type": "queued_command", "prompt": "Decide.2.B", "origin": {"kind": "human"}},
+        }
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "something else", 1), aside)
+        self.assertEqual(refs, ["9efb08a1.Decide.1", "9efb08a1.Decide.3"])
+
+    def test_an_answer_in_words_settles_its_item_and_a_note_keeps_the_letters(self) -> None:
+        refs = self.open_refs(
+            prompt(FIRST, "go"),
+            reply(DECIDE_REPLY),
+            prompt(SECOND, "9efb08a1.Decide.1: A red one, please\n9efb08a1.Decide.3.N: not tonight", 1),
+        )
+        self.assertEqual(refs, ["9efb08a1.Decide.2"])
+
+    def test_a_reference_alone_answers_nothing(self) -> None:
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "see 9efb08a1.Decide.1 again", 1))
+        self.assertIn("9efb08a1.Decide.1", refs)
+
     def test_a_question_answers_nothing(self) -> None:
         refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "9efb08a1.Decide.1.B? how would B work", 1))
         self.assertIn("9efb08a1.Decide.1", refs)
