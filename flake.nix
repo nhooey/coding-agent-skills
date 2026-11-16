@@ -198,17 +198,20 @@
             touch $out
           '';
 
+          # plans.py, and its PostToolUse hook end to end through bash.
           checks.plans-as-graph =
             pkgs.runCommand "plans-as-graph-tests"
               {
                 nativeBuildInputs = [
                   pkgs.python3
                   pkgs.git
+                  pkgs.bash
                 ];
               }
               ''
                 export HOME=$TMPDIR
                 python3 -I ${./skills/coding-agent-plans-as-graph}/scripts/test_plans.py
+                python3 -I ${./skills/coding-agent-plans-as-graph}/scripts/test_plans_check_hook.py
                 touch $out
               '';
 
