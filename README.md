@@ -76,6 +76,7 @@ A plugin hook runs in every session and subagent, whether or not the skill is lo
   - the PostToolUse (`Write|Edit`) hook `plans-check-hook.sh`, with its helpers `plans_check_hook.py` and `plans.py`, from [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)
   - the PreToolUse (`Write|Edit`) hook `memory-write-reminder.sh`, with its helper `memory_write_reminder.py`, from [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md)
   - the PreToolUse (`mcp__claude-in-chrome__.*`) and PostToolUse (`Bash`, `select_browser`, `switch_browser`) hook `browser-check-hook.sh`, with its helper `browser_check_hook.py`, from [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)
+  - the Stop hook `reply-lint-hook.sh`, with its helpers `reply_lint_hook.py`, `lint_reply.py` and `reply_turns.py`, from [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)
 - **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and `hooks/hooks.json`.
   It isn't the repository root, so the plugin doesn't load `skills/` a second time under a namespaced name.
 - **The package:** `nix build .#hooks-plugin` copies `plugin/` and adds each hook script from its skill's `scripts/` to the plugin's `scripts/`.
@@ -85,7 +86,7 @@ A plugin hook runs in every session and subagent, whether or not the skill is lo
 - **A setting for blocking hooks:** a hook that can deny or block reads a setting that turns it down to a reminder or off, since a plugin enabled in managed settings can't be disabled in a session.
   The setting lives in the skill's preferences file, as [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md) describes: `.agents/skills/<skill>.preferences.md` in the project (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
   The skill documents the setting's line.
-  `session-build-limits.sh` only adds to the environment and `memory-write-reminder.sh` only adds context, so they have none; `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, and is at `remind` unless set.
+  `session-build-limits.sh` only adds to the environment and `memory-write-reminder.sh` only adds context, so they have none; `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, `browser-check-hook.sh` reads `Browser check: deny | remind | off` and `reply-lint-hook.sh` reads `Reply lint: block | remind | off`; each is at `remind` unless set.
 - **Checks:** `nix flake check` runs each hook script's tests and `checks.hooks-plugin`, which builds the plugin and runs [`check-hooks-plugin.sh`](nix/hooks-plugin-check/check-hooks-plugin.sh) on it.
   `claude plugin validate` on the built plugin checks it as Claude Code reads it.
   `check-hooks-plugin.sh` enforces each rule with an existing tool:
