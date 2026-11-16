@@ -1,5 +1,5 @@
 {
-  description = "coding-agent-scratchpad-scripts: Coding-agent skill — edit with the edit tools, run one-off checks inline, and promote anything run twice to a named, documented tool instead of a cryptic scratchpad script";
+  description = "coding-agent-scratchpad-scripts: Coding-agent skill — edit with the edit tools, run one-off checks inline, never source a generated file, and keep only named data in the scratchpad";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
