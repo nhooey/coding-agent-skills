@@ -13,8 +13,8 @@ holding `<session>.jsonl` is used. The session is `CLAUDE_CODE_SESSION_ID`, over
 `python3 scripts/reply_turns.py <subcommand>`. Standard library only.
 
 A turn starts at a `user` record with `turnOrigin` `human`, `peer` (an agent's `<agent-message`
-report) or `task_notification`, or one carrying `pluginPrompt` (a prompt a mod submitted, such as the
-kanban-answers band's `reassess`, read as the text the mod sent), not a sidechain and not a compaction
+report) or `task_notification`, or one carrying `pluginPrompt` (a prompt a mod submitted, such as a
+button's `reassess`, read as the text the mod sent), not a sidechain and not a compaction
 summary: the user sees a usage line for each, so each counts as a turn. Its reply is the `text` blocks of the `assistant` records, not
 sidechain, up to the next such prompt; tool results belong to the turn under way. The global
 `--human-only` flag keeps the earlier reading, where only a `human` prompt opens a turn and a peer or
@@ -116,7 +116,7 @@ def _text_of(content: object) -> str:
 
 
 def _plugin_text(record: dict) -> str | None:
-    """A prompt a plugin submitted, such as the kanban-answers band's `reassess`: the text it sent."""
+    """A prompt a plugin submitted, such as a button's `reassess`: the text it sent."""
     text = (record.get("pluginPrompt") or {}).get("text")
     return text if isinstance(text, str) else None
 

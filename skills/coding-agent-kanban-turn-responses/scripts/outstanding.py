@@ -34,7 +34,7 @@ Subcommands:
   decide [--json]            every open Decide item with its options, one line each, or with `--json`
                              one object `{"items": [...]}`, each item its turn id, list, number,
                              summary, kind (radio, checkbox or binary), reference and options (letter
-                             and name); the shape the kanban-answers mod reads and its tool takes.
+                             and name), for a tool to read.
                              Open: raised since the latest `recheck` (or `reassess`) turn, its latest restatement
                              only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing)
@@ -615,7 +615,7 @@ def parser() -> argparse.ArgumentParser:
     du = sub.add_parser("due", help="`full` or `counts <time left>`: whether this reply prints the full roll-up")
     du.add_argument("--now", metavar="ISO", help="the time to judge at, instead of the clock")
     de = sub.add_parser("decide", help="every open Decide item with its options")
-    de.add_argument("--json", action="store_true", help='print one object, {"items": [...]}, for the kanban-answers mod')
+    de.add_argument("--json", action="store_true", help='print one object, {"items": [...]}, for a tool to read')
     de.add_argument("--width", type=int, default=_DEFAULT_WIDTH, help="cut summaries to this width")
     return p
 

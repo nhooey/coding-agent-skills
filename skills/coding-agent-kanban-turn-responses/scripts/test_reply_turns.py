@@ -136,9 +136,9 @@ class TurnsOfTest(unittest.TestCase):
     def test_a_prompt_a_plugin_submitted_opens_a_turn_with_the_text_it_sent(self) -> None:
         submitted = prompt(
             SECOND,
-            "The coding-agent-kanban-answers plugin sent a message:\nreassess\n\nThis is how Claude Code…",
+            "The some-mod plugin sent a message:\nreassess\n\nThis is how Claude Code…",
             origin="system",
-            pluginPrompt={"name": "coding-agent-kanban-answers", "text": "reassess"},
+            pluginPrompt={"name": "some-mod", "text": "reassess"},
         )
         system = prompt(THIRD, "a system prompt", origin="system")
         turns = reply_turns.turns_of((prompt(FIRST, "go"), reply("one"), submitted, reply("two"), system))
