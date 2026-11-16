@@ -92,9 +92,41 @@
         '';
       };
       perSystem =
-        { system, pkgs, ... }:
         {
-          packages = base.packages.${system};
+          config,
+          system,
+          pkgs,
+          ...
+        }:
+        {
+          # The skills, and the hooks plugin `coding-agent-skills-hooks`: plugin/
+          # with each hook script copied in from its skill. A skill adds a hook
+          # by listing its script here and running it from plugin/hooks/hooks.json.
+          packages = base.packages.${system} // {
+            hooks-plugin = import ./nix/hooks-plugin.nix {
+              inherit pkgs;
+              src = ./plugin;
+              hookScripts = [
+                ./skills/coding-agent-session-build-limits/scripts/session-build-limits.sh
+              ];
+            };
+          };
+
+          # The built hooks plugin's manifest, hooks.json and scripts, and the
+          # checker's own tests.
+          checks.hooks-plugin =
+            pkgs.runCommand "hooks-plugin-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
+              ''
+                python3 -I ${./scripts}/test_check_hooks_plugin.py
+                python3 -I ${./scripts}/check_hooks_plugin.py ${config.packages.hooks-plugin}
+                touch $out
+              '';
 
           apps = base.apps.${system};
 
