@@ -28,6 +28,8 @@ A progress update is any text the agent writes between tool calls before the fin
 | 💤    | not started, nothing in its way              |
 | ❌    | failed or abandoned, with why in a few words |
 
+⏳ also heads the Waiting list, since both mean waiting on something other than the agent and the user.
+
 A step names its subject, never its category: "the 2020 resolutions", not "the documents". A progress update carries no lists, no 📌 roll-up and no decisions; anything that needs the user waits for the final response, unless the work cannot go on without it.
 
 ## The final response's lists
@@ -37,7 +39,7 @@ A step names its subject, never its category: "the 2020 resolutions", not "the d
 | ✅ **Done:**               | one item per change, with its file and commit; a clean check, with what it checked and the count                                                                                                  | nobody           | no                                                 |
 | 🚧 **Pending:**            | the agent's own work started and not finished, scope left out, a hold that will not announce itself when it lifts                                                                                 | the agent        | yes                                                |
 | 📝 **Logged:**             | one item per entry written into the project's backlog, by index and title                                                                                                                         | the next agent   | no                                                 |
-| 🤔 **Waiting:**            | a background shell, subagent, hand-off or expected message, and what the session does with its result                                                                                             | the thing itself | yes                                                |
+| ⏳ **Waiting:**            | a background shell, subagent, hand-off or expected message, and what the session does with its result                                                                                             | the thing itself | yes                                                |
 | ❓ **Answers:**            | one item per question the user asked that names no listed item, the question as the summary, shortened or reworded where that reads better, the answer under it                                   | nobody           | no                                                 |
 | 🔍 **Review:**             | one item per thing put in front of the user to read, listen to or look at, a pull request to review or merge among them, with where to open it and what to look for                               | the user         | yes, until the user's reply shows they reviewed it |
 | 👉 **Todo:**               | one item per action asked of the user that is neither a choice nor a reading: a file to mark up, a prompt to paste, a command to run; each says what to do, where, by its path, and what it frees | the user         | yes                                                |
@@ -53,7 +55,7 @@ A review that is itself a choice goes in 🧠 Decide, and a task that is not a r
 
 ## The shape
 
-- **Header:** the header line ends in a hard line break. The line under it holds one `▔` U+2594 per column of the header, the emoji counting 2, so `🤔 **Waiting:**` takes 11. The first item follows on the next line.
+- **Header:** the header line ends in a hard line break. The line under it holds one `▔` U+2594 per column of the header, the emoji counting 2, so `⏳ **Waiting:**` takes 11. The first item follows on the next line.
 - **Item:** a numbered item opens on its summary, in bold, alone on its line and ending in a hard line break; the rest of the item starts on the line beneath, at the column the summary starts at. The summary is a phrase, or the question for an Answers or a Decide item, with no trailing colon, since nothing follows it on its line. It names its subject, never its category, and the item to do first leads. A summary that says all there is, such as a check that passed, is the whole item. A bullet, such as a 📌 roll-up item, keeps its summary and text on one line. A Done item comes from the commit or the run output, never from memory. No item points back with a phrase like "the quotes" or "those episodes": each names what it means by its label, as `writing-hygiene-refer-by-canonical-label` says, since what set it up has scrolled away.
 - **Numbering:** each list numbers from 1 and nothing else in the final response is numbered except an item's own steps, so `Decide.2` names one thing. A second final response to the same prompt continues the numbering.
 - **Separator:** in every list, the 📌 roll-up included, a multi-line item is parted from each neighbour by the separator line of `markdown-hygiene-terminal-rendering`: the list's indent, U+2800 `⠀`, and nothing else, directly under the item's last line, with no blank line beside it inside the list. Since a summary has its line to itself, every item with more than its summary is multi-line, every Decide item among them. Items that are only their summary sit together, and the first item follows its header with no separator. `scripts/lint_reply.py` holds the character as `SEPARATOR`.
@@ -84,7 +86,7 @@ A review that is itself a choice goes in 🧠 Decide, and a task that is not a r
 
 ## Earlier turns' items
 
-The final response closes, before any ETA line, on what earlier turns left open and no later turn settled: every 🚧 Pending, 🤔 Waiting, 🔍 Review, 👉 Todo and 🧠 Decide item. It prints in full or as one count line, by the roll-up interval.
+The final response closes, before any ETA line, on what earlier turns left open and no later turn settled: every 🚧 Pending, ⏳ Waiting, 🔍 Review, 👉 Todo and 🧠 Decide item. It prints in full or as one count line, by the roll-up interval.
 
 **The roll-up interval.** The full roll-up prints once min(30 min, 5 × the average duration of the last 5 completed turns) has passed since the last final response that printed it in full; otherwise the final response closes on one count line.
 
@@ -94,7 +96,7 @@ The final response closes, before any ETA line, on what earlier turns left open 
 
 `scripts/outstanding.py due` prints `full`, or `counts` with the time until the full roll-up is due.
 
-**The count line** names each list by its glyph and count, in the lists' order, Pending, Waiting, Review, Todo, Decide, each list left out when empty: `📌 Outstanding: 🚧 4 · 🤔 2 · 🔍 2 · 👉 1 · 🧠 5`. `scripts/outstanding.py render --counts` drafts it.
+**The count line** names each list by its glyph and count, in the lists' order, Pending, Waiting, Review, Todo, Decide, each list left out when empty: `📌 Outstanding: 🚧 4 · ⏳ 2 · 🔍 2 · 👉 1 · 🧠 5`. `scripts/outstanding.py render --counts` drafts it.
 
 **The full roll-up** has the header `📌 **Outstanding from previous turns:**`, underlined with `━` U+2501, one per column, 35 in all, so the heavier rule sets it apart from this turn's lists. Under it the items are grouped by the list they came from, each group under that list's own header, in the lists' order and with no underline, and a blank line before each group's header but the first. Each item is one bullet, never numbered, naming its subject in a line and never reprinting its options, and ends with its 🔖 tag. `scripts/outstanding.py render` drafts it, and the session prunes what is settled. [examples.md](examples.md#the-full-roll-up) draws one.
 
@@ -121,7 +123,7 @@ Read [commands.md](commands.md) before running any of them, and put their output
 - **Time:** say how long work takes, never when it lands or goes out, and set no deadline.
 - **Tables:** a plain Markdown table, as `markdown-hygiene-terminal-rendering` writes it, never a box table in a `text` block. A cell holding a state holds its emoji from the progress-update table, not a word.
 - **Links:** every URL, a local served page as much as a web page, is a Markdown link opened by 🔗 and a space, `🔗 [the trial projection](http://127.0.0.1:8765/…)`, kept out of `text` blocks as `markdown-hygiene-terminal-rendering` says. In a table's cell the link goes without the 🔗, its label short enough not to wrap.
-- **Glyphs:** the only ones in a response are the 8 header glyphs, `▔`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the 6 state emoji, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, `💻 ❯` and `✴️ ❯` before a command for the user to run, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
+- **Glyphs:** the only ones in a response are the 8 header glyphs, `▔`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the 6 state emoji, ⏳ among them being also the Waiting header's glyph, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, `💻 ❯` and `✴️ ❯` before a command for the user to run, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
 
 ## Why and how to apply
 

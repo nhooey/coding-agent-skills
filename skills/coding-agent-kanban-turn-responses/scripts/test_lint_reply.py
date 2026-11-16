@@ -50,7 +50,7 @@ ONE_LINE_RUN = (
     "\n"
     "📌 **Outstanding from previous turns:**  \n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    "🤔 **Waiting:**  \n"
+    "⏳ **Waiting:**  \n"
     "- **Landing `atomic-reload`.** 🔖 0f311c94₋₃\n"
     "- **The nightly import.** 🔖 18e77cb3₋₁₇\n"
 )
@@ -174,7 +174,7 @@ class LintReplyTest(unittest.TestCase):
         self.assertEqual(kinds(text), [(5, "j")])
 
     def test_roll_up_groups_end_at_a_blank_line(self) -> None:
-        head = "📌 **Outstanding from previous turns:**  \n" + "━" * 35 + "\n🤔 **Waiting:**  \n- **Landing.** 🔖 0f311c94₋₃\n"
+        head = "📌 **Outstanding from previous turns:**  \n" + "━" * 35 + "\n⏳ **Waiting:**  \n- **Landing.** 🔖 0f311c94₋₃\n"
         tail = "🧠 **Decide:**  \n- **The cache store.** 🔖 9d2e7a10₋₂\n"
         self.assertEqual(kinds(head + tail), [(5, "j")])
         self.assertEqual(kinds(head + "\n" + tail), [])
@@ -222,6 +222,7 @@ class LintReplyTest(unittest.TestCase):
             "✅ **Done:**": 8,
             "🚧 **Pending:**": 11,
             "📝 **Logged:**": 10,
+            "⏳ **Waiting:**": 11,
             "🤔 **Waiting:**": 11,
             "❓ **Answers:**": 11,
             "🔍 **Review:**": 10,

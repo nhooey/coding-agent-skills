@@ -56,7 +56,7 @@ Printed once the roll-up interval has passed; `outstanding.py render` drafts it,
 ```text
 📌 **Outstanding from previous turns:**  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤔 **Waiting:**  
+⏳ **Waiting:**  
 - **Landing `atomic-reload` with 4 other branches,** entry 1419's whole-file database swap among them. 🔖 0f311c94₋₃
 
 👉 **Todo:**  
@@ -71,5 +71,5 @@ Printed once the roll-up interval has passed; `outstanding.py render` drafts it,
 Printed in place of the full roll-up until the interval has passed; `outstanding.py render --counts` drafts it from the same items.
 
 ```text
-📌 Outstanding: 🚧 4 · 🤔 2 · 🔍 2 · 👉 1 · 🧠 5
+📌 Outstanding: 🚧 4 · ⏳ 2 · 🔍 2 · 👉 1 · 🧠 5
 ```

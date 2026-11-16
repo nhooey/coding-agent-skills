@@ -371,6 +371,18 @@ class RenderTest(unittest.TestCase):
         self.assertNotIn("Dropped", out)
         self.assertIn("- **Rework the loader** 🔖 b2c3d4e5₀", out)
 
+    def test_waiting_items_render_under_the_hourglass_header(self) -> None:
+        waiting = "⏳ **Waiting:**  \n▔▔▔▔▔▔▔▔▔▔▔\n1. **The test run** in the background.\n"
+        records = (prompt(FIRST, "go"), reply(waiting), prompt(SECOND, "more", 1), reply("Prose.", 1))
+        self.assertIn("⏳ **Waiting:**  \n- **The test run** 🔖 9efb08a1₋₁", self.render(*records))
+        self.assertEqual(self.render(*records, counts=True), "📌 Outstanding: ⏳ 1")
+
+    def test_an_older_reply_s_thinking_face_waiting_header_still_parses(self) -> None:
+        old = "🤔 **Waiting:**  \n▔▔▔▔▔▔▔▔▔▔▔\n1. **The test run** in the background.\n"
+        records = (prompt(FIRST, "go"), reply(old), prompt(SECOND, "more", 1), reply("Prose.", 1))
+        self.assertIn("⏳ **Waiting:**  \n- **The test run** 🔖 9efb08a1₋₁", self.render(*records))
+        self.assertEqual(self.render(*records, counts=True), "📌 Outstanding: ⏳ 1")
+
     def test_nothing_open_renders_nothing(self) -> None:
         self.assertEqual(self.render(prompt(FIRST, "go"), reply("Prose only.")), "")
         self.assertEqual(self.render(prompt(FIRST, "go"), reply("Prose only."), counts=True), "")
