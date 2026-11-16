@@ -16,7 +16,7 @@ The items are reprinted with their wording, grouping and options unchanged, so t
 
 ## `recheck`: the open items, worked out afresh
 
-`reassess` is another name for it. The kanban-answers mod's `Reassess` button submits it.
+`reassess` is another name for it.
 
 The earlier items are evidence of what is undecided, not a structure to keep. The recheck takes no item's wording, grouping, numbering or options as given:
 

@@ -35,7 +35,7 @@ It runs from any directory: the transcript is looked up under the working direct
 | `index [ID...] [--last N]`                              | each turn's relative index, as `-3` and `₋₃`; with no id, the last N turns                                                                       |
 | `items [--since ID] [--lists L] [--latest] [--width W]` | `id  ₋ₖ  list  summary`, one line per item                                                                                                       |
 | `grep PATTERN [...]`                                    | the same lines for items whose line matches the regex, ignoring case                                                                             |
-| `decide [--json] [--width W]`                           | every open Decide item with its options, one line each; `--json` prints `{"items": [...]}`, the shape the kanban-answers mod reads               |
+| `decide [--json] [--width W]`                           | every open Decide item with its options, one line each; `--json` prints `{"items": [...]}`, for a tool to read                                   |
 
 **What `due` measures.** The roll-up interval is min(30 min, 5 × the average duration of the last 5 completed turns, each from its prompt to the next), read as the 5 gaps between the last 6 prompts, the current turn's prompt closing the latest; under 2 prompts it is 30 min. The clock starts at the reply text that last printed the 📌 header with its `━` rule on the next line, by that text's own timestamp; a count line has no rule and never starts it. With no full roll-up in the transcript, `due` prints `full`.
 

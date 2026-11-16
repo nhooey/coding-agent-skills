@@ -1,12 +1,9 @@
 {
   "name": "coding-agent-skills",
-  "owner": { "name": "Neil Hooey" },
+  "owner": {
+    "name": "Neil Hooey"
+  },
   "plugins": [
-    {
-      "name": "coding-agent-kanban-answers",
-      "source": "./plugins/coding-agent-kanban-answers",
-      "description": "Clickable answers to the coding-agent-kanban-turn-responses skill's Decide items"
-    },
     {
       "name": "coding-agent-headless-runs",
       "source": "./plugins/coding-agent-headless-runs",
