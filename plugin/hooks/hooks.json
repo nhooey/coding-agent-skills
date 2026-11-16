@@ -1,0 +1,15 @@
+{
+  "description": "Hooks of the coding-agent-skills collection; each script comes from its skill's scripts/ folder.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-build-limits.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
