@@ -142,6 +142,13 @@
                 touch $out
               '';
 
+          # The repository's own dev tool: its argument parsing, test discovery
+          # and mod lookup, with the commands it would run recorded, not run.
+          checks.skills-dev = pkgs.runCommand "skills-dev-tests" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+            python3 -I ${./scripts}/test_skills_dev.py
+            touch $out
+          '';
+
           checks.plans-as-graph =
             pkgs.runCommand "plans-as-graph-tests"
               {
@@ -184,18 +191,21 @@
           # name, motd, the install-skills startup that reconciles the runtime
           # `skills-devshell/` sub-flake at project scope, the ci/dev/maintenance
           # command trio (check / fmt / update-flake), and the skills commands
-          # (reap-skills / update-skills-devshell). This repo adds the mod
-          # checks below: they need `claude` itself and the Claude Code API
+          # (reap-skills / update-skills-devshell). This repo adds `skills-dev`,
+          # whose `mods check` needs `claude` itself and the Claude Code API
           # types its running build writes, neither of which the Nix sandbox
-          # has, so they run here rather than in `nix flake check`.
+          # has, so it runs here rather than in `nix flake check`.
           devshells.default = {
-            packages = [ pkgs.typescript ];
+            packages = [
+              pkgs.python3
+              pkgs.typescript
+            ];
             commands = [
               {
-                category = "ci";
-                name = "check-mods";
-                help = "validate, type-check and test the mods under plugins/, or the ones named";
-                command = ''bash "$PRJ_ROOT/plugins/check-mods.sh" "$@"'';
+                category = "dev";
+                name = "skills-dev";
+                help = "test: run the skills' script tests; mods check|try: check or try the mods under plugins/";
+                command = ''python3 "$PRJ_ROOT/scripts/skills_dev.py" "$@"'';
               }
             ];
           };

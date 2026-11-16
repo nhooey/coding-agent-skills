@@ -11,10 +11,14 @@ and `agents/plans/` the project's plans.
 nix develop      # the dev shell; installs the project's skills into .agents/skills/
 nix fmt          # nixfmt over *.nix, prettier over *.md and *.yaml
 nix flake check  # formatting and the skills' script tests
-check-mods       # in the dev shell: validate, type-check and test the mods under plugins/
 ```
+
+In the dev shell, `skills-dev` runs the rest; `skills-dev --help` lists its
+commands. `skills-dev test` runs the skills' script tests outside the sandbox,
+and `skills-dev mods check` validates, type-checks and tests the mods under
+`plugins/`.
 
 Run `nix fmt` and `nix flake check` before committing: no CI runs them on push,
 so a formatting slip or a failing script test is otherwise caught by nothing.
-Run `check-mods` too when a change touches `plugins/`, since `nix flake check`
-doesn't cover the mods.
+Run `skills-dev mods check` too when a change touches `plugins/`, since
+`nix flake check` doesn't cover the mods.
