@@ -81,6 +81,9 @@ skill is loaded; the skill itself still installs through the packages above.
   - the PostToolUse (`Write|Edit`) hook `plans-check-hook.sh`, with its
     helpers `plans_check_hook.py` and `plans.py`, from
     [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)
+  - the PreToolUse (`Write|Edit`) hook `memory-write-reminder.sh`, with its
+    helper `memory_write_reminder.py`, from
+    [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md)
 - **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
   `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
   `skills/` a second time under a namespaced name.
@@ -103,7 +106,8 @@ skill is loaded; the skill itself still installs through the packages above.
   describes: `.agents/skills/<skill>.preferences.md` in the project
   (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
   The skill documents the setting's line.
-  `session-build-limits.sh` only adds to the environment, so it has none;
+  `session-build-limits.sh` only adds to the environment and
+  `memory-write-reminder.sh` only adds context, so they have none;
   `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, and is
   at `remind` unless set.
 - **Checks:** `nix flake check` runs each hook script's tests and

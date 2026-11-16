@@ -23,6 +23,8 @@ Whenever the user teaches the agent how to work, whether or not auto-memory is l
 - **Standing rules:** "always `--force-with-lease`", "never amend after pushing", "that `gh` flag is broken in v2".
 - **Requests to remember a way of working:** "remember that we use squash merges here".
 
+**The hook:** in Claude Code, the `coding-agent-skills-hooks` plugin's `scripts/memory-write-reminder.sh` lets a session's first Write or Edit under `~/.claude/projects/*/memory/` go ahead and reminds it to load this skill; a memory written through Bash isn't seen.
+
 These stay memory material, since they are about the user or the moment rather than how to work:
 
 - **Who the user is:** role, expertise, name. A personal choice about how one skill's output or workflow should look is different: it goes in that skill's preferences file ([Anyone, or a personal choice](#anyone-or-a-personal-choice)).

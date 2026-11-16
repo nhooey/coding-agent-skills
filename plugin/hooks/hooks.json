@@ -20,6 +20,15 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/scratchpad-guard.sh\""
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/memory-write-reminder.sh\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
