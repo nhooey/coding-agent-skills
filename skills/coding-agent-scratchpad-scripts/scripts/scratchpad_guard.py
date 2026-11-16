@@ -9,6 +9,14 @@ stdin. Standard library only, and Python 3.9 or later.
   there being sourced. At the setting `remind` the call runs and the reason is
   added as context; at `deny` the call is denied with the reason; at `off`
   nothing is printed.
+- PreToolUse on Bash, also: finds an inline program (`python3 -` heredoc,
+  `node -e`, ...) that opens a file for writing, or a heredoc redirected into a
+  file outside the temporary roots. At `remind` the call runs and one line
+  says edits go through the Edit or Write tool; at `deny` the first such
+  command in a session is denied, and later ones remind; at `off` nothing.
+  After the third in a session it is silent. The count lives in
+  `$CLAUDE_PLUGIN_DATA/scratchpad-guard/inline-writes/<session id>`; with no
+  count to keep, `deny` reminds instead, so a denial can't repeat forever.
 - SubagentStart: gives the subagent the rule in four lines, unless `off`.
 
 A path counts when it is under a temporary root (/tmp, /private/tmp,
@@ -69,6 +77,33 @@ WRITE_REDIRECTS = frozenset((">", ">>", ">|", "&>", "&>>"))
 HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 SETTING_LINE = re.compile(r"^\W*scratchpad guard\W*(deny|remind|off)\W*$", re.IGNORECASE | re.MULTILINE)
 
+# Interpreters whose inline program (heredoc on stdin, or `-c`/`-e`) is read for a file write.
+INLINE_INTERPRETERS = frozenset(("python", "python3", "node", "ruby", "perl"))
+# -c and -e, and perl's bundles ending in e, such as -le and -ne.
+CODE_FLAG = re.compile(r"^-[A-Za-z]*[ce]$")
+# perl -i, -pi, -i.bak: an in-place substitution, which the skill allows.
+PERL_IN_PLACE = re.compile(r"^-[A-Za-z]*i")
+# Python and Ruby's w, a, x and r+, with b, t and + beside them, and Perl's >, >> and +<.
+MODE = r"(?:[rbt]*(?:[wax][bt+]*|\+[bt]*)|>>?|\+<)"
+WRITE_MODE = f"""(?:'{MODE}'|"{MODE}")"""
+WRITE_CALLS = re.compile(
+    r"\bopen\((?:[^()]|\([^()]*\))*?,\s*(?:mode\s*=\s*)?" + WRITE_MODE
+    + r"|\.open\(\s*(?:mode\s*=\s*)?" + WRITE_MODE
+    + r"|\.write_text\(|\.write_bytes\(|\bwriteFileSync\(|\bfs(?:\.promises)?\.writeFile\(|\bFile\.write\("
+)
+HEREDOC_OPERATOR = re.compile(r"^<<-?$")
+SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+INLINE_WRITE_LIMIT = 3
+INLINE_WRITE_REMINDER = (
+    "This command wrote a file from an inline program. If it changed an existing file, use the Edit or Write "
+    f"tool for the next one (`{SKILL}`, rule 1)."
+)
+INLINE_WRITE_DENIAL = (
+    "This command writes a file from an inline program. If it changes an existing file, use the Edit or Write "
+    f"tool instead (`{SKILL}`, rule 1). If it generates data, rerun it unchanged: only the first such command "
+    "in a session is denied."
+)
+
 WAYS_OUT = (
     "The scratchpad holds data, not programs. Instead: edit a file with the Edit or Write tool, never a generated "
     "script; run a one-off check inline, as a heredoc into `python3 -` (`python3 - <<'PYEOF'` ... `PYEOF`) with no "
@@ -85,9 +120,11 @@ SUBAGENT_RULES = "\n".join(
     )
 )
 
-# What the core needs from outside: $TMPDIR (str or None), and has_marker(folder) -> bool, the stat calls.
-Context = collections.namedtuple("Context", ("tmpdir", "has_marker"))
-# action is write, edit, redirect, tee, run, chmod or source.
+# What the core needs from outside: $TMPDIR (str or None), has_marker(folder) -> bool, the stat calls, and
+# inline_writes, how many inline file writes the session had before this call (None when there's no count).
+Context = collections.namedtuple("Context", ("tmpdir", "has_marker", "inline_writes"), defaults=(None,))
+# action is write, edit, redirect, tee, run, chmod or source; for an inline write, inline (path is the
+# interpreter) or heredoc (path is the file written).
 Finding = collections.namedtuple("Finding", ("action", "path"))
 
 DESCRIPTIONS = {
@@ -273,6 +310,83 @@ def bash_findings(tool_input: Mapping, ctx: Context) -> tuple[Finding, ...]:
     return tuple(itertools.chain.from_iterable(command_findings(argv, targets, ctx) for argv, targets in commands))
 
 
+# ---- Bash: an inline program or a heredoc that writes a file
+
+
+def heredoc_bodies(command: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Each line that opens heredocs, with their bodies in order; an unclosed one runs to the end."""
+
+    def step(state, line):
+        done, pending = state
+        if pending is None:
+            delimiters = tuple(m.group(2) for m in HEREDOC.finditer(line))
+            return (done, (line, delimiters, (), ()) if delimiters else None)
+        opening, delimiters, bodies, body = pending
+        if line.strip() != delimiters[0]:
+            return (done, (opening, delimiters, bodies, body + (line,)))
+        finished = bodies + ("\n".join(body),)
+        if len(delimiters) == 1:
+            return (done + ((opening, finished),), None)
+        return (done, (opening, delimiters[1:], finished, ()))
+
+    done, pending = functools.reduce(step, command.replace("\\\n", " ").split("\n"), ((), None))
+    return done + (((pending[0], pending[2] + ("\n".join(pending[3]),)),) if pending else ())
+
+
+def commands_with_bodies(line: str, bodies: tuple[str, ...]) -> tuple[tuple[tuple[str, ...], tuple[str, ...]], ...]:
+    """The simple commands on a heredoc's opening line, each with the bodies of its own `<<` operators."""
+    commands = simple_commands(tokens(line))
+    counts = tuple(sum(1 for word in c if HEREDOC_OPERATOR.match(word)) for c in commands)
+    starts = itertools.accumulate(counts, initial=0)
+    return tuple((c, bodies[start:start + count]) for c, start, count in zip(commands, starts, counts))
+
+
+def code_argument(args: tuple[str, ...]) -> str | None:
+    """The program given with `-c` or `-e` (perl's `-le` and `-ne` included), or None."""
+    return next((code for flag, code in zip(args, args[1:]) if CODE_FLAG.match(flag)), None)
+
+
+def outside_temp_roots(path: str, ctx: Context) -> bool:
+    return temp_location(path, ctx) is None and not path.startswith("/dev/")
+
+
+def inline_command_findings(command: tuple[str, ...], bodies: tuple[str, ...], ctx: Context) -> tuple[Finding, ...]:
+    """A cat or tee that writes its heredoc into a file, or an interpreter whose inline program writes one."""
+    argv, targets = argv_and_targets(command)
+    if not argv:
+        return ()
+    name, args = posixpath.basename(argv[0]), argv[1:]
+    if name in ("cat", "tee"):
+        operands = tuple(a for a in args if not a.startswith("-")) if name == "tee" else ()
+        written = targets + operands if bodies else ()
+        return tuple(Finding("heredoc", path) for path in written if outside_temp_roots(path, ctx))
+    if name not in INLINE_INTERPRETERS and not VERSIONED_PYTHON.match(name):
+        return ()
+    if name == "perl" and any(PERL_IN_PLACE.match(a) for a in args):
+        return ()
+    code = code_argument(args)
+    stdin_program = bodies[0] if bodies and script_argument(args) in (None, "-") else None
+    program = code if code is not None else stdin_program
+    return (Finding("inline", name),) if program is not None and WRITE_CALLS.search(program) else ()
+
+
+def inline_write_findings(tool_input: Mapping, ctx: Context) -> tuple[Finding, ...]:
+    """Inline programs and heredocs in a Bash command that write a file, each named once."""
+    command = tool_input.get("command")
+    if not isinstance(command, str):
+        return ()
+    flagged = tuple((c, ()) for c in simple_commands(tokens(command)))
+    heredocs = tuple(itertools.chain.from_iterable(commands_with_bodies(*opening) for opening in heredoc_bodies(command)))
+    found = (inline_command_findings(c, bodies, ctx) for c, bodies in flagged + heredocs)
+    return tuple(dict.fromkeys(itertools.chain.from_iterable(found)))
+
+
+def event_inline_writes(event: Mapping, ctx: Context) -> tuple[Finding, ...]:
+    tool_input = event.get("tool_input")
+    is_bash = event.get("hook_event_name") == "PreToolUse" and event.get("tool_name") == "Bash"
+    return inline_write_findings(tool_input, ctx) if is_bash and isinstance(tool_input, Mapping) else ()
+
+
 MATCHERS: Mapping[str, Callable[[Mapping, Context], tuple[Finding, ...]]] = {
     "Write": write_findings,
     "Edit": edit_findings,
@@ -305,6 +419,27 @@ def pre_tool_use(findings: tuple[Finding, ...], setting: str) -> dict | None:
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
 
 
+def inline_write_output(findings: tuple[Finding, ...], setting: str, before: int | None) -> dict | None:
+    """The reminder, or at `deny` the session's first denial; nothing after the limit. before is None when uncounted."""
+    if not findings or setting == "off" or (before is not None and before >= INLINE_WRITE_LIMIT):
+        return None
+    if setting == "deny" and before == 0:
+        decision = {"permissionDecision": "deny", "permissionDecisionReason": INLINE_WRITE_DENIAL}
+    else:
+        decision = {"additionalContext": INLINE_WRITE_REMINDER}
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
+
+
+def merged(first: dict | None, second: dict | None) -> dict | None:
+    """Two PreToolUse outputs as one: a denial wins, the first if both deny, and two contexts are joined."""
+    if first is None or second is None:
+        return first or second
+    a, b = first["hookSpecificOutput"], second["hookSpecificOutput"]
+    if "permissionDecision" in a or "permissionDecision" in b:
+        return first if "permissionDecision" in a else second
+    return {"hookSpecificOutput": {**a, "additionalContext": a["additionalContext"] + "\n" + b["additionalContext"]}}
+
+
 def decide(event: Mapping, setting: str, ctx: Context) -> dict | None:
     """The hook's JSON output for one input, or None to print nothing."""
     name = event.get("hook_event_name")
@@ -317,7 +452,8 @@ def decide(event: Mapping, setting: str, ctx: Context) -> dict | None:
     matcher = MATCHERS.get(event.get("tool_name"))
     tool_input = event.get("tool_input")
     findings = matcher(tool_input, ctx) if matcher and isinstance(tool_input, Mapping) else ()
-    return pre_tool_use(findings, setting)
+    writes = inline_write_output(event_inline_writes(event, ctx), setting, ctx.inline_writes)
+    return merged(pre_tool_use(findings, setting), writes)
 
 
 # ---- shell
@@ -346,6 +482,25 @@ def preferences_texts(event: Mapping) -> tuple[str, ...]:
     return (read_text(os.path.join(os.path.expanduser("~"), name)), read_text(os.path.join(project, name)))
 
 
+def counted_inline_write(event: Mapping) -> int | None:
+    """Add this call to the session's count of inline writes; the count before it, or None when it can't be kept."""
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    session = event.get("session_id")
+    if not data or not isinstance(session, str) or not SESSION_ID.match(session):
+        return None
+    folder = os.path.join(data, "scratchpad-guard", "inline-writes")
+    path = os.path.join(folder, session)
+    text = read_text(path).strip()
+    before = int(text) if text.isdigit() else 0
+    try:
+        os.makedirs(folder, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(str(before + 1))
+    except OSError:
+        return None
+    return before
+
+
 def main() -> int:
     try:
         event = json.loads(sys.stdin.read())
@@ -353,7 +508,11 @@ def main() -> int:
         return 0
     if not isinstance(event, dict):
         return 0
-    output = decide(event, setting_from(preferences_texts(event)), Context(os.environ.get("TMPDIR"), has_marker))
+    setting = setting_from(preferences_texts(event))
+    uncounted = Context(os.environ.get("TMPDIR"), has_marker)
+    writes = setting != "off" and bool(event_inline_writes(event, uncounted))
+    ctx = uncounted._replace(inline_writes=counted_inline_write(event) if writes else None)
+    output = decide(event, setting, ctx)
     if output is not None:
         print(json.dumps(output))
     return 0
