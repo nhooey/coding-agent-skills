@@ -51,6 +51,18 @@ Do this before the first browser action of a session, and again after any `selec
 6. Once one matches, navigate the tab back to its URL without the marker if the fragment would change the page.
 7. If the session moved off the browser it started in, tell the user which app and window it uses now.
 
+## The browser check hook
+
+The `coding-agent-skills-hooks` plugin runs `browser-check-hook.sh`, beside `which_browser.py`, on the Claude in Chrome tools. A session's first call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`, is caught once. The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass. A check is good for an hour.
+
+Its setting is a line in the preferences file, `Browser check: deny`, `remind` or `off`; **`remind` is the default**:
+
+- **`remind`:** the call runs, and the session is told to load this skill and check the browser before acting further.
+- **`deny`:** the call is denied with that as the reason. The second attempt passes, so a session that can't run the script isn't locked out.
+- **`off`:** nothing.
+
+When the hook catches a call, do the check above before the next page action.
+
 ## Bring the browser forward
 
 When someone is watching and the browser should be in front, activate the preferred app, never another one:
@@ -71,11 +83,12 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" --list
 
 Add `--urls` to print each window's tab URLs under it, to tell unnamed windows apart. A window has a given name only when the user named it, with Window, then Name Window in Chrome; otherwise its given name is empty and only its title, the active tab's title, shows.
 
-The preferences file holds up to 3 keys, as a Markdown list:
+The preferences file holds up to 4 keys, as a Markdown list:
 
 - **Preferred app:** the app name as macOS knows it, such as `Google Chrome`.
 - **Preferred window:** the window's given name, such as `Claude in Chrome`. Match it exactly.
 - **Never use:** apps not to act in, such as `Brave Browser`. One per nested bullet.
+- **Browser check:** the hook's setting, `deny`, `remind` or `off`, as above.
 
 For example:
 
