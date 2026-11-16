@@ -118,6 +118,16 @@ class EndToEnd(unittest.TestCase):
         self.path = os.environ.get("PATH", "")
         self.assertNotEqual(self.run_hook(self.plans / "open" / "child.md"), "")
 
+    def test_no_yq_on_path_runs_no_check(self):
+        stub = Path(self.tmp.name) / "bin"
+        stub.mkdir()
+        marker = Path(self.tmp.name) / "ran"
+        (stub / "python3").write_text(f"#!/bin/sh\ntouch {marker}\n")
+        (stub / "python3").chmod(0o755)
+        self.path = str(stub)
+        self.assertEqual(self.run_hook(self.node("open/child.md", **{"part-of": "nowhere"})), "")
+        self.assertFalse(marker.exists())
+
     def test_a_finding_about_another_file_is_given_once(self):
         self.node("open/broken.md", needs="[gone]")
         self.node("open/parent.md", kind="end-state")

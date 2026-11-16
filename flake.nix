@@ -105,6 +105,14 @@
           # standard library, and the tests may use these libraries too.
           testPython = pkgs.python3.withPackages (ps: [ ps.pytest ]);
 
+          # The tools a skill's scripts run, by the hook script that runs
+          # them: on PATH in the dev shell and the tests, and set on PATH in
+          # the hooks plugin's copy of that script. plans.py reads frontmatter
+          # with yq, and plans-check-hook.sh runs plans.py.
+          scriptInputs = {
+            "plans-check-hook.sh" = [ pkgs.yq-go ];
+          };
+
           # `skill-tests [python | shell | SKILL ...]`: each language's tests
           # with its own tool, pytest for test_*.py, bash for each test_*.sh and
           # bats for *.bats, the shell language's, under tests/ and scripts/;
@@ -119,7 +127,8 @@
               pkgs.bats
               pkgs.git
               pkgs.jq
-            ];
+            ]
+            ++ lib.concatLists (lib.attrValues scriptInputs);
             text = ''
               cd "''${PRJ_ROOT:-$PWD}"
               language=
@@ -217,7 +226,7 @@
           # by listing its script here and running it from plugin/hooks/hooks.json.
           packages = base.packages.${system} // {
             hooks-plugin = import ./nix/hooks-plugin.nix {
-              inherit pkgs;
+              inherit pkgs scriptInputs;
               src = ./plugin;
               hookScripts = [
                 ./skills/coding-agent-session-build-limits/scripts/session-build-limits.sh
@@ -307,7 +316,8 @@
             packages = [
               testPython
               pkgs.typescript
-            ];
+            ]
+            ++ lib.concatLists (lib.attrValues scriptInputs);
             commands = [
               {
                 category = "dev";

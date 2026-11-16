@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import plans
 
@@ -141,6 +143,51 @@ class Plan(unittest.TestCase):
         self.node("closed", "b", state="implemented")
         self.assertEqual(self.run_cmd("check"), (0, "", ""))
         self.assertEqual(self.run_cmd("ready")[1].split(), ["wrapped"])
+
+    def test_an_indented_comment_joins_no_line(self):
+        (self.root / "open" / "commented.md").write_text(
+            "---\ntitle: Commented\nstate: approved\nkind: implementation\nneeds: [a]\n"
+            "  # a is the parser rewrite\n---\n"
+        )
+        self.node("closed", "a", state="implemented")
+        self.assertEqual(self.run_cmd("check"), (0, "", ""))
+
+    def test_a_trailing_comment_is_no_part_of_the_value(self):
+        (self.root / "open" / "commented.md").write_text(
+            "---\ntitle: Commented\nstate: approved\nkind: implementation\n"
+            "needs: [a]  # a is the parser rewrite\n---\n"
+        )
+        self.node("closed", "a", state="implemented")
+        self.assertEqual(self.run_cmd("check"), (0, "", ""))
+        self.assertEqual(self.run_cmd("ready")[1].split(), ["commented"])
+
+    def test_a_value_yaml_would_read_as_a_number_or_boolean_keeps_its_text(self):
+        self.node("open", "x", state="in-progress", title="1.50", owner="true")
+        self.node("open", "y", state="proposed", title="null")
+        self.assertEqual(self.run_cmd("overview"), (0, "", ""))
+        text = (self.root / "README.md").read_text()
+        self.assertIn("- [1.50](open/x.md) `x`, true\n", text)
+        self.assertIn("- [null](open/y.md) `y`\n", text)
+
+    def test_frontmatter_that_isnt_yaml_is_reported_with_its_line(self):
+        (self.root / "closed" / "x.md").write_text(
+            "---\ntitle: X\nstate: implemented\nimplemented-by: wave 7: 9 pull requests\nkind: implementation\n---\n"
+        )
+        code, _, err = self.run_cmd("check")
+        self.assertEqual(code, 1)
+        self.assertIn("closed/x.md: frontmatter isn't YAML: line 4, column 23: mapping values are not allowed", err)
+
+    def test_frontmatter_that_isnt_key_value_pairs_is_reported(self):
+        (self.root / "open" / "x.md").write_text("---\n- title\n- state\n---\n")
+        self.assertIn("open/x.md: frontmatter isn't `key: value` pairs", self.run_cmd("check")[2])
+
+    def test_no_yq_on_path_is_an_error_that_names_it(self):
+        self.node("open", "x", state="proposed")
+        with mock.patch.dict(os.environ, {"PATH": self.tmp.name}):
+            code, _, err = self.run_cmd("check")
+        self.assertEqual(code, 2)
+        self.assertIn("`yq` (yq-go)", err)
+
 
 if __name__ == "__main__":
     unittest.main()

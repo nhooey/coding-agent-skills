@@ -83,6 +83,9 @@ A plugin hook runs in every session and subagent, whether or not the skill is lo
   It is built by [`nix/hooks-plugin.nix`](nix/hooks-plugin.nix), the same derivation as agent-plugins-nixpkgs' `mkClaudePlugin`, built here because agent-plugins-nixpkgs takes this flake as an input.
 - **Adding a hook:** keep the script in `skills/<skill>/scripts/`, where the skill documents it, and its tests in `tests/<skill>/`, where `skills-dev test <skill>` and `nix flake check` run them; list the script in `hookScripts` in [`flake.nix`](flake.nix); and add it to `hooks/hooks.json` as `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, since a store file has no executable bit to rely on.
   Keep it under about 50 ms, exiting at once when it has nothing to do.
+- **A tool a hook runs:** name its package under the script's name in `scriptInputs` in [`flake.nix`](flake.nix).
+  The plugin's copy of the script puts it on PATH on its second line, and the dev shell and the tests have it too.
+  `plans-check-hook.sh` gets `yq`, which `plans.py` reads frontmatter with.
 - **A setting for blocking hooks:** a hook that can deny or block reads a setting that turns it down to a reminder or off, since a plugin enabled in managed settings can't be disabled in a session.
   The setting lives in the skill's preferences file, as [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md) describes: `.agents/skills/<skill>.preferences.md` in the project (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
   The skill documents the setting's line.

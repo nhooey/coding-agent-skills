@@ -13,11 +13,19 @@
   # Hook scripts, each copied to scripts/<its name>, which hooks.json runs as
   # `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`.
   hookScripts,
+  # The packages a hook script runs, by its name: the plugin's copy of the
+  # script puts their bin/ folders on PATH, ahead of the caller's, on its
+  # second line.
+  scriptInputs ? { },
 }:
 let
   inherit (pkgs) lib;
   manifest = lib.importJSON "${src}/.claude-plugin/plugin.json";
+  unknown = lib.subtractLists (map baseNameOf hookScripts) (lib.attrNames scriptInputs);
 in
+assert lib.assertMsg (
+  unknown == [ ]
+) "hooks-plugin: scriptInputs names no hook script: ${lib.concatStringsSep ", " unknown}";
 pkgs.runCommand "claude-plugin-${manifest.name}-${manifest.version}"
   {
     passthru = {
@@ -32,4 +40,9 @@ pkgs.runCommand "claude-plugin-${manifest.name}-${manifest.version}"
     ${lib.concatMapStrings (script: ''
       cp ${script} $out/scripts/${lib.escapeShellArg (baseNameOf script)}
     '') hookScripts}
+    ${lib.concatStrings (
+      lib.mapAttrsToList (name: inputs: ''
+        sed --in-place ${lib.escapeShellArg "1a PATH=${lib.makeBinPath inputs}\${PATH:+:$PATH}; export PATH"} $out/scripts/${lib.escapeShellArg name}
+      '') scriptInputs
+    )}
   ''

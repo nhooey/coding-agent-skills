@@ -21,7 +21,7 @@ agents/plans/
 - **One node per file**, named by its id: lower-case words and dashes that say what it is, such as `uniform-skill-sets`. The id never changes, because links use it.
 - **Open or closed is the folder:** closing a node moves it to the `closed/` beside its `open/` in the same commit that sets its state, with `git mv`, so its history follows it.
 - **A plan of several nodes gets its own folder:** nodes that belong to one plan, such as a cross-repository cleanup or a feature's rollout, go in `agents/plans/<plan>/open/` and `closed/`, the folder named like an id. A lone node stays in the top-level `open/` and `closed/`. Ids stay unique across every plan, so a link never says which folder its target is in, and a node can link into another plan.
-- **A long list may wrap:** a formatter such as prettier breaks a long `needs:` list onto an indented next line, and `plans.py` reads the indented line as part of the one above.
+- **The frontmatter is YAML:** `plans.py` reads it with a YAML parser, so a long `needs:` list that a formatter such as prettier wraps onto an indented next line is still one list, and a `#` comment, on its own line or after a value, is dropped.
 - **`agents/plans/`** sits beside `AGENTS.md`, readable by any agent and committed like code. Plans in `.claude/plans/`, `docs/plans/` or a `_implemented/` folder are moved here (see [Tidying old plans](#tidying-old-plans)).
 
 ## A node
@@ -40,7 +40,7 @@ needs: [skillspkgs-authoring-combination]
 What is true when this is done, and how to check it. As long as it needs.
 ```
 
-The frontmatter is one `key: value` per line, with lists in brackets:
+The frontmatter is one `key: value` per line, with lists in brackets. A value that holds `: ` or ` #`, or opens on a backtick, `[`, `{`, `*` or `&` without being a list, goes in double quotes, as YAML requires: `implemented-by: "wave 7: 9 pull requests, #12 and #13"`. The keys:
 
 | Key              | Holds                                                                         |
 | ---------------- | ----------------------------------------------------------------------------- |
@@ -108,7 +108,7 @@ Research and audits that plans rest on go in `agents/reports/`, beside `agents/p
 
 ## The script
 
-`scripts/plans.py`, standard library only, run from the project root:
+`scripts/plans.py`, run from the project root. Its Python is standard library only, and it reads each node's frontmatter with `yq` ([yq-go](https://github.com/mikefarah/yq)), which must be on PATH; without it the script stops with an error naming `yq`.
 
 ```bash
 python3 scripts/plans.py check      # every problem; exits 1 if any
@@ -116,7 +116,7 @@ python3 scripts/plans.py ready      # approved nodes whose needs are all impleme
 python3 scripts/plans.py overview   # rewrites agents/plans/README.md, after a clean check
 ```
 
-`--plans <dir>` points it at another folder. `check` reports a state in the wrong folder, links to missing nodes, cycles in `part-of`, `needs` or `after`, `after` outside a schedule node, unknown keys, missing fields, and nodes left at the plan's root.
+`--plans <dir>` points it at another folder. `check` reports frontmatter that isn't YAML, with the line YAML stopped at, a state in the wrong folder, links to missing nodes, cycles in `part-of`, `needs` or `after`, `after` outside a schedule node, unknown keys, missing fields, and nodes left at the plan's root.
 
 ## Tidying old plans
 
