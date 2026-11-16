@@ -133,6 +133,14 @@
                 touch $out
               '';
 
+          # The browser finder's parsing and output, with no osascript.
+          checks.browser-selection =
+            pkgs.runCommand "browser-selection-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+              ''
+                python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_which_browser.py
+                touch $out
+              '';
+
           checks.plans-as-graph =
             pkgs.runCommand "plans-as-graph-tests"
               {
