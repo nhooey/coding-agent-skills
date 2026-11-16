@@ -90,6 +90,9 @@ skill is loaded; the skill itself still installs through the packages above.
     `select_browser`, `switch_browser`) hook `browser-check-hook.sh`, with its
     helper `browser_check_hook.py`, from
     [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)
+  - the Stop hook `reply-lint-hook.sh`, with its helpers `reply_lint_hook.py`,
+    `lint_reply.py` and `reply_turns.py`, from
+    [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)
 - **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
   `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
   `skills/` a second time under a namespaced name.
@@ -114,14 +117,17 @@ skill is loaded; the skill itself still installs through the packages above.
   The skill documents the setting's line.
   `session-build-limits.sh` only adds to the environment and
   `memory-write-reminder.sh` only adds context, so they have none;
-  `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, and is
-  at `remind` unless set.
+  `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`,
+  `browser-check-hook.sh` reads `Browser check: deny | remind | off` and
+  `reply-lint-hook.sh` reads `Reply lint: block | remind | off`; each is at
+  `remind` unless set.
 - **Checks:** `nix flake check` runs each hook script's tests and
   `checks.hooks-plugin`, which builds the plugin and runs
   [`check_hooks_plugin.py`](scripts/check_hooks_plugin.py): every hook is a
   command hook running one of the plugin's scripts through `bash`, every
-  script is run by a hook or named by one as its helper and parses, and the
-  manifest has a name and version.
+  script is run by a hook, named by one as its helper or imported by a helper,
+  and parses, every module a helper imports from outside the standard library
+  is in the plugin, and the manifest has a name and version.
   `claude plugin validate` on the built plugin checks it as Claude Code reads
   it.
 - **Installing it:** agent-plugins-nixpkgs passes `hooks-plugin` through, and a
