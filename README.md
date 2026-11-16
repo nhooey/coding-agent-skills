@@ -101,7 +101,8 @@ skill is loaded; the skill itself still installs through the packages above.
   `checks.hooks-plugin`, which builds the plugin and runs
   [`check_hooks_plugin.py`](scripts/check_hooks_plugin.py): every hook is a
   command hook running one of the plugin's scripts through `bash`, every
-  script is run by a hook and parses, and the manifest has a name and version.
+  script is run by a hook or named by one as its helper and parses, and the
+  manifest has a name and version.
   `claude plugin validate` on the built plugin checks it as Claude Code reads
   it.
 - **Installing it:** agent-plugins-nixpkgs passes `hooks-plugin` through, and a
