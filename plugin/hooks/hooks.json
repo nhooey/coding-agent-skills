@@ -29,6 +29,15 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/memory-write-reminder.sh\""
           }
         ]
+      },
+      {
+        "matcher": "mcp__claude-in-chrome__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/browser-check-hook.sh\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -38,6 +47,24 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/plans-check-hook.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/browser-check-hook.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__claude-in-chrome__(select_browser|switch_browser)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/browser-check-hook.sh\""
           }
         ]
       }

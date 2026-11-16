@@ -115,6 +115,8 @@
                 ./skills/coding-agent-plans-as-graph/scripts/plans.py
                 ./skills/coding-agent-route-feedback-to-skills-over-memory/scripts/memory-write-reminder.sh
                 ./skills/coding-agent-route-feedback-to-skills-over-memory/scripts/memory_write_reminder.py
+                ./skills/coding-agent-browser-selection/scripts/browser-check-hook.sh
+                ./skills/coding-agent-browser-selection/scripts/browser_check_hook.py
               ];
             };
           };
