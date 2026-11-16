@@ -4,9 +4,10 @@
 Usage: check_hooks_plugin.py <plugin folder>
 
 Every hook must be a command hook that runs one of the plugin's own scripts as
-`bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, every script under scripts/
-must be run by some hook, and each script must parse as bash. Prints one line
-per problem and exits 1 if there are any.
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, and each such script must parse
+as bash. Every other file under scripts/ must be a helper that a hook's script
+names, such as the Python a bash hook hands its work to, and a `.py` helper must
+compile. Prints one line per problem and exits 1 if there are any.
 """
 
 import json
@@ -94,8 +95,15 @@ def check_hooks(root, problems):
 def check_scripts(root, run, problems):
     scripts = root / "scripts"
     present = {p.name for p in scripts.iterdir() if p.is_file()} if scripts.is_dir() else set()
+    hook_texts = [(scripts / name).read_text() for name in sorted(present & run)]
     for name in sorted(present - run):
-        problems.append(f"scripts/{name}: no hook runs it")
+        if not any(name in text for text in hook_texts):
+            problems.append(f"scripts/{name}: no hook runs it")
+        elif name.endswith(".py"):
+            try:
+                compile((scripts / name).read_text(), name, "exec")
+            except SyntaxError as err:
+                problems.append(f"scripts/{name}: {err}")
     for name in sorted(present & run):
         parsed = subprocess.run(["bash", "-n", str(scripts / name)], capture_output=True, text=True)
         if parsed.returncode != 0:

@@ -66,6 +66,15 @@ class CheckHooksPlugin(unittest.TestCase):
         found = self.problems(session_start(), scripts={"hook.sh": "exit 0\n", "stray.sh": "exit 0\n"})
         self.assertIn("scripts/stray.sh: no hook runs it", found)
 
+    def test_a_helper_a_hook_script_names_passes(self):
+        scripts = {"hook.sh": 'exec python3 "$(dirname "$0")/helper.py"\n', "helper.py": "print(1)\n"}
+        self.assertEqual(self.problems(session_start(), scripts=scripts), [])
+
+    def test_a_python_helper_that_does_not_compile_is_reported(self):
+        scripts = {"hook.sh": 'exec python3 "$(dirname "$0")/helper.py"\n', "helper.py": "def (:\n"}
+        found = self.problems(session_start(), scripts=scripts)
+        self.assertTrue(any(p.startswith("scripts/helper.py:") for p in found), found)
+
     def test_a_script_bash_cannot_parse_is_reported(self):
         found = self.problems(session_start(), scripts={"hook.sh": "if then fi (\n"})
         self.assertTrue(any(p.startswith("scripts/hook.sh:") for p in found), found)
