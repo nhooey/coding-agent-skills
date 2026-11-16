@@ -10,6 +10,9 @@ _A script an agent writes to its scratchpad is read once, by nobody, and run onc
 ## The rule
 
 1. **An edit to a file uses the Edit or Write tool.** Never a generated script that rewrites it: no `ed1.py`, `fix_test2.py` or `sed` script written to a file to change another file. The edit tools show the change as a diff, keep the file's state in step, and leave nothing behind.
+
+   The [hook](#the-hook) reminds you of this rule when a Bash command's inline program (`python3 -` heredoc, `-c`, `-e`) opens a file for writing, or a heredoc goes into a file outside the temporary roots: the command runs and one line of context follows, up to three times a session; at `deny` the session's first such command is denied, and one that generates data is rerun unchanged.
+
 2. **A one-off check runs inline in the Bash call,** with no file written. A heredoc into `python3 -` or `node -` is fine:
 
    ```bash
