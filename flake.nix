@@ -188,11 +188,19 @@
                 touch $out
               '';
 
-          # The browser finder's parsing and output, with no osascript.
+          # The browser finder's parsing and output, with no osascript, and the
+          # browser check hook at each setting, end to end through bash.
           checks.browser-selection =
-            pkgs.runCommand "browser-selection-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+            pkgs.runCommand "browser-selection-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.bash
+                ];
+              }
               ''
                 python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_which_browser.py
+                python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_browser_check_hook.py
                 touch $out
               '';
 
