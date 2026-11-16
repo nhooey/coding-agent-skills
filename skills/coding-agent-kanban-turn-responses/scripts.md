@@ -77,3 +77,15 @@ python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_repl
 | `l`  | a table with no blank line above it, or a line directly under its last row, drawn as one more row |
 
 A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them. A blank line ends it; a header or a line of prose left of its items' text, written with no blank line before it, is a `j`. Its tests run with `python3 -I scripts/test_lint_reply.py`, and `nix flake check` runs them too.
+
+## The `reply_lint_hook.py` script
+
+[`reply_lint_hook.py`](scripts/reply_lint_hook.py) is the skill's Stop hook. The `coding-agent-skills-hooks` plugin runs it in every session through [`reply-lint-hook.sh`](scripts/reply-lint-hook.sh), with `lint_reply.py` and `reply_turns.py` copied in beside it. The shell script exits at once when the session's transcript never names the skill. The Python acts only when the transcript shows the skill loaded, by a Skill tool call naming it or its "Base directory for this skill:" line, so a session that never loaded the skill is never checked. It reads the hook's input on stdin and lints its `last_assistant_message`, or, where that is missing, the current turn's last reply text in `transcript_path`, read through `reply_turns.py`. It always exits 0.
+
+| `Reply lint` | Findings in a response with a list header or a 📌 roll-up                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `remind`     | printed as a `systemMessage`, shown to the user; the turn ends. The default                                                                                   |
+| `block`      | `decision: "block"` with the findings as the `reason`, so the session writes the response again; when `stop_hook_active` is set, the turn ends as at `remind` |
+| `off`        | nothing                                                                                                                                                       |
+
+The setting is the last valid `Reply lint:` line in the user's preferences file, `~/.agents/skills/coding-agent-kanban-turn-responses.preferences.md`, then the project's, the same file under `.agents/skills/` in `CLAUDE_PROJECT_DIR` or the hook's `cwd`. A `block` reason or `systemMessage` reaches the session only through the hook's output: a Stop hook has no way to add text to the model's context without continuing the turn. Its tests run with `python3 -I scripts/test_reply_lint_hook.py`, and `nix flake check` runs them too.
