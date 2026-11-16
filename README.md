@@ -78,6 +78,9 @@ skill is loaded; the skill itself still installs through the packages above.
   - the PreToolUse (`Bash|Write|Edit`) and SubagentStart hook
     `scratchpad-guard.sh`, with its helper `scratchpad_guard.py`, from
     [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)
+  - the PostToolUse (`Write|Edit`) hook `plans-check-hook.sh`, with its
+    helpers `plans_check_hook.py` and `plans.py`, from
+    [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)
 - **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
   `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
   `skills/` a second time under a namespaced name.

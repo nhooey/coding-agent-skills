@@ -110,6 +110,9 @@
                 ./skills/coding-agent-session-build-limits/scripts/session-build-limits.sh
                 ./skills/coding-agent-scratchpad-scripts/scripts/scratchpad-guard.sh
                 ./skills/coding-agent-scratchpad-scripts/scripts/scratchpad_guard.py
+                ./skills/coding-agent-plans-as-graph/scripts/plans-check-hook.sh
+                ./skills/coding-agent-plans-as-graph/scripts/plans_check_hook.py
+                ./skills/coding-agent-plans-as-graph/scripts/plans.py
               ];
             };
           };

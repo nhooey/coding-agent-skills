@@ -94,6 +94,7 @@ A plan keeps what, how and when apart, so each can change without rewriting the 
 - **No coordinator, no claiming:** where several agents pick work on their own, the files can't make a claim atomic. Use a tracker that can, holding claims by node id, and leave the nodes' `state` to the coordinator or the user.
 - **Finish:** set the state, add `implemented-by`, `git mv` it to `closed/`, and regenerate the overview, in the commit that finishes the work or the one straight after.
 - **Every change to the graph:** run `plans.py check`, then `plans.py overview`, and commit the overview with the nodes.
+- **The hook:** in Claude Code, the `coding-agent-skills-hooks` plugin's `scripts/plans-check-hook.sh` runs `check` after each Write or Edit of a node and adds any finding to the session's context. It doesn't see edits through Bash, such as a `git mv` to `closed/`, and never writes the overview, so the line above still holds.
 
 ## The script
 
