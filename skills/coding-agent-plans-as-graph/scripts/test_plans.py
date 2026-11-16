@@ -144,5 +144,13 @@ class Plan(unittest.TestCase):
         self.assertEqual(self.run_cmd("check"), (0, "", ""))
         self.assertEqual(self.run_cmd("ready")[1].split(), ["wrapped"])
 
+    def test_an_indented_comment_joins_no_line(self):
+        (self.root / "open" / "commented.md").write_text(
+            "---\ntitle: Commented\nstate: approved\nkind: implementation\nneeds: [a]\n"
+            "  # a is the parser rewrite\n---\n"
+        )
+        self.node("closed", "a", state="implemented")
+        self.assertEqual(self.run_cmd("check"), (0, "", ""))
+
 if __name__ == "__main__":
     unittest.main()

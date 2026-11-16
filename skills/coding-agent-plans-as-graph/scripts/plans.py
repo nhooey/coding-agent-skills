@@ -95,11 +95,12 @@ def parse_line(number: int, line: str) -> Tuple[Optional[Tuple[str, object]], Pr
 
 
 def fold(lines: Tuple[str, ...]) -> Tuple[Tuple[int, str], ...]:
-    """Each logical line with its first line's number: an indented line joins the one above."""
+    """Each logical line with its first line's number: an indented line joins the one above,
+    unless it is a comment, which stays a line of its own for the caller to drop."""
 
     def step(acc: Tuple[Tuple[int, str], ...], numbered: Tuple[int, str]) -> Tuple[Tuple[int, str], ...]:
         n, line = numbered
-        joins = acc and line[:1].isspace() and line.strip()
+        joins = acc and line[:1].isspace() and line.strip() and not line.lstrip().startswith("#")
         return acc[:-1] + ((acc[-1][0], f"{acc[-1][1]} {line.strip()}"),) if joins else acc + ((n, line),)
 
     return reduce(step, enumerate(lines, start=2), ())
