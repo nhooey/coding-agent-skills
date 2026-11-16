@@ -1,5 +1,5 @@
 {
-  description = "coding-agent-route-feedback-to-skills-over-memory: Coding-agent skill — when the user gives behavioral feedback, propose adding it to an existing skill (with a verbal proposal + persistence sub-question) before falling back to auto-memory";
+  description = "coding-agent-route-feedback-to-skills-over-memory: Coding-agent skill — when the user gives behavioral feedback, route it to the layer that owns it (a skill or preferences edit, or a plan node for a hook, tool or config) before falling back to auto-memory";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

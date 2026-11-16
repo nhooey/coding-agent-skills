@@ -78,7 +78,7 @@ When the user corrects how a skill works:
 - **A lesson right for anyone using the skill:** edit the skill. A gotcha, a missing edge case, a rule every user would want.
 - **A personal choice:** put it in that skill's preferences file, the project's or the user's by where it should hold. Editing the skill would force it on everyone who installs it.
 
-`coding-agent-route-feedback-to-skills-over-memory` covers the routing in full: when a lesson goes into a skill rather than memory, and how to propose the edit.
+`coding-agent-route-feedback-to-skills-over-memory` covers the routing in full: which layer a lesson belongs in, a skill, a preferences file, a hook, a tool, a dev shell or memory among them, and how to propose the edit.
 
 ## When to apply
 
@@ -94,5 +94,5 @@ without asking. If it isn't in your listing, tell the user which skill is
 missing and ask whether to install it from the same collection this skill
 came from; don't apply it from memory.
 
-- `coding-agent-route-feedback-to-skills-over-memory`: routes a lesson about how the agent works into the right skill, or its preferences file, before memory.
+- `coding-agent-route-feedback-to-skills-over-memory`: routes a lesson about how the agent works to the layer that owns it, a skill or its preferences file among them, before memory.
 - `git-hygiene-no-history-in-tracked-files`: a tracked file states the current rule, and its history goes in the commit message.
