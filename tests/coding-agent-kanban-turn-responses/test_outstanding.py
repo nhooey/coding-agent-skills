@@ -206,6 +206,11 @@ class OpenDecideItemsTest(unittest.TestCase):
         refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "Decide.3.N of 9efb08a1", 1))
         self.assertEqual(refs, ["9efb08a1.Decide.1", "9efb08a1.Decide.2"])
 
+    def test_an_answer_naming_its_turn_after_it_settles_no_item_of_the_turn_before(self) -> None:
+        for line in ("Decide.2: B of 9efb08a1", "Decide.2: B,C of 9efb08a1", "Decide.2.A, C from 9efb08a1"):
+            with self.subTest(line=line):
+                self.assertEqual(outstanding._answers_of_line(line, "b2c3d4e5"), frozenset({("9efb08a1", 2)}))
+
     def test_a_bare_answer_settles_the_turn_before_it(self) -> None:
         refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "Decide.1: B\n3. Y", 1))
         self.assertEqual(refs, ["9efb08a1.Decide.2"])

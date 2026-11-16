@@ -467,8 +467,13 @@ _AFTER_REF = (
 _ANSWER_WITH_ID = re.compile(rf"\b([0-9a-f]{{6,8}})\.Decide\.(\d+){_AFTER_REF}")
 _ANSWER_ID_AFTER = re.compile(rf"\bDecide\.(\d+)(?:\.|:\s*|\s+){_LETTERS}\s+(?:of|from)\s+([0-9a-f]{{6,8}})\b")
 # An answer to the last final response, naming no turn: `Decide.2.B`, `Decide.2: B`, `Decide.2: <words>`,
-# or `2. B` opening a line.
-_ANSWER_BARE = re.compile(rf"(?<![0-9a-f]\.)\bDecide\.(\d+){_AFTER_REF}(?!\s+(?:of|from)\s)")
+# or `2. B` opening a line. Whatever `_ANSWER_ID_AFTER` matches is turned away first, so `Decide.2: B,C of
+# 9efb08a1` can't also pass as words after the colon, or as `.A` stopping partway through `.A, C from 9efb08a1`.
+_ANSWER_BARE = re.compile(
+    rf"(?<![0-9a-f]\.)\bDecide\.(\d+)"
+    rf"(?!(?:\.|:\s*|\s+){_LETTERS}\s+(?:of|from)\s+[0-9a-f]{{6,8}}\b)"
+    rf"{_AFTER_REF}(?!\s+(?:of|from)\s)"
+)
 _ANSWER_NUMBER = re.compile(r"^\s*(\d+)[.:]\s*[A-Z](?:\s*,\s*[A-Z])*\s*$")
 
 
