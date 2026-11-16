@@ -22,7 +22,7 @@ The share is `SHARE=3`, one setting at the top of the script. Three sessions bui
 - **How:** it appends `export` lines to the file named in `CLAUDE_ENV_FILE`, which the session's Bash commands then load.
 - **Variables already set:** a variable that is already set and not empty is left alone, so a session started with `MAKEFLAGS` set keeps its value.
 - **No `CLAUDE_ENV_FILE`:** the script does nothing and exits 0.
-- **Not Nix:** none of these variables reaches a Nix build, which runs under the daemon with its own `max-jobs` and `cores` for each client. `coding-agent-headless-in-checkout` holds new headless runs while the machine is short of memory, which bounds Nix across agents.
+- **Not Nix:** none of these variables reaches a Nix build, which runs under the daemon with its own `max-jobs` and `cores` for each client. `coding-agent-headless-in-checkout` holds new headless runs while the machine is short of memory, which bounds Nix across agents. A builder that shares the store can't make a machine-wide cap either: the daemon handing a build off keeps its output locks while the builder runs, so a second daemon, or `localhost` in `builders`, waits on them forever ([NixOS/nix#2029](https://github.com/NixOS/nix/issues/2029)).
 
 ## Installing it
 
