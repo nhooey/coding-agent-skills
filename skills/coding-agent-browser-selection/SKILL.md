@@ -53,7 +53,7 @@ Do this before the first browser action of a session, and again after any `selec
 
 ## The browser check hook
 
-The `coding-agent-skills-hooks` plugin runs `browser-check-hook.sh`, beside `which_browser.py`, on the Claude in Chrome tools. A session's first call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`, is caught once. The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass. A check is good for an hour.
+The `coding-agent-skills-hooks` plugin runs `browser-check-hook.sh`, beside `which_browser.py`, on the Claude in Chrome tools. A session's first call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`, `browser_batch`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`, is caught once. The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass. A check is good for an hour.
 
 Its setting is a line in the preferences file, `Browser check: deny`, `remind` or `off`; **`remind` is the default**:
 
