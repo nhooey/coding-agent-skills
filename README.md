@@ -72,8 +72,12 @@ A skill whose rule a script can decide in every session ships its hook in
 plugin. A plugin hook runs in every session and subagent, whether or not the
 skill is loaded; the skill itself still installs through the packages above.
 
-- **What's in it:** the SessionStart hook `session-build-limits.sh`, from
-  [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md).
+- **What's in it:**
+  - the SessionStart hook `session-build-limits.sh`, from
+    [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)
+  - the PreToolUse (`Bash|Write|Edit`) and SubagentStart hook
+    `scratchpad-guard.sh`, with its helper `scratchpad_guard.py`, from
+    [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)
 - **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
   `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
   `skills/` a second time under a namespaced name.
@@ -96,7 +100,9 @@ skill is loaded; the skill itself still installs through the packages above.
   describes: `.agents/skills/<skill>.preferences.md` in the project
   (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
   The skill documents the setting's line.
-  `session-build-limits.sh` only adds to the environment, so it has none.
+  `session-build-limits.sh` only adds to the environment, so it has none;
+  `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, and is
+  at `remind` unless set.
 - **Checks:** `nix flake check` runs each hook script's tests and
   `checks.hooks-plugin`, which builds the plugin and runs
   [`check_hooks_plugin.py`](scripts/check_hooks_plugin.py): every hook is a
