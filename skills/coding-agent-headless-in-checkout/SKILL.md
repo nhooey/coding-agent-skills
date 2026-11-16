@@ -121,7 +121,7 @@ How many of a job's runs ended `ok`, `failed`, `limit` or `skipped` comes from `
 ## Limits and billing
 
 - **Subscription, not the API:** `claude -p` bills `ANTHROPIC_API_KEY` whenever it is set, so the script refuses to start while it is, unless given `--allow-api-key`. `claude auth status` shows the login in use.
-- **Usage limits:** a headless run can't wait for a limit to reset. A run that fails on a usage limit exits 255, and xargs, GNU or BSD, starts no more commands after one exits 255, so an xargs fan-out stops there by itself. A caller that loops instead checks for 255 and stops. Rerun the checkouts with no outcome file after the reset, with the same `--job` to reuse their worktrees.
+- **Usage limits:** a headless run can't wait for a limit to reset. A run that fails on a usage limit exits 255, and xargs, GNU or BSD, starts no more commands after one exits 255, so an xargs fan-out stops there by itself. A caller that loops instead checks for 255 and stops. Rerun the checkouts with no outcome file, or one whose status is `limit`, after the reset, with the same `--job` to reuse their worktrees.
 - **Trust:** a headless session runs a checkout's hooks and `.mcp.json` servers without a trust dialog, and auto mode approves actions without a person. Run only in checkouts the user owns, named one by one.
 
 ## Cleaning up
