@@ -524,9 +524,10 @@ class Runs(unittest.TestCase):
         self.assertEqual(status, "", "the main checkout must stay clean")
 
     def test_checkout_without_a_session_starts_a_new_one(self):
-        self.assertEqual(self.run_one(self.beta)[0], 0)
+        self.assertEqual(self.run_one(self.beta, "--session", "continue")[0], 0)
         self.assertNotIn("--resume", self.recorded("beta.worktrees_headless-t1")["argv"])
         self.assertIsNone(self.outcome("beta")["resumed_from"])
+        self.assertIn("no earlier session; starting a new one", self.outcome("beta")["notes"])
 
     def test_checkout_run_uses_continue_where_there_is_a_session(self):
         self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "continue")[0], 0)
@@ -650,8 +651,10 @@ class Runs(unittest.TestCase):
 
     def test_dirty_checkout_runs_in_place_untouched_by_the_note(self):
         self.make_alpha_dirty()
-        self.assertEqual(self.run_one(self.alpha, "--where", "checkout")[0], 0)
-        self.assertEqual(self.recorded("src_alpha")["argv"][1], "do the thing")
+        self.assertEqual(self.run_one(self.alpha, "--where", "checkout", "--session", "continue")[0], 0)
+        argv = self.recorded("src_alpha")["argv"]
+        self.assertIn("--continue", argv)
+        self.assertEqual(argv[1], "do the thing")
 
     def test_progress_lines_go_to_stderr(self):
         code, out = self.run_one(self.alpha, "--where", "checkout", "--progress-every", "0.5",
@@ -676,7 +679,7 @@ class Runs(unittest.TestCase):
     def test_xargs_fan_out_stops_after_a_usage_limit(self):
         listing = f"{self.alpha}\n{self.beta}\n"
         cmd = ["xargs", "-P", "1", "-I{}", sys.executable, "-I", str(SCRIPTS / "run_headless.py"),
-               *self.common(), "--where", "checkout", "{}"]
+               *self.common(), "--where", "checkout", "--no-admission", "{}"]
         # A floor of 0 GB, so this machine's own free space never holds the run.
         env = {**os.environ, **self.env, "FAKE_CLAUDE_MODE": "limit", "WORKTREES_FLOOR_BUILD_GB": "0"}
         env.pop("ANTHROPIC_API_KEY", None)
@@ -726,7 +729,18 @@ class Runs(unittest.TestCase):
         self.assertEqual(seen[-1]["branch"], "main")
 
     def test_status_file_shows_waiting_then_skipped(self):
-        self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0", levels=(4,))
+        seen: list[str] = []
+        write = run_headless.write_status
+
+        def spy(path: Path, record: dict) -> None:
+            seen.append(record["state"])
+            write(path, record)
+
+        with mock.patch.object(run_headless, "write_status", side_effect=spy):
+            self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0", levels=(4,))
+        self.assertIn("waiting", seen)
+        self.assertEqual(seen[-1], "skipped")
+        self.assertLess(seen.index("waiting"), seen.index("skipped"))
         status = self.status("beta")
         self.assertEqual((status["state"], status["session_id"], status["tool_calls"]),
                          ("skipped", None, 0))
