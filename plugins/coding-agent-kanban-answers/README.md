@@ -92,13 +92,13 @@ under `{"items": [...]}`. The `kanban_options` tool takes the same object. The s
 From the repository's dev shell:
 
 ```bash
-check-mods coding-agent-kanban-answers
+skills-dev mods check coding-agent-kanban-answers
 ```
 
-It runs [`../check-mods.sh`](../check-mods.sh), which with no name checks every mod in the repository: `claude plugin validate`, `tsc -p` and `claude plugin test`. `tsc` needs the Claude Code API declarations in `.claude-plugin/types/`, which the engine lays there when it loads the mod from a folder it watches; where none has, the script copies the running build's from the files its `plugin-authoring` skill wrote. To try the mod without installing it:
+It runs [`skills-dev`](../../scripts/skills_dev.py), which with no name checks every mod in the repository: `claude plugin validate`, `tsc -p` and `claude plugin test`. `tsc` needs the Claude Code API declarations in `.claude-plugin/types/`, which the engine lays there when it loads the mod from a folder it watches; where none has, the tool copies the running build's from the files its `plugin-authoring` skill wrote. To try the mod without installing it:
 
 ```bash
-claude --plugin-dir plugins/coding-agent-kanban-answers
+skills-dev mods try coding-agent-kanban-answers
 ```
 
 | File                                       | Holds                                                                                            |
