@@ -1,6 +1,6 @@
 ---
 name: coding-agent-session-build-limits
-description: Give every Claude Code session, interactive or headless, a fixed share of the machine for make, cargo, Rust tests, pytest-xdist and the JVM, with a bundled SessionStart hook that appends export lines to the file named in CLAUDE_ENV_FILE and leaves any variable the user already set alone. Use when setting up a machine so several sessions building at once don't oversubscribe its cores, when a session's builds or tests spawn more workers than the machine can spare, or when installing, changing or debugging that hook.
+description: Give every Claude Code session, interactive or headless, a fixed share of the machine for make, cargo, Rust tests, pytest-xdist and the JVM, with a SessionStart hook, shipped in the coding-agent-skills-hooks plugin, that appends export lines to the file named in CLAUDE_ENV_FILE and leaves any variable the user already set alone. Use when setting up a machine so several sessions building at once don't oversubscribe its cores, when a session's builds or tests spawn more workers than the machine can spare, or when installing, changing or debugging that hook.
 ---
 
 # Session build limits
@@ -26,28 +26,13 @@ The share is `SHARE=3`, one setting at the top of the script. Three sessions bui
 
 ## Installing it
 
-This collection ships skills, not plugins, so the hook goes in the user's `settings.json` by hand. Install the skill, then add this to `~/.claude/settings.json`, adjusting the path to where the skill is installed:
+The hook comes from the `coding-agent-skills-hooks` plugin, this collection's hooks plugin, not from the user's `settings.json`. The skill only documents it.
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/skills/coding-agent-session-build-limits/scripts/session-build-limits.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-The command runs the script through `bash`, because a skill installed by Nix keeps its scripts read-only, without the executable bit.
-
-Never edit the user's settings without being asked; show the snippet and let the user add it.
+- **Where it's built:** the flake package `hooks-plugin` copies this skill's `scripts/session-build-limits.sh` into the plugin, whose `hooks/hooks.json` runs it under SessionStart as `bash "${CLAUDE_PLUGIN_ROOT}/scripts/session-build-limits.sh"`.
+- **How it's installed:** agent-plugins-nixpkgs passes `hooks-plugin` through, and MyNixOS lists it in `services.agent-plugins.plugins`, whose nix-darwin module enables it in managed settings. A plugin enabled there runs in every session and subagent, and no session or user setting can turn it off.
+- **For one session:** `claude --plugin-dir "$(nix build --no-link --print-out-paths github:nhooey/coding-agent-skills#hooks-plugin)"`.
+- **A hand-wired copy:** a `hooks.SessionStart` entry in `settings.json` that runs this script as well makes the hook run twice, writing the same export lines twice. That's harmless but redundant; suggest the user remove it, and never edit the user's settings without being asked.
+- **Not in:** `--bare` runs, which skip plugins, and agents other than Claude Code.
 
 ## Checking it
 
