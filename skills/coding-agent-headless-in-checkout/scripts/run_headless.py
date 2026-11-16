@@ -42,8 +42,28 @@ level, `kern.memorystatus_vm_pressure_level`: 1 (normal) starts the run, 2
 (warning) or 4 (critical) holds it, checking again every few seconds and saying
 so on a progress line. A run already going is never stopped. A level that can't
 be read counts as 1, with a note.
-  --no-admission         start at once, whatever the pressure
+It also reads the free space, with shutil.disk_usage, on the checkout's volume
+and on /nix, and holds the run the same way while either is below the build
+floor: WORKTREES_FLOOR_BUILD_GB from the environment, else from the KEY=value
+lines of ~/.config/worktrees/floor, else 70 GB.
+  --no-admission         start at once, whatever the pressure and free space
   --admission-timeout M  give up after M minutes of waiting, with status skipped
+
+Finishing worktrees, through the `worktrees` program when it is on the PATH:
+before making a worktree the runner calls `worktrees sweep --apply` in the
+checkout, which removes earlier jobs' worktrees whose branches have landed.
+After the run it calls, on its worktree:
+  worktrees finish <wt>               a run that changed nothing: no commits
+  worktrees finish <wt> --log <log>   a failed run with no commits
+  worktrees clean <wt> --apply        a run that committed: the worktree waits
+                                      for its branch to land, without its build
+                                      output
+The program decides what it removes, and keeps anything with uncommitted
+changes or commits of its own. --keep-worktree turns both calls off. Without
+the program the worktree is kept, and the outcome says nothing was cleaned.
+A worktree with an `.envrc` is provisioned with `worktrees provision` before
+the session starts under `direnv exec`, since direnv refuses a new worktree's
+blocked copy; without the program the session starts without `direnv exec`.
 
 Output: progress lines go to stderr, each opening on the label: one when the
 session starts, one every --progress-every seconds (default 60) with its time,
@@ -64,7 +84,7 @@ Exit status:
   0    the session ended without an error
   1    it failed, or timed out
   2    bad arguments: not a git checkout, an empty prompt, ANTHROPIC_API_KEY set
-  3    skipped, by --dirty skip or by --admission-timeout
+  3    skipped, by --dirty skip or by --admission-timeout, for memory or disk
   255  it hit a usage limit. xargs, GNU or BSD, starts no more runs after a
        command exits 255, so a fan-out through xargs stops there by itself.
 
@@ -86,9 +106,10 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Callable
+from types import MappingProxyType
+from typing import Callable, Mapping
 
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 USAGE_LIMIT = re.compile(
@@ -108,6 +129,12 @@ ETA_LINE = re.compile(
 )
 ETA_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
 STATUS_EVERY_SECONDS = 10.0
+FLOOR_KEY = "WORKTREES_FLOOR_BUILD_GB"
+DEFAULT_BUILD_FLOOR_GB = 70.0
+GB = 10**9
+NIX_VOLUME = Path("/nix")
+WORKTREES = "worktrees"
+PROGRAM_TIMEOUT_SECONDS = 900
 
 
 def project_key(path: Path) -> str:
@@ -243,19 +270,108 @@ def ensure_worktree(checkout: Path, job: str) -> tuple[Path, str]:
     return path, f"created {path} on {branch}"
 
 
-def allow_direnv(checkout: Path, worktree: Path) -> str | None:
-    """Allow the worktree's `.envrc` when it is the checkout's, byte for byte.
+# Finishing worktrees through the `worktrees` program. Which call an ending
+# gets is pure; running the program and asking git are the shell.
 
-    direnv trusts an `.envrc` by its path, so a new worktree's copy starts out
-    blocked even though the user allowed the same file in the checkout.
+NOTHING, FAILED, COMMITTED = "nothing", "failed", "committed"
+
+
+def ending(status: str, ahead: int) -> str:
+    """How a worktree run ended, for finishing: it committed, changed nothing, or failed.
+
+    Commits win, whatever the status, so committed work is only ever cleaned.
     """
-    main, copy = checkout / ".envrc", worktree / ".envrc"
-    if not (main.is_file() and copy.is_file() and shutil.which("direnv")):
+    if ahead > 0:
+        return COMMITTED
+    return NOTHING if status == "ok" else FAILED
+
+
+def finish_args(end: str, worktree: str, log: str | None) -> tuple[str, ...]:
+    """The `worktrees` arguments that finish a worktree after the run ended as `end`."""
+    match end:
+        case "committed":
+            return ("clean", worktree, "--apply")
+        case "failed" if log is not None:
+            return ("finish", worktree, "--log", log)
+        case _:
+            return ("finish", worktree)
+
+
+def program_note(args: tuple[str, ...], code: int, output: str) -> str:
+    """One line on a `worktrees` call: its arguments, its exit status and the last line it said."""
+    said = output.strip().splitlines()[-1] if output.strip() else ""
+    return f"{WORKTREES} {' '.join(args)}: exit {code}" + (f": {said}" if said else "")
+
+
+def run_program(program: str, args: tuple[str, ...], cwd: Path) -> tuple[int, str]:
+    """Runs `worktrees` and returns its exit status and output; a failure to run is a status too."""
+    try:
+        proc = subprocess.run([program, *args], cwd=cwd, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, check=False,
+                              timeout=PROGRAM_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return 124, f"timed out after {PROGRAM_TIMEOUT_SECONDS}s"
+    except OSError as err:
+        return 127, str(err)
+    return proc.returncode, proc.stdout + proc.stderr
+
+
+def commits_ahead(checkout: Path, worktree: Path) -> int:
+    """The worktree's commits that the checkout's HEAD doesn't have."""
+    head = git("rev-parse", "HEAD", cwd=checkout).stdout.strip()
+    out = git("rev-list", "--count", "HEAD", f"^{head}", cwd=worktree) if head else None
+    return int(out.stdout.strip()) if out is not None and out.returncode == 0 else 0
+
+
+# Disk admission. The floor and the shortfalls are pure; reading the free space
+# and the floor file is the shell.
+
+
+def floor_settings(text: str) -> Mapping[str, str]:
+    """The `KEY=value` lines of the floor file; comments and other lines skipped."""
+    pairs = (line.split("=", 1) for line in text.splitlines()
+             if "=" in line and not line.lstrip().startswith("#"))
+    return MappingProxyType({k.strip(): v.strip().strip("\"'") for k, v in pairs})
+
+
+def parse_gb(value: str) -> float | None:
+    try:
+        number = float(value)
+    except ValueError:
         return None
-    if main.read_bytes() != copy.read_bytes():
-        return "worktree .envrc differs from the checkout's; left blocked"
-    subprocess.run(["direnv", "allow", str(worktree)], capture_output=True, check=False)
-    return "allowed the worktree's .envrc, identical to the checkout's"
+    return number if number >= 0 else None
+
+
+def build_floor(file_text: str, environ: Mapping[str, str]) -> tuple[float, str | None]:
+    """The build floor in GB and a note: the variable, else the file's line, else 70."""
+    sources = ((environ.get(FLOOR_KEY), FLOOR_KEY), (floor_settings(file_text).get(FLOOR_KEY), "the floor file"))
+    given = next(((value, where) for value, where in sources if value), None)
+    if given is None:
+        return DEFAULT_BUILD_FLOOR_GB, None
+    gb = parse_gb(given[0])
+    if gb is None:
+        return DEFAULT_BUILD_FLOOR_GB, (f"build floor {given[0]!r} from {given[1]} is not a number "
+                                        f"of GB; used {DEFAULT_BUILD_FLOOR_GB:g}")
+    return gb, None
+
+
+def disk_shortfalls(free: tuple[tuple[str, int | None], ...], floor_gb: float) -> tuple[str, ...]:
+    """One reason per volume under the floor; a volume that couldn't be read holds nothing."""
+    return tuple(f"{space / GB:.0f} GB free on {path}, below the {floor_gb:g} GB build floor"
+                 for path, space in free if space is not None and space < floor_gb * GB)
+
+
+def free_bytes(path: Path) -> int | None:
+    """Free space on `path`'s volume, or None where there is no such path, such as /nix without Nix."""
+    try:
+        return shutil.disk_usage(path).free
+    except OSError:
+        return None
+
+
+def default_floor_file() -> Path:
+    config = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(config) / "worktrees" / "floor"
 
 
 @dataclass
@@ -283,6 +399,7 @@ class Outcome:
     result: str = ""
     log: str | None = None
     notes: list[str] = field(default_factory=list)
+    cleanup: str | None = None  # what became of the worktree; None for a run in the checkout
 
 
 def elapsed(seconds: float) -> str:
@@ -298,9 +415,17 @@ def taskpolicy_prefix(platform: str) -> list[str]:
     return ["taskpolicy", "-c", "utility"] if platform == "darwin" else []
 
 
-def admission_decision(level: int, waited: float, timeout: float | None) -> str:
-    """Start, wait or give up, from the pressure level and the seconds waited so far."""
-    if level == PRESSURE_NORMAL:
+def hold_reasons(level: int, short: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """Why a run can't start yet: memory pressure above normal, and each volume under the floor."""
+    return ((f"memory pressure level {level}",) if level != PRESSURE_NORMAL else ()) + short
+
+
+def admission_decision(
+    level: int, waited: float, timeout: float | None, short: tuple[str, ...] = ()
+) -> str:
+    """Start, wait or give up, from the pressure level, the disk shortfalls and the seconds
+    waited so far."""
+    if not hold_reasons(level, short):
         return START
     return GIVE_UP if timeout is not None and waited >= timeout else WAIT
 
@@ -344,6 +469,11 @@ class Admission:
     level: int
     waited: float
     notes: tuple[str, ...]
+    reasons: tuple[str, ...] = ()  # what still held the run when it gave up
+
+
+def no_disk_shortfall() -> tuple[str, ...]:
+    return ()
 
 
 def await_admission(
@@ -351,6 +481,7 @@ def await_admission(
     timeout: float | None,
     *,
     read: Callable[[], tuple[int, str | None]],
+    disk: Callable[[], tuple[str, ...]] = no_disk_shortfall,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     poll: float = ADMISSION_POLL_SECONDS,
@@ -359,19 +490,22 @@ def await_admission(
     """The shell around admission_decision: read, say so while waiting, sleep, read again."""
     begin = clock()
     level, note = read()
-    first_level = level
+    short = disk()
+    held_by = " and ".join(
+        (("memory pressure",) if level != PRESSURE_NORMAL else ()) + (("disk space",) if short else ()))
     notes = (note,) if note else ()
     while True:
         waited = clock() - begin
-        action = admission_decision(level, waited, timeout)
+        action = admission_decision(level, waited, timeout, short)
         if action != WAIT:
             break
-        say(f"waiting {label} {elapsed(waited)}: memory pressure level {level}")
+        say(f"waiting {label} {elapsed(waited)}: {'; '.join(hold_reasons(level, short))}")
         on_wait()
         sleep(poll)
         level, _ = read()
-    held = (f"waited {elapsed(waited)} at memory pressure before starting",) if first_level != PRESSURE_NORMAL else ()
-    return Admission(action, level, waited, notes + held)
+        short = disk()
+    held = (f"waited {elapsed(waited)} for {held_by} before starting",) if held_by else ()
+    return Admission(action, level, waited, notes + held, hold_reasons(level, short))
 
 
 def tool_calls(log: Path) -> tuple[int, str | None]:
@@ -635,6 +769,57 @@ def run(
     args: argparse.Namespace,
     status: StatusWriter = no_status,
     read: Callable[[], tuple[int, str | None]] = read_pressure_level,
+    disk: Callable[[], tuple[str, ...]] = no_disk_shortfall,
+    program: str | None = None,
+) -> Outcome:
+    """Admission, the sweep, the session, then finishing its worktree. `program` is the
+    path of `worktrees`, or None where it isn't installed."""
+    outcome = start_and_run(plan, args, status, read, disk, program)
+    made_worktree = args.where == "worktree" and (Path(plan.workdir) / ".git").exists()
+    return finish(outcome, args, program) if made_worktree and outcome.status != "skipped" else outcome
+
+
+def finish(outcome: Outcome, args: argparse.Namespace, program: str | None) -> Outcome:
+    """Finishes the run's worktree through `worktrees`, and says in the outcome what became of it."""
+    if args.keep_worktree:
+        return replace(outcome, cleanup="kept the worktree: --keep-worktree")
+    if program is None:
+        return replace(outcome, cleanup=f"kept the worktree, nothing cleaned: {WORKTREES} is not on the PATH")
+    checkout, worktree = Path(outcome.checkout), Path(outcome.workdir)
+    call = finish_args(ending(outcome.status, commits_ahead(checkout, worktree)), str(worktree), outcome.log)
+    code, output = run_program(program, call, checkout)
+    return replace(outcome, cleanup=program_note(call, code, output))
+
+
+def sweep_note(checkout: Path, args: argparse.Namespace, program: str | None) -> str | None:
+    """Sweeps the checkout's landed worktrees before this run makes its own."""
+    if args.where != "worktree" or args.keep_worktree or program is None:
+        return None
+    code, output = run_program(program, ("sweep", "--apply"), checkout)
+    return program_note(("sweep", "--apply"), code, output)
+
+
+def direnv_wrapper(checkout: Path, workdir: Path, where: str, program: str | None) -> tuple[list[str], str | None]:
+    """`direnv exec` for the session, and a note. A new worktree's `.envrc` is blocked, and
+    `direnv exec` refuses a blocked one, so in a worktree it wraps the run only once
+    `worktrees provision` succeeds; without the program the run starts without it."""
+    wrapper = env_wrapper(workdir)
+    if not wrapper or where != "worktree":
+        return wrapper, None
+    if program is None:
+        return [], f"{WORKTREES} is not on the PATH, so the worktree's .envrc wasn't provisioned; started without direnv exec"
+    code, output = run_program(program, ("provision", str(workdir)), checkout)
+    note = program_note(("provision", str(workdir)), code, output)
+    return (wrapper, note) if code == 0 else ([], f"{note}; started without direnv exec")
+
+
+def start_and_run(
+    plan: Plan,
+    args: argparse.Namespace,
+    status: StatusWriter,
+    read: Callable[[], tuple[int, str | None]],
+    disk: Callable[[], tuple[str, ...]],
+    program: str | None,
 ) -> Outcome:
     checkout = Path(plan.checkout)
     outcome = Outcome(plan.label, plan.checkout, plan.workdir, "skipped",
@@ -645,30 +830,33 @@ def run(
     if not args.no_admission:
         timeout = args.admission_timeout * 60 if args.admission_timeout is not None else None
         status("waiting")
-        admission = await_admission(plan.label, timeout, read=read,
+        admission = await_admission(plan.label, timeout, read=read, disk=disk,
                                     poll=args.admission_poll, on_wait=lambda: status("waiting"))
         outcome.notes.extend(admission.notes)
         if admission.action == GIVE_UP:
-            outcome.result = (f"not started: memory pressure level {admission.level} for "
+            outcome.result = (f"not started: {'; '.join(admission.reasons)} for "
                               f"{elapsed(admission.waited)}, past --admission-timeout")
             return outcome
+    swept = sweep_note(checkout, args, program)
+    if swept:
+        outcome.notes.append(swept)
     try:
         if args.where == "worktree":
             workdir, note = ensure_worktree(checkout, args.job)
             outcome.notes.append(note)
-            direnv_note = allow_direnv(checkout, workdir)
-            if direnv_note:
-                outcome.notes.append(direnv_note)
         else:
             workdir = checkout
     except RuntimeError as err:
         outcome.status, outcome.result = "failed", str(err)
         return outcome
+    wrapper, direnv_note = direnv_wrapper(checkout, workdir, args.where, program)
+    if direnv_note:
+        outcome.notes.append(direnv_note)
 
     log = args.log_dir / f"{plan.label}.stream.jsonl"
     err_log = args.log_dir / f"{plan.label}.stderr"
     outcome.log = str(log)
-    command = plan.prefix + env_wrapper(workdir) + plan.command
+    command = plan.prefix + wrapper + plan.command
     say(f"start   {plan.label}")
     start, done = time.monotonic(), threading.Event()
     with log.open("w"):
@@ -756,12 +944,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         "0 to write it only when the state changes (default: 10)")
     p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-headless/<job>")
     p.add_argument("--no-admission", action="store_true",
-                   help="start at once, whatever the memory pressure (the utility priority still applies)")
+                   help="start at once, whatever the memory pressure and free space "
+                        "(the utility priority still applies)")
     p.add_argument("--admission-timeout", type=float, metavar="MINUTES",
-                   help="give up after waiting this long for memory pressure to ease, "
-                        "with status skipped (default: wait as long as it takes)")
+                   help="give up after waiting this long for memory pressure to ease or disk space "
+                        "to free, with status skipped (default: wait as long as it takes)")
+    p.add_argument("--keep-worktree", action="store_true",
+                   help="leave this run's worktree as it ends, and sweep no landed ones before it")
     p.add_argument("--admission-poll", type=float, default=ADMISSION_POLL_SECONDS,
                    help=argparse.SUPPRESS)
+    p.add_argument("--floor-file", type=Path, help=argparse.SUPPRESS)
     p.add_argument("--projects-root", type=Path, default=PROJECTS_ROOT, help=argparse.SUPPRESS)
     p.add_argument("--allow-api-key", action="store_true",
                    help="run even though ANTHROPIC_API_KEY is set, which bills the API")
@@ -772,6 +964,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     if args.label is not None and not re.fullmatch(r"[A-Za-z0-9._-]+", args.label):
         p.error("--label may hold only letters, digits, '.', '_' and '-'")
     args.log_dir = args.log_dir or default_log_root() / args.job
+    args.floor_file = args.floor_file or default_floor_file()
     return args
 
 
@@ -788,9 +981,12 @@ def main(
     *,
     read: Callable[[], tuple[int, str | None]] | None = None,
     platform: str = sys.platform,
+    free: Callable[[Path], int | None] = free_bytes,
+    find_program: Callable[[str], str | None] = shutil.which,
 ) -> int:
     """The command line. `read` gives the memory pressure level, by default through sysctl on
-    `platform`; tests pass both rather than patching the module."""
+    `platform`, `free` a volume's free bytes, and `find_program` the path of `worktrees`;
+    tests pass them rather than patching the module."""
     read = read or (lambda: read_pressure_level(platform))
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if os.environ.get("ANTHROPIC_API_KEY") and not args.allow_api_key and not args.dry_run:
@@ -806,9 +1002,17 @@ def main(
     if checkout is None:
         print(f"not a git checkout: {args.checkout}", file=sys.stderr)
         return 2
-    plan = plan_for(checkout, args.label or checkout.name, prompt, args, platform)
+    floor_gb, floor_note = build_floor(read_or_empty(args.floor_file), os.environ)
+    volumes = (checkout, NIX_VOLUME)
+
+    def disk() -> tuple[str, ...]:
+        return disk_shortfalls(tuple((str(v), free(v)) for v in volumes), floor_gb)
+
+    program = find_program(WORKTREES)
+    planned = plan_for(checkout, args.label or checkout.name, prompt, args, platform)
+    plan = replace(planned, notes=[*planned.notes, *([floor_note] if floor_note else [])])
     for note in plan.notes:
-        if "may still be running" in note:
+        if "may still be running" in note or note == floor_note:
             say(f"warning {plan.label}: {note}")
 
     if args.dry_run:
@@ -817,6 +1021,9 @@ def main(
             "command": plan.command[:2] + ["<prompt>"] + plan.command[3:],
             "pressure_level": level,
             "pressure_note": note,
+            "build_floor_gb": floor_gb,
+            "disk_short": None if args.no_admission else list(disk()),
+            "worktrees": program,
         }))
         return 0
 
@@ -831,12 +1038,13 @@ def main(
     }
     status = status_writer(args.log_dir / f"{plan.label}.status.json", base,
                            log=log, projects_root=args.projects_root)
-    outcome = run(plan, args, status, read)
+    outcome = run(plan, args, status, read, disk, program)
     status(outcome.status, ended=time.time(),
            final={"session_id": outcome.session_id, "turns": outcome.turns})
     first = outcome.result.splitlines()[0][:120] if outcome.result else ""
     turns = f" ({outcome.turns} turns)" if outcome.turns is not None else ""
-    say(f"{outcome.status:7} {outcome.label}{turns}: {first}")
+    cleanup = f" [{outcome.cleanup}]" if outcome.cleanup else ""
+    say(f"{outcome.status:7} {outcome.label}{turns}: {first}{cleanup}")
     line = json.dumps(asdict(outcome))
     (args.log_dir / f"{plan.label}.outcome.json").write_text(line + "\n")
     print(line, flush=True)

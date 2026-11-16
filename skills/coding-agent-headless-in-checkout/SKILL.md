@@ -32,8 +32,9 @@ run_headless.py --job <name> --prompt-file prompt.md <checkout>
 | `--permission-mode`          | `auto`                  | passed to `claude`, always with `--permission-prompts none` so nothing waits                                                |
 | `--max-turns`, `--timeout`   | none                    | caps; set them on a first or experimental run                                                                               |
 | `--claude-arg`               | none                    | one more `claude` argument, repeatable                                                                                      |
-| `--no-admission`             | off                     | start at once, whatever the memory pressure                                                                                 |
-| `--admission-timeout`        | none                    | minutes to wait for memory pressure to ease before giving up as `skipped`                                                   |
+| `--no-admission`             | off                     | start at once, whatever the memory pressure and free space                                                                  |
+| `--admission-timeout`        | none                    | minutes to wait for memory pressure to ease or disk space to free before giving up as `skipped`                             |
+| `--keep-worktree`            | off                     | leave the run's worktree as it ends, and sweep no landed worktrees before it                                                |
 | `--dry-run`                  | off                     | print the working directory, the session it resumes, the command, the priority prefix and the memory pressure level it read |
 
 A run takes minutes to an hour, so a session running it follows `coding-agent-usage-line-report-eta`.
@@ -42,7 +43,8 @@ A run takes minutes to an hour, so a session running it follows `coding-agent-us
 
 - **Priority:** on macOS each session starts under `taskpolicy -c utility`, so the scheduler favours interactive work and everything the session starts inherits the class. Elsewhere it starts at normal priority. `--no-admission` keeps the utility class.
 - **Memory pressure:** before starting, the script reads `kern.memorystatus_vm_pressure_level`: 1 (normal) starts the run; 2 (warning) or 4 (critical) holds it, rechecking every few seconds and saying so on a progress line, `waiting <label> <time>: memory pressure level <n>`. A run already going is never stopped. A level that can't be read, or isn't 1, 2 or 4, counts as 1, with a note in the outcome. Off macOS there is nothing to read, so the run starts.
-- **Giving up:** `--admission-timeout <minutes>` ends the wait with status `skipped` and exit status 3, so a fan-out moves on; the checkout's work is untouched and no worktree is made. Without it the run waits as long as it takes; with `--no-admission` it doesn't wait at all, for a run that must go whatever the pressure.
+- **Disk space:** the script also reads the free space on the checkout's volume and on `/nix` with `shutil.disk_usage`, and holds the run the same way while either is below the build floor, the one agents' builds stop at: `WORKTREES_FLOOR_BUILD_GB` from the environment, else the `WORKTREES_FLOOR_BUILD_GB=<GB>` line of `~/.config/worktrees/floor` (`$XDG_CONFIG_HOME/worktrees/floor`), else 70 GB. A volume that can't be read, such as `/nix` on a machine without Nix, holds nothing. The progress line names the volume, its free space and the floor.
+- **Giving up:** `--admission-timeout <minutes>` ends the wait with status `skipped` and exit status 3, so a fan-out moves on; the checkout's work is untouched, no worktree is made and nothing is swept. Without it the run waits as long as it takes; with `--no-admission` it doesn't wait at all, for a run that must go whatever the pressure or free space.
 - **What it bounds:** Nix's `max-jobs` and `cores` apply to each client of the daemon, so holding a new run is what keeps builds across a fan-out near the machine's CPUs. Keep a fan-out's `-P` small anyway.
 - **Checking it:** `taskpolicy -G <pid>` on a started session shows the utility class.
 
@@ -83,13 +85,13 @@ Show the list and the prompt to the user before a real run: every run acts on it
 Each run gets the checkout's environment the way a manual session does:
 
 - **Through a plugin:** a checkout whose dev shell reaches Claude Code through a plugin, one that loads it into every Bash command, needs nothing more, since `claude -p` loads plugins.
-- **Through direnv:** a checkout with an `.envrc` runs under `direnv exec <dir>`. direnv trusts an `.envrc` by its path, so a new worktree's copy starts blocked; the script allows it only when it is byte for byte the checkout's own, which the user already allowed.
+- **Through direnv:** a checkout with an `.envrc` runs under `direnv exec <dir>`. direnv trusts an `.envrc` by its path, so a new worktree's copy starts blocked, and `direnv exec` refuses a blocked `.envrc` outright. In a worktree the script therefore calls `worktrees provision <worktree>` first, which allows the copy when it is byte for byte the checkout's own, and runs under `direnv exec` only when that succeeds. Without the `worktrees` program, or when provisioning fails, the session starts without `direnv exec`, and a note in the outcome says so.
 
 ## Reading the results
 
 Progress goes to stderr, each line opening on the run's label: one when the session starts, one every `--progress-every` seconds, 60 by default, with its time, its tool calls so far and the tool it called last, and one when it ends. When the agent runs a fan-out in the background, it reads that output only when the user asks how it's going.
 
-The outcome goes to stdout as one JSON line, and to `<label>.outcome.json` in the log folder, `$XDG_STATE_HOME/coding-agent-headless/<job>/` by default: its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log` and its `notes`. The session's full stream-json output and stderr are beside it. The exit status says the same: 0 ok, 1 failed or timed out, 2 bad arguments, 3 skipped, 255 a usage limit.
+The outcome goes to stdout as one JSON line, and to `<label>.outcome.json` in the log folder, `$XDG_STATE_HOME/coding-agent-headless/<job>/` by default: its `status` (`ok`, `failed`, `limit` or `skipped`), exit `code`, `session_id`, `resumed_from`, `turns`, the start of the final `result`, its `log`, its `notes` and its `cleanup`, what became of the worktree (`null` for a run in the checkout), which the progress line that ends the run repeats in brackets. The session's full stream-json output and stderr are beside it. The exit status says the same: 0 ok, 1 failed or timed out, 2 bad arguments, 3 skipped, 255 a usage limit.
 
 ### The live status file
 
@@ -120,7 +122,15 @@ Report each checkout's outcome to the user by its name, with the branch of any w
 
 ## Cleaning up
 
-A finished job leaves its worktrees and `headless/<job>` branches. Remove each by its path and branch name once its changes are merged or dropped, as `shell-hygiene-delete-named-paths` and `git-workflow-tidy-branches` say: `git -C <checkout> worktree remove <checkout>.worktrees/headless-<job>`, then `git -C <checkout> branch -d headless/<job>`.
+With the `worktrees` program on the `PATH`, the script finishes its own worktree when the run ends, and the outcome's `cleanup` says how:
+
+- **Changed nothing**, no commits on `headless/<job>`: `worktrees finish <worktree>` removes the worktree and its branch.
+- **Failed** with no commits: `worktrees finish <worktree> --log <the stream log>`, since the log is outside the worktree; the program keeps a worktree with uncommitted changes.
+- **Committed:** `worktrees clean <worktree> --apply` deletes its build output, and the worktree waits for its branch to land.
+
+Before making a worktree the script runs `worktrees sweep --apply` in the checkout, which removes earlier jobs' worktrees whose branches have landed since. The program keeps anything with uncommitted changes or commits of its own, so a branch still to review stays. `--keep-worktree` turns off both, for a run someone wants to inspect.
+
+To finish a job's worktree by hand, such as one `--keep-worktree` left, run `worktrees finish <checkout>.worktrees/headless-<job>`; `worktrees sweep --apply` in the checkout removes all of its landed ones. Without the program the script keeps every worktree and says in `cleanup` that nothing was cleaned; remove each then by its path and branch name once its changes are merged or dropped, as `shell-hygiene-delete-named-paths` and `git-workflow-tidy-branches` say.
 
 ## Your preferences
 

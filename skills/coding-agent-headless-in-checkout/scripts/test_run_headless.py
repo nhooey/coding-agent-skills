@@ -42,6 +42,12 @@ FAKE_CLAUDE = textwrap.dedent(
         print(json.dumps({{"type": "result", "is_error": True, "result": "tests failed"}}))
         sys.exit(1)
     print(json.dumps({{"type": "system", "subtype": "init", "session_id": "sess-1"}}), flush=True)
+    if mode == "commit":
+        import subprocess
+        open("work.txt", "w").write("work\\n")
+        subprocess.run(["git", "add", "work.txt"], check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
+                        "commit", "-q", "-m", "work"], check=True)
     if mode == "slow":
         import time
         print(json.dumps({{"type": "assistant", "message": {{"id": "m1", "content": [
@@ -52,6 +58,12 @@ FAKE_CLAUDE = textwrap.dedent(
                        "session_id": "sess-1", "num_turns": 3}}))
     """
 )
+
+# Stand-ins for the `worktrees` program and direnv: each notes its working
+# directory and arguments, one call per line. The stub `worktrees` exits with
+# FAKE_WORKTREES_EXIT; the stub direnv runs the command after `exec <dir>`.
+FAKE_WORKTREES = '#!/bin/sh\necho "$PWD|$*" >> "$FAKE_CLAUDE_RECORD/worktrees.txt"\necho "stub $1 done"\nexit "${FAKE_WORKTREES_EXIT:-0}"\n'
+FAKE_DIRENV = '#!/bin/sh\necho "$*" >> "$FAKE_CLAUDE_RECORD/direnv.txt"\nshift 2\nexec "$@"\n'
 
 
 def git(*args: str, cwd: Path) -> None:
@@ -264,6 +276,72 @@ class Admission(unittest.TestCase):
         result = run_headless.await_admission("x", None, read=lambda: (1, None), sleep=None)
         self.assertEqual((result.action, result.notes), ("start", ()))
 
+    def test_a_disk_shortfall_holds_the_run_like_memory_pressure(self):
+        decide = run_headless.admission_decision
+        short = ("60 GB free on /nix, below the 70 GB build floor",)
+        self.assertEqual(decide(1, 0, None, short), "wait")
+        self.assertEqual(decide(1, 10, 10, short), "give_up")
+        self.assertEqual(decide(1, 10, 10, ()), "start")
+
+    def test_waits_for_disk_space_then_starts(self):
+        shortfalls, now = iter([("low on /nix",), ("low on /nix",), ()]), [0.0]
+        def sleep(seconds):
+            now[0] += seconds
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            result = run_headless.await_admission(
+                "x", None, read=lambda: (1, None), disk=lambda: next(shortfalls),
+                sleep=sleep, clock=lambda: now[0], poll=5)
+        self.assertEqual((result.action, result.waited), ("start", 10.0))
+        self.assertIn("waiting x 0s: low on /nix", err.getvalue())
+        self.assertEqual(result.notes, ("waited 10s for disk space before starting",))
+
+
+class Disk(unittest.TestCase):
+    def test_the_floor_is_70_gb_without_a_file_or_a_variable(self):
+        self.assertEqual(run_headless.build_floor("", {}), (70.0, None))
+
+    def test_the_floor_comes_from_the_files_key_value_lines(self):
+        text = "# written by Home Manager\nWORKTREES_FLOOR_BUILD_GB=50\nWORKTREES_FLOOR_CLEANUP_ONLY_GB=20\n"
+        self.assertEqual(run_headless.build_floor(text, {}), (50.0, None))
+
+    def test_the_variable_overrides_the_file(self):
+        floor = run_headless.build_floor("WORKTREES_FLOOR_BUILD_GB=50\n", {"WORKTREES_FLOOR_BUILD_GB": "90"})
+        self.assertEqual(floor, (90.0, None))
+
+    def test_a_floor_that_is_not_a_number_falls_back_to_70_with_a_note(self):
+        gb, note = run_headless.build_floor("WORKTREES_FLOOR_BUILD_GB=lots\n", {})
+        self.assertEqual(gb, 70.0)
+        self.assertIn("'lots'", note)
+
+    def test_shortfalls_name_each_volume_under_the_floor(self):
+        free = (("/w", 80 * 10**9), ("/nix", 60 * 10**9), ("/gone", None))
+        self.assertEqual(run_headless.disk_shortfalls(free, 70),
+                         ("60 GB free on /nix, below the 70 GB build floor",))
+
+    def test_free_bytes_of_a_missing_path_is_none(self):
+        self.assertIsNone(run_headless.free_bytes(Path("/no/such/volume/here")))
+
+
+class Finishing(unittest.TestCase):
+    def test_commits_win_then_status_decides(self):
+        ending = run_headless.ending
+        self.assertEqual([ending("ok", 0), ending("failed", 0), ending("limit", 0)],
+                         ["nothing", "failed", "failed"])
+        self.assertEqual([ending("ok", 2), ending("failed", 1)], ["committed", "committed"])
+
+    def test_each_ending_is_one_worktrees_call(self):
+        args = run_headless.finish_args
+        self.assertEqual(args("nothing", "/wt", "/l"), ("finish", "/wt"))
+        self.assertEqual(args("failed", "/wt", "/l"), ("finish", "/wt", "--log", "/l"))
+        self.assertEqual(args("failed", "/wt", None), ("finish", "/wt"))
+        self.assertEqual(args("committed", "/wt", "/l"), ("clean", "/wt", "--apply"))
+
+    def test_program_note_keeps_the_last_line(self):
+        self.assertEqual(run_headless.program_note(("finish", "/wt"), 0, "a\nkept: unmerged\n"),
+                         "worktrees finish /wt: exit 0: kept: unmerged")
+        self.assertEqual(run_headless.program_note(("sweep", "--apply"), 1, ""),
+                         "worktrees sweep --apply: exit 1")
+
 
 class Runs(unittest.TestCase):
     def setUp(self):
@@ -284,6 +362,16 @@ class Runs(unittest.TestCase):
         policy = bin_dir / "taskpolicy"
         policy.write_text('#!/bin/sh\necho "$1 $2" >> "$FAKE_CLAUDE_RECORD/taskpolicy.txt"\nshift 2\nexec "$@"\n')
         policy.chmod(0o755)
+        # `worktrees` sits in a folder of its own, off the PATH, so a run finds it
+        # only through run_one's `program=True`, never a real one on this machine.
+        self.worktrees = base / "tools" / "worktrees"
+        self.worktrees.parent.mkdir()
+        self.worktrees.write_text(FAKE_WORKTREES)
+        self.worktrees.chmod(0o755)
+        direnv = bin_dir / "direnv"
+        direnv.write_text(FAKE_DIRENV)
+        direnv.chmod(0o755)
+        self.floor_file = base / "config" / "worktrees" / "floor"
         self.env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
                     "FAKE_CLAUDE_RECORD": str(self.record)}
         # alpha has an earlier session; beta has none.
@@ -297,14 +385,17 @@ class Runs(unittest.TestCase):
 
     def common(self) -> list[str]:
         return ["--prompt", "do the thing", "--job", "t1", "--progress-every", "0",
-                "--projects-root", str(self.projects), "--log-dir", str(self.logs)]
+                "--projects-root", str(self.projects), "--log-dir", str(self.logs),
+                "--floor-file", str(self.floor_file)]
 
     def run_one(self, checkout: Path, *extra: str, mode: str = "ok",
-                levels: tuple[int, ...] = (1,), platform: str = "linux") -> tuple[int, str]:
+                levels: tuple[int, ...] = (1,), platform: str = "linux",
+                free_gb: float = 500, program: bool = False) -> tuple[int, str]:
         """main() in this process, for one checkout; returns its exit status and stdout.
 
         The memory pressure reader gives `levels` in turn, then repeats the last; `self.reads`
-        counts its calls. `platform` stands in for sys.platform.
+        counts its calls. `platform` stands in for sys.platform, `free_gb` for the free space
+        on every volume, and `program` puts the stub `worktrees` in reach.
         """
         self.reads = 0
 
@@ -312,15 +403,21 @@ class Runs(unittest.TestCase):
             self.reads += 1
             return levels[min(self.reads, len(levels)) - 1], None
 
+        def find(name: str) -> str | None:
+            return str(self.worktrees) if program and name == "worktrees" else None
+
         env = {**self.env, "FAKE_CLAUDE_MODE": mode}
-        old = {k: os.environ.get(k) for k in [*env, "ANTHROPIC_API_KEY"]}
+        old = {k: os.environ.get(k) for k in [*env, "ANTHROPIC_API_KEY", "WORKTREES_FLOOR_BUILD_GB"]}
         os.environ.update(env)
         os.environ.pop("ANTHROPIC_API_KEY", None)
+        if "WORKTREES_FLOOR_BUILD_GB" not in env:
+            os.environ.pop("WORKTREES_FLOOR_BUILD_GB", None)
         out, err = io.StringIO(), io.StringIO()
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 code = run_headless.main([*self.common(), *extra, str(checkout)],
-                                         read=read, platform=platform)
+                                         read=read, platform=platform,
+                                         free=lambda _: int(free_gb * 10**9), find_program=find)
         finally:
             for k, v in old.items():
                 if v is None:
@@ -502,7 +599,8 @@ class Runs(unittest.TestCase):
         listing = f"{self.alpha}\n{self.beta}\n"
         cmd = ["xargs", "-P", "1", "-I{}", sys.executable, "-I", str(SCRIPTS / "run_headless.py"),
                *self.common(), "--where", "checkout", "{}"]
-        env = {**os.environ, **self.env, "FAKE_CLAUDE_MODE": "limit"}
+        # A floor of 0 GB, so this machine's own free space never holds the run.
+        env = {**os.environ, **self.env, "FAKE_CLAUDE_MODE": "limit", "WORKTREES_FLOOR_BUILD_GB": "0"}
         env.pop("ANTHROPIC_API_KEY", None)
         proc = subprocess.run(cmd, input=listing, text=True, capture_output=True, env=env)
         self.assertNotEqual(proc.returncode, 0)
@@ -554,6 +652,124 @@ class Runs(unittest.TestCase):
         status = self.status("beta")
         self.assertEqual((status["state"], status["session_id"], status["tool_calls"]),
                          ("skipped", None, 0))
+
+    # Disk admission.
+
+    def test_below_the_default_floor_the_run_is_skipped_with_status_3(self):
+        code, out = self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0",
+                                 free_gb=60, program=True)
+        self.assertEqual(code, 3)
+        outcome = json.loads(out)
+        self.assertEqual(outcome["status"], "skipped")
+        self.assertIn("60 GB free", outcome["result"])
+        self.assertIn("below the 70 GB build floor", outcome["result"])
+        self.assertIsNone(outcome["cleanup"])
+        self.assertFalse(any(self.record.iterdir()), "neither claude nor worktrees may have run")
+        self.assertFalse(run_headless.worktree_path(self.beta, "t1").exists())
+
+    def test_the_floor_is_read_from_the_floor_file(self):
+        self.floor_file.parent.mkdir(parents=True)
+        self.floor_file.write_text("WORKTREES_FLOOR_BUILD_GB=50\nWORKTREES_FLOOR_CLEANUP_ONLY_GB=25\n")
+        self.assertEqual(self.run_one(self.beta, free_gb=60)[0], 0)
+        self.floor_file.write_text("WORKTREES_FLOOR_BUILD_GB=100\n")
+        code, out = self.run_one(self.beta, "--admission-timeout", "0", "--admission-poll", "0",
+                                 free_gb=60)
+        self.assertEqual(code, 3)
+        self.assertIn("below the 100 GB build floor", json.loads(out)["result"])
+
+    def test_the_variable_overrides_the_floor_file(self):
+        self.floor_file.parent.mkdir(parents=True)
+        self.floor_file.write_text("WORKTREES_FLOOR_BUILD_GB=100\n")
+        self.env["WORKTREES_FLOOR_BUILD_GB"] = "10"
+        self.assertEqual(self.run_one(self.beta, free_gb=60)[0], 0)
+
+    def test_dry_run_shows_the_floor_and_the_shortfall(self):
+        plan = json.loads(self.run_one(self.beta, "--dry-run", free_gb=60, program=True)[1])
+        self.assertEqual(plan["build_floor_gb"], 70.0)
+        self.assertEqual(len(plan["disk_short"]), 2, "the checkout's volume and /nix")
+        self.assertEqual(plan["worktrees"], str(self.worktrees))
+
+    def test_no_admission_starts_below_the_floor(self):
+        self.assertEqual(self.run_one(self.beta, "--no-admission", "--admission-timeout", "0",
+                                      free_gb=1)[0], 0)
+
+    # Finishing the worktree.
+
+    def worktrees_calls(self) -> list[tuple[str, str]]:
+        """The stub `worktrees` calls, each as (working directory, arguments)."""
+        path = self.record / "worktrees.txt"
+        lines = path.read_text().splitlines() if path.exists() else []
+        return [tuple(line.split("|", 1)) for line in lines]
+
+    def test_a_run_that_changed_nothing_is_finished(self):
+        self.assertEqual(self.run_one(self.alpha, program=True)[0], 0)
+        wt = run_headless.worktree_path(self.alpha, "t1")
+        self.assertEqual(self.worktrees_calls(),
+                         [(str(self.alpha), "sweep --apply"), (str(self.alpha), f"finish {wt}")])
+        self.assertEqual(self.outcome("alpha")["cleanup"], f"worktrees finish {wt}: exit 0: stub finish done")
+        self.assertIn("[worktrees finish", self.stderr)
+
+    def test_a_failed_run_is_finished_with_its_log(self):
+        self.assertEqual(self.run_one(self.alpha, mode="fail", program=True)[0], 1)
+        wt = run_headless.worktree_path(self.alpha, "t1")
+        self.assertEqual(self.worktrees_calls()[-1],
+                         (str(self.alpha), f"finish {wt} --log {self.logs / 'alpha.stream.jsonl'}"))
+
+    def test_a_run_that_committed_is_cleaned_and_kept(self):
+        self.assertEqual(self.run_one(self.alpha, mode="commit", program=True)[0], 0)
+        wt = run_headless.worktree_path(self.alpha, "t1")
+        self.assertEqual(self.worktrees_calls()[-1], (str(self.alpha), f"clean {wt} --apply"))
+        self.assertTrue((wt / "work.txt").is_file())
+
+    def test_the_programs_refusal_is_reported_not_fatal(self):
+        self.env["FAKE_WORKTREES_EXIT"] = "1"
+        self.assertEqual(self.run_one(self.alpha, program=True)[0], 0)
+        self.assertIn("exit 1", self.outcome("alpha")["cleanup"])
+        self.assertIn("worktrees sweep --apply: exit 1", " ".join(self.outcome("alpha")["notes"]))
+
+    def test_keep_worktree_turns_off_the_sweep_and_the_finish(self):
+        self.assertEqual(self.run_one(self.alpha, "--keep-worktree", program=True)[0], 0)
+        self.assertEqual(self.worktrees_calls(), [])
+        self.assertEqual(self.outcome("alpha")["cleanup"], "kept the worktree: --keep-worktree")
+
+    def test_without_the_program_the_worktree_stays_and_the_outcome_says_so(self):
+        self.assertEqual(self.run_one(self.alpha)[0], 0)
+        self.assertTrue(run_headless.worktree_path(self.alpha, "t1").is_dir())
+        self.assertEqual(self.outcome("alpha")["cleanup"],
+                         "kept the worktree, nothing cleaned: worktrees is not on the PATH")
+        self.assertIn("nothing cleaned", self.stderr)
+
+    def test_a_run_in_the_checkout_finishes_nothing(self):
+        self.assertEqual(self.run_one(self.alpha, "--where", "checkout", program=True)[0], 0)
+        self.assertEqual(self.worktrees_calls(), [])
+        self.assertIsNone(self.outcome("alpha")["cleanup"])
+
+    # Provisioning a worktree's .envrc for direnv exec.
+
+    def commit_envrc(self) -> None:
+        (self.alpha / ".envrc").write_text("export X=1\n")
+        git("add", ".envrc", cwd=self.alpha)
+        git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "envrc",
+            cwd=self.alpha)
+
+    def test_a_worktree_with_an_envrc_is_provisioned_before_direnv_exec(self):
+        self.commit_envrc()
+        self.assertEqual(self.run_one(self.alpha, program=True)[0], 0)
+        wt = run_headless.worktree_path(self.alpha, "t1")
+        self.assertIn((str(self.alpha), f"provision {wt}"), self.worktrees_calls())
+        self.assertEqual((self.record / "direnv.txt").read_text().split()[:2], ["exec", str(wt)])
+
+    def test_without_the_program_a_worktree_runs_without_direnv_exec(self):
+        self.commit_envrc()
+        self.assertEqual(self.run_one(self.alpha)[0], 0)
+        self.assertFalse((self.record / "direnv.txt").exists())
+        self.assertIn("started without direnv exec", " ".join(self.outcome("alpha")["notes"]))
+
+    def test_a_failed_provision_runs_without_direnv_exec(self):
+        self.commit_envrc()
+        self.env["FAKE_WORKTREES_EXIT"] = "1"
+        self.assertEqual(self.run_one(self.alpha, program=True)[0], 0)
+        self.assertFalse((self.record / "direnv.txt").exists())
 
 
 if __name__ == "__main__":
