@@ -343,6 +343,76 @@ class Finishing(unittest.TestCase):
                          "worktrees sweep --apply: exit 1")
 
 
+class Summary(unittest.TestCase):
+    """`--summary --job <job>` over a job's folder of outcome files."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.state = Path(self.tmp.name)
+        patcher = mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(self.state)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.tmp.cleanup)
+        self.folder = self.state / "coding-agent-headless" / "night"
+
+    def write_outcomes(self, outcomes: dict[str, str]) -> None:
+        self.folder.mkdir(parents=True)
+        for label, text in outcomes.items():
+            (self.folder / f"{label}.outcome.json").write_text(text)
+        (self.folder / "alpha.status.json").write_text(json.dumps({"state": "running"}))
+        (self.folder / "alpha.stream.jsonl").write_text('{"status": "ok"}\n')
+
+    def summary(self, *extra: str) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = run_headless.main(["--summary", "--job", "night", *extra])
+        return code, out.getvalue()
+
+    def test_counts_each_state_from_the_outcome_files_only(self):
+        self.write_outcomes({
+            "alpha": json.dumps({"status": "ok"}), "beta": json.dumps({"status": "ok"}),
+            "gamma": json.dumps({"status": "failed"}), "delta": json.dumps({"status": "limit"}),
+            "eps": "not json",
+        })
+        code, out = self.summary("--json")
+        self.assertEqual(code, 0)
+        record = json.loads(out)
+        self.assertEqual(record["runs"], 5)
+        self.assertEqual(record["folder"], str(self.folder))
+        self.assertEqual(record["counts"],
+                         {"ok": 2, "failed": 1, "skipped": 0, "limit": 1, "unreadable": 1})
+
+    def test_prints_a_table_by_default(self):
+        self.write_outcomes({"alpha": json.dumps({"status": "skipped"})})
+        code, out = self.summary()
+        self.assertEqual(code, 0)
+        lines = out.splitlines()
+        self.assertIn("1 runs", lines[0])
+        self.assertEqual(lines[1].split(), ["state", "runs"])
+        self.assertEqual([line.split() for line in lines[2:]],
+                         [["ok", "0"], ["failed", "0"], ["skipped", "1"], ["limit", "0"]])
+
+    def test_a_job_with_no_outcome_files_prints_zero_counts(self):
+        code, out = self.summary("--json")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["counts"], {"ok": 0, "failed": 0, "skipped": 0, "limit": 0})
+        self.folder.mkdir(parents=True)
+        code, out = self.summary()
+        self.assertEqual(code, 0)
+        self.assertIn("0 runs", out)
+
+    def test_log_dir_names_another_folder(self):
+        other = self.state / "elsewhere"
+        other.mkdir()
+        (other / "a.outcome.json").write_text(json.dumps({"status": "failed"}))
+        record = json.loads(self.summary("--json", "--log-dir", str(other))[1])
+        self.assertEqual(record["counts"]["failed"], 1)
+
+    def test_state_counts_keeps_unknown_states_after_the_known_ones(self):
+        self.assertEqual(list(run_headless.state_counts(("zeta", "ok", "beta"))),
+                         ["ok", "failed", "skipped", "limit", "beta", "zeta"])
+
+
 class Runs(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

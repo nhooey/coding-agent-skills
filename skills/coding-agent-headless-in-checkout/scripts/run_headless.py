@@ -80,6 +80,12 @@ state (waiting, running, ok, failed, limit or skipped), its times, session,
 turns, tool calls, last tool, its last ETA line and the session that started
 the runner. The coding-agent-headless-runs mod draws these files in a pane.
 
+Summary: `run_headless.py --summary --job <job>` starts nothing. It reads the
+job's outcome files in its log folder and prints how many runs ended in each
+state, ok, failed, limit and skipped always among them, as a table, or as one
+JSON object with --json. A job with no outcome files prints zero counts. It
+exits 0; an outcome file that holds no status counts as `unreadable`.
+
 Exit status:
   0    the session ended without an error
   1    it failed, or timed out
@@ -109,7 +115,7 @@ import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Callable, Mapping
+from typing import Callable, Iterable, Mapping
 
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 USAGE_LIMIT = re.compile(
@@ -124,6 +130,7 @@ PRESSURE_LEVELS = frozenset({1, 2, 4})
 ADMISSION_POLL_SECONDS = 5.0
 START, WAIT, GIVE_UP = "start", "wait", "give_up"
 EXIT = {"ok": 0, "failed": 1, "skipped": 3, "limit": 255}
+UNREADABLE = "unreadable"
 ETA_LINE = re.compile(
     r"⛳ skills/coding-agent-usage-line-report-eta: ETA (\d+(?:\.\d+)?)([smh])(?![A-Za-z])"
 )
@@ -968,6 +975,66 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return args
 
 
+def outcome_status(text: str) -> str:
+    """The `status` of one outcome file's text, or UNREADABLE when it holds no JSON object with one."""
+    record = json_object(text.strip())
+    status = record.get("status") if record else None
+    return status if isinstance(status, str) and status else UNREADABLE
+
+
+def state_counts(statuses: Iterable[str]) -> dict[str, int]:
+    """How many runs ended in each state: every state an outcome can have, zero or not, in the
+    order EXIT gives them, then any other status found, in name order."""
+    found = tuple(statuses)
+    others = sorted(set(found) - set(EXIT))
+    return {state: found.count(state) for state in (*EXIT, *others)}
+
+
+def summary_record(job: str, folder: Path, statuses: Iterable[str]) -> dict:
+    counts = state_counts(statuses)
+    return {"job": job, "folder": str(folder), "runs": sum(counts.values()), "counts": counts}
+
+
+def summary_table(record: dict) -> str:
+    width = max(len("state"), *map(len, record["counts"]))
+    rows = (f"{state:<{width}}  {n:>4}" for state, n in record["counts"].items())
+    return "\n".join((
+        f"job {record['job']}: {record['runs']} runs with an outcome in {record['folder']}",
+        f"{'state':<{width}}  {'runs':>4}",
+        *rows,
+    ))
+
+
+def read_statuses(folder: Path) -> tuple[str, ...]:
+    """The status of every <label>.outcome.json in a job's log folder; none for a missing folder."""
+    paths = sorted(folder.glob("*.outcome.json")) if folder.is_dir() else ()
+    return tuple(outcome_status(read_or_empty(p)) for p in paths)
+
+
+def parse_summary_args(argv: list[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="run_headless.py --summary",
+        description="Count a job's runs in each state, from the outcome files in its log folder.",
+    )
+    p.add_argument("--summary", action="store_true", required=True)
+    p.add_argument("--job", required=True, help="the job whose runs to count")
+    p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-headless/<job>")
+    p.add_argument("--json", action="store_true", help="print one JSON object instead of a table")
+    args = p.parse_args(argv)
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", args.job):
+        p.error("--job may hold only letters, digits, '.', '_' and '-'")
+    args.log_dir = args.log_dir or default_log_root() / args.job
+    return args
+
+
+def summary(argv: list[str]) -> int:
+    """`--summary --job <job>`: print the count of the job's runs in each state, exit 0."""
+    args = parse_summary_args(argv)
+    record = summary_record(args.job, args.log_dir, read_statuses(args.log_dir))
+    print(json.dumps(record) if args.json else summary_table(record))
+    return 0
+
+
 def read_prompt(args: argparse.Namespace) -> str:
     if args.prompt is not None:
         return args.prompt
@@ -987,8 +1054,11 @@ def main(
     """The command line. `read` gives the memory pressure level, by default through sysctl on
     `platform`, `free` a volume's free bytes, and `find_program` the path of `worktrees`;
     tests pass them rather than patching the module."""
+    argv = sys.argv[1:] if argv is None else argv
+    if "--summary" in argv:
+        return summary(argv)
     read = read or (lambda: read_pressure_level(platform))
-    args = parse_args(sys.argv[1:] if argv is None else argv)
+    args = parse_args(argv)
     if os.environ.get("ANTHROPIC_API_KEY") and not args.allow_api_key and not args.dry_run:
         print("ANTHROPIC_API_KEY is set, so `claude -p` would bill the API instead of your "
               "subscription. Unset it, or pass --allow-api-key.", file=sys.stderr)
