@@ -33,8 +33,9 @@ Subcommands:
                              printed the 📌 header with its rule; a count line never resets the clock
   decide [--json]            every open Decide item with its options, one line each, or with `--json`
                              one object `{"items": [...]}`, each item its turn id, list, number,
-                             summary, kind (radio, checkbox or binary), reference and options (letter
-                             and name), for a tool to read.
+                             summary, kind (radio, checkbox or binary), reference, note and options
+                             (letter, name, glyph, consequence, pros, cons and notes), for a tool to
+                             read.
                              Open: raised since the latest `recheck` (or `reassess`) turn, its latest restatement
                              only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing)
