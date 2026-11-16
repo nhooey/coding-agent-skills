@@ -34,8 +34,8 @@ Subcommands:
   decide [--json]            every open Decide item with its options, one line each, or with `--json`
                              one object `{"items": [...]}`, each item its turn id, list, number,
                              summary, kind (radio, checkbox, or binary for 👍 and 👎 options in
-                             earlier turns), reference and options (letter
-                             and name), for a tool to read.
+                             earlier turns), reference, note and options (letter, name, glyph,
+                             consequence, pros, cons and notes), for a tool to read.
                              Open: raised since the latest `reassess` turn, its latest restatement only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing)
 A `reassess` turn is one whose prompt opens on `reassess`, `recheck`, `regenerate` or `recalculate`, or a
