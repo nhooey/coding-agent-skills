@@ -1,7 +1,7 @@
 {
   "name": "coding-agent-skills-hooks",
   "version": "0.1.0",
-  "description": "The hooks of the coding-agent-skills collection, each run in every session: session-build-limits.sh gives a session a fixed share of the machine for builds and tests.",
+  "description": "The hooks of the coding-agent-skills collection, each run in every session: session-build-limits.sh gives a session a fixed share of the machine for builds and tests, and scratchpad-guard.sh keeps loose program files out of temporary directories and gives each subagent that rule.",
   "author": { "name": "Neil Hooey" },
   "homepage": "https://github.com/nhooey/coding-agent-skills",
   "repository": "https://github.com/nhooey/coding-agent-skills"

@@ -36,6 +36,31 @@ Each Bash call starts a fresh shell, so a helper the agent wants again gets writ
 
 **How to apply:** before writing a file anywhere but the project's own source, ask what it is. An edit goes through the Edit or Write tool. A check you'll run once goes inline. Anything you'll run again becomes a named tool in the project, after checking the project doesn't already have one, and so does anything a committed claim or file rests on. Data you keep gets a name saying what it holds. When briefing a subagent, pass these rules on, the `source` rule included.
 
+## The hook
+
+`scripts/scratchpad-guard.sh`, in the `coding-agent-skills-hooks` plugin, holds rules 1, 2 and 4 in every session and subagent:
+
+- **PreToolUse on `Bash|Write|Edit`:** catches writing, editing, running or making executable a program file (`.py`, `.sh`, `.js`, `.ts` and the like) under a temporary root (`/tmp`, `/var/folders`, `$TMPDIR`) with no project marker (`.git`, `flake.nix`, `package.json`, an `.html` page, …) between, and `source` of any file there. Its message names the three ways out above.
+- **SubagentStart:** gives each subagent rules 1, 2 and 4 in four lines.
+- **The setting:** a line `Scratchpad guard: remind` in this skill's preferences file. `remind`, the default, lets the call run and adds the message; `deny` denies it; `off` silences both hooks.
+
+## Your preferences
+
+!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-scratchpad-scripts.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-scratchpad-scripts.preferences.md" 2>/dev/null || true`
+
+If your agent doesn't run the line above, read these files yourself if they
+exist: `coding-agent-scratchpad-scripts.preferences.md` next to this skill's folder, then
+`.agents/skills/coding-agent-scratchpad-scripts.preferences.md` in the project. A project's
+file overrides the user's, and the user's overrides this skill's defaults.
+
+The keys this skill reads, with its own defaults:
+
+```markdown
+- Scratchpad guard: remind
+```
+
+`Scratchpad guard` is `deny`, `remind` or `off`; the hook reads it on every call, so a change needs no rebuild.
+
 ## Related skills
 
 When one of these applies and it's in your skill listing, load it

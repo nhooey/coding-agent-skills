@@ -108,6 +108,8 @@
               src = ./plugin;
               hookScripts = [
                 ./skills/coding-agent-session-build-limits/scripts/session-build-limits.sh
+                ./skills/coding-agent-scratchpad-scripts/scripts/scratchpad-guard.sh
+                ./skills/coding-agent-scratchpad-scripts/scripts/scratchpad_guard.py
               ];
             };
           };
