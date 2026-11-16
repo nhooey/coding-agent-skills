@@ -114,7 +114,7 @@ LETS_THROUGH = (
     ("> into a data file", bash("gh pr view 78 --json body > /tmp/pr-78-body.md")),
     ("python3 writes a data file", bash("python3 tools/report.py > /tmp/report.json")),
     # Inline checks.
-    ("python3 - heredoc", bash("python3 - <<'PYEOF'\nopen('/tmp/x.py', 'w')\nimport subprocess; subprocess.run(['python3', '/tmp/t.py'])\nPYEOF")),
+    ("python3 - heredoc", bash("python3 - <<'PYEOF'\nprint(open('/tmp/x.py').read())\nimport subprocess; subprocess.run(['python3', '/tmp/t.py'])\nPYEOF")),
     ("node -e", bash("node -e 'require(\"/tmp/t.js\")'")),
     ("bash -c", bash("bash -c 'source /tmp/env.sh; /tmp/t.sh'")),
     ("python3 -c", bash('python3 -c "import runpy; runpy.run_path(\'/tmp/t.py\')"')),
@@ -145,6 +145,114 @@ LETS_THROUGH = (
     # Unbalanced quoting still reads.
     ("unbalanced quotes", bash("echo 'it's /tmp/notes.txt")),
 )
+
+
+def heredoc(head, body, delimiter="PYEOF"):
+    return bash(f"{head} <<'{delimiter}'\n{body}\n{delimiter}")
+
+
+# An inline program or heredoc that writes a file. Each row: what it shows, the hook input, and the findings.
+INLINE_WRITES = (
+    ("open w in a python3 - heredoc", heredoc("python3 -", 'open("README.md", "w").write(text)'), (("inline", "python3"),)),
+    ("open a, in a with", heredoc("python3 -", "with open(path, 'a') as f:\n    f.write(x)"), (("inline", "python3"),)),
+    ("open x", heredoc("python3 -", "open(p, 'x')"), (("inline", "python3"),)),
+    ("open r+", heredoc("python3 -", "open(p, 'r+')"), (("inline", "python3"),)),
+    ("open wb, path from a call", heredoc("python3 -", "open(os.path.join(d, 'a'), 'wb')"), (("inline", "python3"),)),
+    ("open mode=w", heredoc("python3 -", "open(p, encoding='utf-8', mode='w')"), (("inline", "python3"),)),
+    ("Path.open('w')", heredoc("python3 -", "Path('a.md').open('w')"), (("inline", "python3"),)),
+    (".write_text(", heredoc("python3 -", "p.write_text(p.read_text().replace('a', 'b'))"), (("inline", "python3"),)),
+    (".write_bytes(", heredoc("python", "p.write_bytes(b'')"), (("inline", "python"),)),
+    ("python3 with no -", heredoc("python3", "p.write_text('')"), (("inline", "python3"),)),
+    ("python3.12 -", heredoc("python3.12 -", "p.write_text('')"), (("inline", "python3.12"),)),
+    ("node writeFileSync", heredoc("node -", "require('fs').writeFileSync('a.json', s)", "JSEOF"), (("inline", "node"),)),
+    ("node fs.writeFile", heredoc("node", "fs.writeFile('a', s, cb)", "JSEOF"), (("inline", "node"),)),
+    ("ruby File.write", heredoc("ruby", "File.write('a.rb', s)", "RB"), (("inline", "ruby"),)),
+    ("python3 -c", bash("python3 -c \"open('src/a.py', 'w').write('x')\""), (("inline", "python3"),)),
+    ("node -e", bash("node -e \"require('fs').writeFileSync('a', 'b')\""), (("inline", "node"),)),
+    ("ruby -e", bash("ruby -e 'File.write(\"a\", \"b\")'"), (("inline", "ruby"),)),
+    ("perl -e", bash("perl -e 'open(my $f, \">\", \"a\")'"), (("inline", "perl"),)),
+    ("after cd &&", heredoc("cd src && python3 -", "p.write_text('')"), (("inline", "python3"),)),
+    ("cat > path <<EOF", heredoc("cat > README.md", "# Title", "EOF"), (("heredoc", "README.md"),)),
+    ("cat >> path <<EOF", heredoc("cat >> /Users/x/proj/notes.md", "more", "EOF"), (("heredoc", "/Users/x/proj/notes.md"),)),
+    ("cat <<EOF > path", bash("cat <<'EOF' > src/config.toml\n[a]\nEOF"), (("heredoc", "src/config.toml"),)),
+    ("tee path <<EOF", bash("tee docs/a.md <<'EOF'\ntext\nEOF"), (("heredoc", "docs/a.md"),)),
+    ("tee -a path >/dev/null <<EOF", bash("tee -a docs/a.md >/dev/null <<EOF\ntext\nEOF"), (("heredoc", "docs/a.md"),)),
+    ("the second of two heredocs", bash("cat <<A\nx\nA\npython3 - <<B\np.write_text('')\nB"), (("inline", "python3"),)),
+    ("named once though written twice", heredoc("python3 -", "a.write_text('')\nb.write_text('')"), (("inline", "python3"),)),
+)
+
+INLINE_LETS_THROUGH = (
+    ("a heredoc that reads and prints", heredoc("python3 -", 'import json\nprint(len(json.load(open("out.json"))))')),
+    ("open with r", heredoc("python3 -", "print(open('a', 'r').read())")),
+    ("open with rb", heredoc("python3 -", "print(open('a', 'rb').read())")),
+    ("a heredoc to git commit -F -", heredoc("git commit -F -", "Subject\n\nopen('a', 'w')", "EOF")),
+    ("a heredoc to gh pr create --body-file -", heredoc("gh pr create --body-file -", "p.write_text('')", "EOF")),
+    ("a heredoc piped to a command", bash("cat <<'EOF' | python3 -c 'import sys; print(sys.stdin.read())'\nopen('a', 'w')\nEOF")),
+    ("a heredoc into the scratchpad", heredoc(f"cat > {SCRATCHPAD}/pr-78-body.md", "body", "EOF")),
+    ("a heredoc into /tmp", heredoc("cat <<'EOF' > /tmp/notes.json", "{}", "X")),
+    ("a heredoc into literal $TMPDIR", heredoc("tee $TMPDIR/data.json", "{}", "EOF")),
+    ("a heredoc to /dev/null", heredoc("tee /dev/null", "x", "EOF")),
+    ("cat > path without a heredoc", bash("cat a.md > b.md")),
+    ("sed -i", bash("sed -i '' 's/a/b/' README.md")),
+    ("perl -pi -e", bash("perl -pi -e 's/a/b/' README.md")),
+    ("perl -i -pe", bash("perl -i -pe 's/open(/x/' a.md")),
+    ("a write call inside a quoted argument", bash("git commit -m \"use p.write_text( not open(a, 'w')\"")),
+    ("python3 runs a file, with a heredoc on stdin", heredoc("python3 tools/gen.py", "p.write_text('')")),
+    ("the heredoc after python3 -c is data", bash("python3 -c 'import sys; print(sys.stdin.read())' <<'EOF'\nopen('a', 'w')\nEOF")),
+)
+
+
+class InlineWrites(unittest.TestCase):
+    def test_each_match(self):
+        for name, event, expected in INLINE_WRITES:
+            with self.subTest(name):
+                found = guard.inline_write_findings(event["tool_input"], CTX)
+                self.assertEqual(tuple(tuple(f) for f in found), expected)
+
+    def test_each_let_through(self):
+        for name, event in INLINE_LETS_THROUGH:
+            with self.subTest(name):
+                self.assertEqual(guard.inline_write_findings(event["tool_input"], CTX), ())
+                for before in (None, 0, 1):
+                    self.assertIsNone(guard.decide(event, "deny", CTX._replace(inline_writes=before)))
+
+    def test_remind_gives_the_line(self):
+        for before in (None, 0, 1, 2):
+            with self.subTest(before):
+                event = heredoc("python3 -", 'open("README.md", "w")')
+                out = guard.decide(event, "remind", CTX._replace(inline_writes=before))["hookSpecificOutput"]
+                self.assertEqual(out, {"hookEventName": "PreToolUse", "additionalContext": guard.INLINE_WRITE_REMINDER})
+        self.assertIn("Edit or Write tool", guard.INLINE_WRITE_REMINDER)
+        self.assertIn("`coding-agent-scratchpad-scripts`, rule 1", guard.INLINE_WRITE_REMINDER)
+
+    def test_silent_after_the_third(self):
+        event = heredoc("python3 -", "p.write_text('')")
+        for setting in ("remind", "deny"):
+            for before in (3, 4, 100):
+                self.assertIsNone(guard.decide(event, setting, CTX._replace(inline_writes=before)))
+
+    def test_deny_denies_only_the_first_in_a_session(self):
+        event = heredoc("python3 -", "p.write_text('')")
+        first = guard.decide(event, "deny", CTX._replace(inline_writes=0))["hookSpecificOutput"]
+        self.assertEqual(first["permissionDecision"], "deny")
+        self.assertIn("rerun it unchanged", first["permissionDecisionReason"])
+        for before in (1, 2, None):
+            later = guard.decide(event, "deny", CTX._replace(inline_writes=before))["hookSpecificOutput"]
+            self.assertEqual(later, {"hookEventName": "PreToolUse", "additionalContext": guard.INLINE_WRITE_REMINDER})
+
+    def test_off_is_silent(self):
+        self.assertIsNone(guard.decide(heredoc("python3 -", "p.write_text('')"), "off", CTX._replace(inline_writes=0)))
+
+    def test_with_a_loose_program_both_are_said(self):
+        event = bash("cat > /tmp/gen.py <<'EOF'\nprint(1)\nEOF\npython3 - <<'PYEOF'\np.write_text('')\nPYEOF")
+        context = guard.decide(event, "remind", CTX._replace(inline_writes=0))["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("/tmp/gen.py", context)
+        self.assertTrue(context.endswith(guard.INLINE_WRITE_REMINDER))
+        denied = guard.decide(event, "deny", CTX._replace(inline_writes=0))["hookSpecificOutput"]
+        self.assertIn("/tmp/gen.py", denied["permissionDecisionReason"])
+
+    def test_only_bash(self):
+        self.assertEqual(guard.event_inline_writes(tool("Write", file_path="a.py", content="open(a, 'w')"), CTX), ())
 
 
 class Matches(unittest.TestCase):
@@ -251,12 +359,13 @@ class Hook(unittest.TestCase):
     def prefer(self, where, text):
         (where / ".agents" / "skills" / "coding-agent-scratchpad-scripts.preferences.md").write_text(text)
 
-    def run_hook(self, event):
+    def run_hook(self, event, **extra_env):
         env = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": str(self.home),
             "TMPDIR": str(self.tmp) + "/",
             "CLAUDE_PROJECT_DIR": str(self.project),
+            **extra_env,
         }
         done = subprocess.run(
             ["bash", str(HERE / "scratchpad-guard.sh")],
@@ -308,6 +417,48 @@ class Hook(unittest.TestCase):
     def test_input_with_no_temporary_root_exits_at_once(self):
         self.assertIsNone(self.run_hook(bash("python3 tools/report.py")))
         self.assertIsNone(self.run_hook(write("/Users/x/proj/fix1.py")))
+
+    def inline_write(self, session="s-1"):
+        return {**heredoc("python3 -", 'open("README.md", "w").write(text)'), "session_id": session}
+
+    def run_counted(self, event):
+        return self.run_hook(event, CLAUDE_PLUGIN_DATA=str(self.tmp / "plugin-data"))
+
+    def test_an_inline_write_reminds_three_times_a_session(self):
+        outputs = [self.run_counted(self.inline_write()) for _ in range(4)]
+        reminder = {"hookEventName": "PreToolUse", "additionalContext": guard.INLINE_WRITE_REMINDER}
+        self.assertEqual(outputs, [reminder] * 3 + [None])
+        self.assertEqual(self.run_counted(self.inline_write("s-2")), reminder)
+        count = self.tmp / "plugin-data" / "scratchpad-guard" / "inline-writes" / "s-1"
+        self.assertEqual(count.read_text(), "4")
+
+    def test_at_deny_the_first_inline_write_in_a_session_is_denied(self):
+        self.prefer(self.project, "Scratchpad guard: deny\n")
+        first, second = (self.run_counted(self.inline_write()) for _ in range(2))
+        self.assertEqual(first["permissionDecision"], "deny")
+        self.assertIn("rerun it unchanged", first["permissionDecisionReason"])
+        self.assertEqual(second["additionalContext"], guard.INLINE_WRITE_REMINDER)
+
+    def test_at_deny_with_no_count_to_keep_it_reminds(self):
+        self.prefer(self.project, "Scratchpad guard: deny\n")
+        for event in (self.inline_write(), self.inline_write("../escape")):
+            self.assertEqual(self.run_hook(event)["additionalContext"], guard.INLINE_WRITE_REMINDER)
+        self.assertEqual(self.run_counted(self.inline_write("../escape"))["additionalContext"], guard.INLINE_WRITE_REMINDER)
+
+    def test_at_off_an_inline_write_is_silent_and_uncounted(self):
+        self.prefer(self.home, "Scratchpad guard: off\n")
+        self.assertIsNone(self.run_counted(self.inline_write()))
+        self.assertFalse((self.tmp / "plugin-data").exists())
+
+    def test_reading_and_stdin_heredocs_are_silent_and_uncounted(self):
+        events = (
+            heredoc("python3 -", 'import json\nprint(len(json.load(open("out.json"))))'),
+            heredoc("git commit -F -", "Subject\n\nBody > text", "EOF"),
+            heredoc(f"cat > {self.scratch}/pr-78-body.md", "body", "EOF"),
+        )
+        for event in events:
+            self.assertIsNone(self.run_counted({**event, "session_id": "s-1"}))
+        self.assertFalse((self.tmp / "plugin-data").exists())
 
     def test_input_that_is_not_json_prints_nothing(self):
         done = subprocess.run(

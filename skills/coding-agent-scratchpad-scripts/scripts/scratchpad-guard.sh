@@ -3,9 +3,10 @@
 # files out of temporary directories.
 #
 # Exits at once, printing nothing, when the hook's input names no temporary
-# root, or names one but no program extension and no `source` or `.`. Anything
-# else goes to scratchpad_guard.py beside this script, which decides. Does
-# nothing when python3 isn't on PATH.
+# root, or names one but no program extension and no `source` or `.`, unless it
+# holds a file-writing call such as `open(` or a heredoc beside a `>` or `tee`.
+# Anything else goes to scratchpad_guard.py beside this script, which decides.
+# Does nothing when python3 isn't on PATH.
 
 set -u
 
@@ -14,6 +15,9 @@ IFS= read -r -d '' input || true
 
 case "$input" in
 *'"SubagentStart"'*) ;;
+# An inline program or a heredoc that may write a file.
+*'open('* | *'.write_text('* | *'.write_bytes('* | *'writeFile'* | *'File.write('*) ;;
+*'<<'*'>'* | *'>'*'<<'* | *'<<'*'tee '* | *'tee '*'<<'*) ;;
 *)
   tmpdir=${TMPDIR:-}
   tmpdir=${tmpdir%/}
