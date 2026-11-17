@@ -11,11 +11,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1780696327,
-        "narHash": "sha256-41aUE2NzTJvZ1OSAu3g1z0V+2l2lAB24MegJ5AACt9s=",
+        "lastModified": 1794837850,
+        "narHash": "sha256-JjZBi9U7vWsp1dN5xVtqgWrQ48yEZh7/yaS1DZqjcmg=",
         "owner": "nhooey",
         "repo": "agent-skill-flake",
-        "rev": "271fb64920156edae2e0c3bb70f98f4464ed58a1",
+        "rev": "a08af8384806c2e8b2ef9f95c657163ba250d112",
         "type": "github"
       },
       "original": {
