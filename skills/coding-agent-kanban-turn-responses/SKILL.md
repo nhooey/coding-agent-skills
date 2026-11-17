@@ -51,6 +51,8 @@ An empty list is left out, and the final response opens on a line of prose. An a
 
 A review that is itself a choice goes in 🧠 Decide, and a task that is not a reading goes in 👉 Todo.
 
+**A turn reply is a delta.** Each ✅ Done item states the state reached, such as "`retries`: 3 → 5 in `config.toml`", never the actions taken to reach it, in the delta form `writing-hygiene-declarative-statements` describes.
+
 **A pull request is a Review item.** A pull request the user is asked to review or merge goes in 🔍 Review, by its canonical label, linked, as `github-hygiene-refer-to-issues-and-pull-requests` writes it, with what to check in it. When this turn's work opened it, the ✅ Done item for that work names the change in a line and points at the Review item by reference, `see Review.1`, without repeating the pull request's label, link or contents, so the pull request is described once.
 
 ## The shape
@@ -162,4 +164,5 @@ came from; don't apply it from memory.
 - `markdown-hygiene-terminal-rendering`: how tables, glyph widths, hard line breaks, separator lines and links render in a terminal.
 - `writing-hygiene-refer-by-canonical-label`: name each thing by one label every time, never pointing back with a vague phrase.
 - `github-hygiene-refer-to-issues-and-pull-requests`: the canonical, linked label a pull request in the Review list carries.
+- `writing-hygiene-declarative-statements`: a turn reply is a delta, stating the state reached rather than the steps.
 - `coding-agent-skill-references`: how a skill names other skills and reads its preferences files.

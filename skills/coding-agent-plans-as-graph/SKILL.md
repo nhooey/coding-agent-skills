@@ -1,6 +1,6 @@
 ---
 name: coding-agent-plans-as-graph
-description: Keep a project's plans as a graph of Markdown nodes in `agents/plans/`, one node per file, open ones in `open/` and finished ones in `closed/`, a plan of several nodes in a folder of its own, with a generated README showing what's in progress, ready, blocked and proposed. Each node has a state (proposed, approved, in-progress; implemented, rejected, abandoned, superseded), a kind (end state, implementation, schedule) and typed links (`part-of`, `needs`, `after`, `superseded-by`), and its body can be as long as it needs. Plans say what will be true, separately from how to get there and from when and by which agents, with costs in tokens, dollars and weekly-limit percent. The bundled `plans.py` checks the graph, lists ready nodes and writes the overview. Use when writing, updating or reviewing a plan, starting work from one, closing a node, scheduling agents across plan nodes, or tidying plans left in `.claude/plans/` or elsewhere.
+description: Keep a project's plans as a graph of Markdown nodes in `agents/plans/`, one node per file, open ones in `open/` and finished ones in `closed/`, a plan of several nodes in a folder of its own, with a generated README showing what's in progress, ready, blocked and proposed. Each node has a state (proposed, approved, in-progress; implemented, rejected, abandoned, superseded), a kind (end state, implementation, schedule) and typed links (`part-of`, `needs`, `after`, `superseded-by`), and its body can be as long as it needs. Plans say what will be true, separately from how to get there and from when and by which agents, with costs in tokens, dollars and weekly-limit percent. The research and audits a plan rests on are dated reports in `agents/reports/`, each current or superseded. The bundled `plans.py` checks the graph, lists ready nodes and writes the overview. Use when writing, updating or reviewing a plan, starting work from one, closing a node, scheduling agents across plan nodes, or tidying plans left in `.claude/plans/` or elsewhere.
 ---
 
 # Plans as a graph of Markdown nodes
@@ -83,9 +83,18 @@ The body is free Markdown: the reasoning, the design, the checks. Write it as th
 
 A plan keeps what, how and when apart, so each can change without rewriting the others:
 
-- **End state:** what will be true, stated so it can be checked. No steps, no tools.
+- **End state:** what will be true, as desired state: postconditions in the present tense that a check could confirm ("every skill repository's dev shell installs the authoring skills"), in the snapshot form `writing-hygiene-declarative-statements` describes. No steps, no tools; steps belong only in implementation nodes.
 - **Implementation:** how one part of an end state gets done, `part-of` it: the approach, the files, the checks that prove it.
 - **Schedule:** when and by whom. A wave of agents, which implementation nodes it runs, how many at once, and its `cost`: tokens per run times runs, in dollars, and that as a share of the user's weekly limit. Schedule nodes are the only ones with `after`.
+
+## Reports
+
+Research and audits that plans rest on go in `agents/reports/`, beside `agents/plans/`:
+
+- **A report is a dated record,** named `agents/reports/<YYYY-MM-DD>-<slug>.md`, with frontmatter holding `state: current` or `state: superseded`, `superseded-by: <report>` when superseded, and `as-of:` naming the commit or commits it was made against.
+- **A plan node links to the report that justifies it,** with a Markdown link in its body.
+- **Raw or machine-specific data,** such as timing logs, per-run logs and wave summaries, stays under `$XDG_STATE_HOME`; the report links to it or summarises it.
+- **A report is a point-in-time record,** exempt from `git-hygiene-no-history-in-tracked-files` as a decision record is. Its `state` says whether it still holds; a newer finding is a new report that supersedes it, not an edit.
 
 ## Working from a plan
 
@@ -150,5 +159,6 @@ missing and ask whether to install it from the same collection this skill
 came from; don't apply it from memory.
 
 - `coding-agent-headless-in-checkout`: runs a schedule node's wave, one headless session per checkout.
-- `git-hygiene-no-history-in-tracked-files`: a node states the plan as it stands, with its history in commit messages.
+- `git-hygiene-no-history-in-tracked-files`: a node states the plan as it stands, with its history in commit messages; reports are exempt.
+- `writing-hygiene-declarative-statements`: the snapshot form an end-state node's postconditions are written in.
 - `coding-agent-skill-references`: the preferences files this skill reads.
