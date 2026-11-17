@@ -150,9 +150,8 @@ tests outside the sandbox, `skills-dev mods check` validates, type-checks and
 tests the Claude Code mods under [`plugins/`](plugins/), and `skills-dev mods
 try` starts Claude Code with one mod loaded. `mods check` runs outside
 `nix flake check` because it needs `claude` itself and the API types its
-running build writes. The dev shell's own toolchain skills (the git, shell and
-Python packs, a few coding-agent skills, and skillspkgs' `authoring`
-combination) live in the runtime [`skills-devshell/`](skills-devshell/)
+running build writes. The dev shell's own skills (skillspkgs'
+`skill-collections` combination, with no additions) live in the runtime [`skills-devshell/`](skills-devshell/)
 sub-flake and are invoked at run time, so the root flake stays a leaf with zero
 skill inputs in its lock.
 
