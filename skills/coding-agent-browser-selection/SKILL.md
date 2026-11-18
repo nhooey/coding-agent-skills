@@ -1,20 +1,15 @@
 ---
 name: coding-agent-browser-selection
 description: |
-  Before any browser work with the Claude in Chrome tools
-  (mcp__claude-in-chrome__*), make sure the session drives the browser app
-  and window the user prefers. Several browsers can have the extension
-  connected, and list_connected_browsers names them only "Browser 1",
-  "Browser 2", in no stable order, so a session can act in the wrong one,
-  such as the user's personal browser. Covers marking the session's tab URL,
-  finding which app and window holds it with the bundled macOS script,
-  switching browsers until one matches the user's preferences, asking when
-  none does, waking the preferred app when it has no window and so dropped
-  off the list, before any tab is made, and bringing only the preferred app
-  forward. Load it before the first mcp__claude-in-chrome__* call of a
-  session, again after any select_browser or switch_browser, and when
-  list_connected_browsers shows only browsers that could be one the user said
-  not to use.
+  Load before every batch of Claude in Chrome actions
+  (mcp__claude-in-chrome__*), meaning the first call, on returning to the
+  browser after other work and after compaction, and also after
+  select_browser or switch_browser, whenever tabs_context_mcp shows tabs
+  or groups other than the ones last seen, and when list_connected_browsers
+  shows only browsers that could be one the user said not to use. Confirms
+  the session drives the user's preferred browser app and window, waking the
+  preferred app when it has no window and so dropped off the list, before
+  any tab is made.
 ---
 
 # Browser selection
@@ -33,7 +28,10 @@ With no preferences set, don't switch, and wake nothing. Find out which app and 
 
 ## Check the browser
 
-Do this before the first browser action of a session, and again after any `select_browser` or `switch_browser`.
+Do this before every batch of browser actions, and again after any `select_browser` or `switch_browser`.
+A batch starts at the session's first browser call, on returning to the browser after other work, and after compaction.
+The browser the extension drives can change between batches with no sign but the tabs, so a check from an earlier batch proves nothing.
+Also do it whenever `tabs_context_mcp` reports tabs or groups other than the ones last seen, such as a missing tab group, unknown tab ids or an empty context: each means "check again", not "carry on".
 
 1. Call `list_connected_browsers`, and note each browser's `deviceId` and the one marked `inUse`.
 2. Choose a browser known not to be an app never to use. Until one is chosen, call no `tabs_context_mcp`, `tabs_create_mcp` or `navigate`: each can make a tab in whichever browser it lands on. A connected browser is known to be safe when:
@@ -73,6 +71,9 @@ Do this before the first browser action of a session, and again after any `selec
    - **Doesn't match, or the app is one never to use:** call `select_browser` with the next browser step 2 allows, and go back to step 3. If step 2 allows none and this check hasn't woken the preferred app yet, wake it as in step 2.1; otherwise stop as in step 2.4.
    - **No browser matches:** stop and ask the user which to use. Never pick one silently.
    - **Nothing found:** the marker isn't in any running browser the script can read. Say so and ask the user.
+   - **The preferred app is running with no window:** the check finds nothing in it, since there is no window to hold the tab.
+     Stop and ask the user to open a window of it, then check again.
+     Never fall back to another browser.
 7. Once one matches, navigate the tab back to its URL without the marker if the fragment would change the page. If no `Preferred device id` is set, offer to save this browser's `deviceId` as one, in the user's preferences file on this machine, not the project's, since a `deviceId` belongs to one machine's browser. If that file is generated, by Home Manager for one, give the user the line to add to its source instead.
 8. If the session moved off the browser it started in, tell the user which app and window it uses now.
 
