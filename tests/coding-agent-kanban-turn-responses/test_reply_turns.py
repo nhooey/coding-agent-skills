@@ -218,6 +218,20 @@ class SectionsTest(unittest.TestCase):
         self.assertEqual(reply_turns.sections("🙃 **Todo:**  \n1. **x**")[0][0], "Todo")
         self.assertEqual(reply_turns.sections("🙃 **Nothing:**  \n1. **x**"), ())
 
+    def test_open_reads_authorizations_first_of_the_lists_waiting_on_the_user(self) -> None:
+        text = (
+            "🔍 **Review:**  \n▔▔▔▔▔▔▔▔▔▔\n1. **#14 The README**\n\n"
+            "🔑 **Authorizations:**  \n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n1. **SSH signing prompt for the push**\n"
+        )
+        self.assertEqual(reply_turns.sections(text)[1][0], "Authorizations")
+        turns = reply_turns.turns_of((prompt(FIRST, "go"), reply(text)))
+        self.assertEqual(
+            reply_turns.render_sections(turns, None, reply_turns.OPEN_SECTIONS),
+            "== aaaa1111 ==\n"
+            "🔑 **Authorizations:**  \n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n1. **SSH signing prompt for the push**\n\n"
+            "🔍 **Review:**  \n▔▔▔▔▔▔▔▔▔▔\n1. **#14 The README**",
+        )
+
     def test_render_sections_gathers_named_sections_under_each_turn_id(self) -> None:
         turns = reply_turns.turns_of((prompt(FIRST, "go"), reply(REPLY), prompt(SECOND, "more"), reply("prose only")))
         self.assertEqual(

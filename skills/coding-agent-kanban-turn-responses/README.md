@@ -27,8 +27,8 @@ run. Once it scrolls away, it is gone. This skill fixes that:
 - **Progress you can watch.** Each step carries a state emoji (✅ done, 🏃
   running, 💤 not started, ❌ failed), so a glance shows where the turn is.
 - **The same order every time.** ✅ Done, 🚧 Pending, 📝 Logged, ⏳
-  Waiting, ❓ Answers, 🔍 Review, 👉 Todo, 🧠 Decide. Each list holds only
-  what is new this turn, and empty lists are left out.
+  Waiting, ❓ Answers, 🔑 Authorizations, 🔍 Review, 👉 Todo, 🧠 Decide. Each
+  list holds only what is new this turn, and empty lists are left out.
 - **Choices you answer by reference.** Each Decide item names the thing it
   decides, offers lettered options with the recommended one first, and gives
   each option a ➕ pro and a ➖ con. You can reply `Decide.1: B`.
@@ -72,7 +72,7 @@ The 📌 line counts what earlier turns left open; this turn's own items join it
 
 ## Answering it
 
-Each list asks something different of you. Lists you only read need no reply; the rest you answer by list and number, in one line each:
+Each list asks something different of you. Lists you only read need no reply; an authorization you grant where it asks; the rest you answer by list and number, in one line each:
 
 | List          | Your reply                                                      | What happens                                                            |
 | ------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------- |
@@ -81,6 +81,7 @@ Each list asks something different of you. Lists you only read need no reply; th
 | 📝 Logged     | nothing                                                         | the entry waits in the backlog for the next agent                       |
 | ⏳ Waiting    | nothing                                                         | the agent reports when it lands; it stays under 📌 until then           |
 | ❓ Answers    | nothing                                                         | your question, with its answer; it never rolls up                       |
+| 🔑 Authorizations | grant it: answer the prompt or send the approval message; after typing a password in your own terminal, say so: `Authorizations.1 done` | the blocked work goes on; it stays under 📌 until granted or withdrawn |
 | 🔍 Review     | comment on it, or say you looked: `Review.1 looks right`        | it closes once your reply shows you reviewed it                         |
 | 👉 Todo       | do it, then say so: `Todo.1 done`                               | it closes, and the agent starts the work it freed                       |
 | 🧠 Decide  | the item and a letter: `Decide.1: A`, or short, `1. A, 2. Y` | the agent acts on your choice; a checkbox item takes several, `3. A, C` |
@@ -110,7 +111,7 @@ Commands you can type during a session:
 
 | You type             | The agent                                                     |
 | -------------------- | ------------------------------------------------------------- |
-| `open`, or `pending` or `restate` | reprints the open Review, Todo and Decide items as written, grouped by topic |
+| `open`, or `pending` or `restate` | reprints the open Authorizations, Review, Todo and Decide items as written, grouped by topic |
 | `reassess`, or `recheck`, `regenerate` or `recalculate` | works out afresh which earlier items are still open, grouped by topic |
 | `Expand Decide.2` | reprints that item in enough detail to act on                 |
 | `Decide.1: B`     | picks option B of Decide item 1                            |

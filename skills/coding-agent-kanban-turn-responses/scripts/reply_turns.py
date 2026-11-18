@@ -2,7 +2,7 @@
 """Find the turns of this session and pull their prompts and reply sections out of the transcript.
 
 Why it exists: a reply names the turn it answers by id, `Decide.2 of 0f311c94`, and
-the `open` and `reassess` commands read every earlier turn's Review, Todo and Decide sections; doing that with
+the `open` and `reassess` commands read every earlier turn's Authorizations, Review, Todo and Decide sections; doing that with
 ad-hoc grep and jq over the session's JSONL was slow and drifted. This script is the one reader.
 
 Takes: the session transcript, `~/.claude/projects/<slug>/<session>.jsonl`. The slug is the main
@@ -24,7 +24,7 @@ record's `uuid`, which earlier replies printed. An id that matches no turn or se
 naming the candidates.
 
 A reply section opens on a line `<glyph> **<Name>:**`, Name one of Answers, Done, Pending, Logged,
-Waiting, Review, Todo or Decide, or an alias older replies use (Questions for Answers, Unfinished or Open for
+Waiting, Authorizations, Review, Todo or Decide, or an alias older replies use (Questions for Answers, Unfinished or Open for
 Pending, To review for Review, To do for Todo, Decisions or Blocked for Decide), matched by name and not glyph; a line of `▔` or `¯` under it belongs to the
 header. A section ends at the next header, at a line starting `Still open from earlier`, or at a topic
 header, the line above a line of `═` that groups the lists of a `reassess` or `open` reply by topic.
@@ -36,8 +36,8 @@ Subcommands, each printing plain text:
   show ID [--prompt-only] [--section NAME]
                                   the prompt then the reply, or that section from every reply text
   decide [--since ID]             each turn's Decide section, from turn ID inclusive; `decisions` and `blocked` too
-  open [--since ID]               each turn's Review, Todo and Decide sections, from turn ID
-                                  inclusive, under the turn's id; a turn with neither is left out
+  open [--since ID]               each turn's Authorizations, Review, Todo and Decide sections, from turn ID
+                                  inclusive, under the turn's id; a turn with none of them is left out
 """
 
 from __future__ import annotations
@@ -53,10 +53,12 @@ from pathlib import Path
 
 # Each header followed by its aliases, the names older replies in a transcript still carry.
 SECTION_NAMES = (
-    "Answers", "Questions", "Done", "Pending", "Unfinished", "Open", "Logged", "Waiting", "Review", "To review", "Todo", "To do",
+    "Answers", "Questions", "Done", "Pending", "Unfinished", "Open", "Logged", "Waiting", "Authorizations", "Review", "To review", "Todo", "To do",
     "Decide", "Decisions", "Blocked",
 )
 DECISIONS = ("Decide", "Decisions", "Blocked")
+# The sections `open` reprints, the lists waiting on the user, in the skill's order.
+OPEN_SECTIONS = ("Authorizations", "Review", "To review", "Todo", "To do", *DECISIONS)
 _HEADER = re.compile(r"^\s*\S+\s+\*\*(" + "|".join(SECTION_NAMES) + r"):\*\*")
 _STOP = "Still open from earlier"
 TOPIC_RULE = "═"  # U+2550, one per column under a topic header
@@ -313,7 +315,7 @@ def parser() -> argparse.ArgumentParser:
     sh.add_argument("--section", choices=SECTION_NAMES, type=str.capitalize)
     bl = sub.add_parser("decide", aliases=["decisions", "blocked"], help="every turn's Decide section")
     bl.add_argument("--since", metavar="ID", help="start at this turn, inclusive")
-    op = sub.add_parser("open", help="every turn's Review, Todo and Decide sections")
+    op = sub.add_parser("open", help="every turn's Authorizations, Review, Todo and Decide sections")
     op.add_argument("--since", metavar="ID", help="start at this turn, inclusive")
     return p
 
@@ -326,7 +328,7 @@ def run(args: argparse.Namespace, turns: tuple[Turn, ...]) -> str:
         "decide": lambda: render_sections(turns, args.since, DECISIONS),
         "decisions": lambda: render_sections(turns, args.since, DECISIONS),
         "blocked": lambda: render_sections(turns, args.since, DECISIONS),
-        "open": lambda: render_sections(turns, args.since, ("Review", "To review", "Todo", "To do", *DECISIONS)),
+        "open": lambda: render_sections(turns, args.since, OPEN_SECTIONS),
     }[args.command]()
 
 

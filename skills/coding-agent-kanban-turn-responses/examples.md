@@ -1,6 +1,6 @@
 # Kanban turn response examples
 
-_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decide list, two lists in one response, a `reassess` grouped by topic, the full 📌 roll-up and the count line that stands in for it._
+_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decide list, two lists in one response, an Authorizations list, a `reassess` grouped by topic, the full 📌 roll-up and the count line that stands in for it._
 
 ## A Decide list
 
@@ -47,6 +47,26 @@ A list ends at a blank line. The blank line between the Done list's last separat
    It was issued before the leak, and rotating it frees the release.
 
 📌 Outstanding: 🧠 2
+```
+
+## An Authorizations list
+
+Three grants only the user can give: a 1Password prompt that is open, an approval message for a push the harness or a classifier refused, and a password for a `sudo` switch. Each summary leads with what the grant unblocks, and the prompt's state stays in the body. Each says where to grant it and what it frees, and the first lists the pull requests its one grant covers as a nested list under its summary. The underline is 18 `▔`, the key counting 2.
+
+```text
+🔑 **Authorizations:**  
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+1. **Merge token for #12 and #13, from 1Password**  
+   The 1Password prompt is open: Touch ID on its window, within about 2 minutes of its opening. It merges:
+   - 🔗 [#12 "Fix the tokenizer"](url)
+   - 🔗 [#13 "Bump the lock"](url)
+   ⠀
+2. **`release-2.4` push to origin, refused by the harness**  
+   Send `Approved: push release-2.4 to origin`; it frees the release build.
+   ⠀
+3. **`sudo darwin-rebuild switch` for the new keyboard settings**  
+   Run it in your terminal, type your password, then say `Authorizations.3 done`:
+   💻 ❯ `sudo darwin-rebuild switch`
 ```
 
 ## A reassess grouped by topic
@@ -119,6 +139,9 @@ Printed once the roll-up interval has passed; `outstanding.py render` drafts it,
 ⏳ **Waiting:**  
 - **Landing `atomic-reload` with 4 other branches,** entry 1419's whole-file database swap among them. 🔖 0f311c94₋₃
 
+🔑 **Authorizations:**  
+- **The `v2.4.0` tag's SSH signature,** prompted for when the session tags the release. 🔖 4c1d9e02₋₁
+
 👉 **Todo:**  
 - **The 2 API keys to rotate in the cloud console:** `deploy-bot` and `ci-runner`, both issued before the leak. 🔖 18e77cb3₋₁₇
 
@@ -131,5 +154,5 @@ Printed once the roll-up interval has passed; `outstanding.py render` drafts it,
 Printed in place of the full roll-up until the interval has passed; `outstanding.py render --counts` drafts it from the same items.
 
 ```text
-📌 Outstanding: 🚧 4 · ⏳ 2 · 🔍 2 · 👉 1 · 🧠 5
+📌 Outstanding: 🚧 4 · ⏳ 2 · 🔑 1 · 🔍 2 · 👉 1 · 🧠 5
 ```

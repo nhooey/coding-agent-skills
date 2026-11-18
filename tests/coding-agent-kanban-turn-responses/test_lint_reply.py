@@ -245,6 +245,7 @@ class LintReplyTest(unittest.TestCase):
             "⏳ **Waiting:**": 11,
             "🤔 **Waiting:**": 11,
             "❓ **Answers:**": 11,
+            "🔑 **Authorizations:**": 18,
             "🔍 **Review:**": 10,
             "👉 **Todo:**": 8,
             "🧠 **Decide:**": 10,
@@ -318,6 +319,7 @@ class LintReplyTest(unittest.TestCase):
         for path, heading in [
             (examples, "## A Decide list"),
             (examples, "## Two lists in one response"),
+            (examples, "## An Authorizations list"),
             (examples, "## A reassess grouped by topic"),
             (examples, "## The full roll-up"),
             (skill / "README.md", "The final response:"),

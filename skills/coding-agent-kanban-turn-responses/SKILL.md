@@ -5,7 +5,7 @@ description: "Load at the start of every turn, before the first response the use
 
 # Kanban turn responses
 
-_Every response in a turn shows what is done, what is still open and what the user must do: a one-line progress update between tool calls, and in the final response up to 8 lists in a fixed order, then what earlier turns left open, under 📌 in full or as one count line._
+_Every response in a turn shows what is done, what is still open and what the user must do: a one-line progress update between tool calls, and in the final response up to 9 lists in a fixed order, then what earlier turns left open, under 📌 in full or as one count line._
 
 A project may extend this skill with a skill of its own, or with its preferences file ([Your preferences](#your-preferences)), adding its own backlog path or link rules; the project's wins where the two differ.
 
@@ -41,15 +41,18 @@ A step names its subject, never its category: "the 2020 resolutions", not "the d
 | 📝 **Logged:**             | one item per entry written into the project's backlog, by index and title                                                                                                                         | the next agent   | no                                                 |
 | ⏳ **Waiting:**            | a background shell, subagent, hand-off or expected message, and what the session does with its result                                                                                             | the thing itself | yes                                                |
 | ❓ **Answers:**            | one item per question the user asked that names no listed item, the question as the summary, shortened or reworded where that reads better, the answer under it                                   | nobody           | no                                                 |
+| 🔑 **Authorizations:**     | one item per grant only the user can give: a 1Password, SecretSpec or SSH signing prompt, an approval for actions the harness or a classifier refused, a `sudo` password                          | the user         | yes, until granted or withdrawn                    |
 | 🔍 **Review:**             | one item per thing put in front of the user to read, listen to or look at, a pull request to review or merge among them, with where to open it and what to look for                               | the user         | yes, until the user's reply shows they reviewed it |
-| 👉 **Todo:**               | one item per action asked of the user that is neither a choice nor a reading: a file to mark up, a prompt to paste, a command to run; each says what to do, where, by its path, and what it frees | the user         | yes                                                |
+| 👉 **Todo:**               | one item per action asked of the user that is not a choice, reading or grant: a file to mark up, a prompt to paste, a command to run; each says what to do, where, by its path, and what it frees | the user         | yes                                                |
 | 🧠 **Decide:**             | one item per decision raised, and per judgement call taken instead of asked, its reversal an option                                                                                               | the user         | yes                                                |
 
 An empty list is left out, and the final response opens on a line of prose. An answer takes the shape its information has: a comparison is a table, a sequence is numbered steps, parallel items are a list. A table never goes inside an item, where it prints as raw pipe rows: it goes after its list's last line and blank line, under a line naming the item, such as `Answers.3:`, then a blank line, the table, and a blank line before the next list's header. A table always has a blank line above and below it, since a line directly under its last row is drawn as one more row.
 
 **A list holds only what is new this turn.** An item an earlier turn printed, unchanged since, is not printed in its list again; it rolls up into 📌. An item whose state changed this turn, a Waiting agent that reported, a Todo item whose prompt is now ready or an item whose question was answered, is new again and is printed in its list with the change.
 
-A review that is itself a choice goes in 🧠 Decide, and a task that is not a reading goes in 👉 Todo.
+A review that is itself a choice goes in 🧠 Decide, a task that is not a reading goes in 👉 Todo, and a grant only the user can give goes in 🔑 Authorizations.
+
+**An authorization is a grant, not a task or a choice.** A 👉 Todo item asks the user to do something, a command to run or a file to mark up, and a 🧠 Decide item asks them to choose. A 🔑 Authorizations item asks for what only the user can give, a password, a touch or an approval, often against a prompt that times out, and the work behind it stops until they give it. A `sudo` command or a system switch the user runs for their password is an authorization, since what it waits on is the password, and the command goes on a line of its own after `💻 ❯`. The summary leads with what the grant unblocks, the tag, branch, token or command, never only the kind of prompt, so two grants of one kind stay two items in the 📌 roll-up. Each item says where to grant it, the prompt's window or the approval message to send, how long the prompt stays open and what granting it frees, and lists what it covers, such as the pull requests or commands one grant covers, as a nested list under its summary; the prompt's state goes in the item's body, never its summary, which the roll-up reprints. The Authorizations list leads the lists that wait on the user, since what it holds blocks running agents. [examples.md](examples.md#an-authorizations-list) draws one.
 
 **A turn reply is a delta.** Each ✅ Done item states the state reached, such as "`retries`: 3 → 5 in `config.toml`", never the actions taken to reach it, in the delta form `writing-hygiene-declarative-statements` describes.
 
@@ -61,7 +64,7 @@ A group that needs nothing from the user is its count and the file or command th
 
 ## The shape
 
-- **Header:** the header line ends in a hard line break. The line under it holds one `▔` U+2594 per column of the header, the emoji counting 2, so `⏳ **Waiting:**` takes 11. The first item follows on the next line.
+- **Header:** the header line ends in a hard line break. The line under it holds one `▔` U+2594 per column of the header, the emoji counting 2, so `⏳ **Waiting:**` takes 11 and `🔑 **Authorizations:**` 18. The first item follows on the next line.
 - **Item:** a numbered item opens on its summary, in bold, alone on its line and ending in a hard line break; the rest of the item starts on the line beneath, at the column the summary starts at. The summary is a phrase, or the question for an Answers or a Decide item, with no trailing colon, since nothing follows it on its line. It names its subject, never its category, and the item to do first leads. A summary that says all there is, such as a check that passed, is the whole item. A bullet, such as a 📌 roll-up item, keeps its summary and text on one line. A Done item comes from the commit or the run output, never from memory. No item points back with a phrase like "the quotes" or "those episodes": each names what it means by its label, as `writing-hygiene-refer-by-canonical-label` says, since what set it up has scrolled away.
 - **Parts:** an item holding several things the user acts on, or several parallel parts, lists them under its summary as a nested list, one to a line, never joined in a sentence, as `writing-hygiene-prose-to-lists` says. A Decide item's options keep the shape [A Decide item](#a-decide-item) gives them.
 - **Figures:** a figure in an item, a count, size or duration, is the output of a query run in the same turn that reads the state it counts, never a tally of lines the session saw go by, and the item names the query beside it: ``4 of 6 runs ok (`run_headless.py --summary --job night`)``. A figure no query can give is an estimate, and the item says so: `about 20 min (estimate)`.
@@ -91,10 +94,11 @@ A group that needs nothing from the user is its count and the file or command th
 - **By reference:** the user names an item by its list and number, `Decide.2`, an option by its letter, `Decide.2: B` or `2. B`, and either by its name. A note may follow the letter, `Decide.2.B: <note>`, and words after the colon with no letter, `Decide.2: <words>`, answer the item in the user's own words; read either as part of the answer, and a note holding a question as a question about the item. An item of an earlier turn carries that turn's id, from its usage line, before or after: `0f311c94.Decide.2` or `Decide.2 of 0f311c94`; with no id, the last final response is meant. An answer to an item of a turn that `reassess` replaced is read against the reassessed item that took it in.
 - **A question is never a choice.** An answer holding a question mark or any question, `Decide.1?`, `B?`, "how would B work?", "why not C?", asks about the item and picks nothing, even when it names an option. Restate the item in its own list, whatever the list, with the answer as the note under its summary and its options rewritten where the answer changes them; the item stays open until the user answers it without a question. A question goes in ❓ Answers only when it names no listed item.
 - **A Review item stays open until the user's reply shows they reviewed it:** they comment on it, answer from it, or say they looked; a reply that only answers something else leaves it open.
+- **An Authorizations item stays open until it is granted or withdrawn:** the prompt is answered or the approval sent, or the session no longer needs it and says so in its Done list. A grant the session cannot see, a password typed in the user's own terminal, closes when the user says so, `Authorizations.3 done`. A prompt that timed out unanswered is raised again and restated in its list, or withdrawn.
 
 ## Earlier turns' items
 
-The final response closes, before any ETA line, on what earlier turns left open and no later turn settled: every 🚧 Pending, ⏳ Waiting, 🔍 Review, 👉 Todo and 🧠 Decide item. It prints in full or as one count line, by the roll-up interval.
+The final response closes, before any ETA line, on what earlier turns left open and no later turn settled: every 🚧 Pending, ⏳ Waiting, 🔑 Authorizations, 🔍 Review, 👉 Todo and 🧠 Decide item. It prints in full or as one count line, by the roll-up interval.
 
 **The roll-up interval.** The full roll-up prints once min(30 min, 5 × the average duration of the last 5 completed turns) has passed since the last final response that printed it in full; otherwise the final response closes on one count line.
 
@@ -104,7 +108,7 @@ The final response closes, before any ETA line, on what earlier turns left open 
 
 `scripts/outstanding.py due` prints `full`, or `counts` with the time until the full roll-up is due.
 
-**The count line** names each list by its glyph and count, in the lists' order, Pending, Waiting, Review, Todo, Decide, each list left out when empty: `📌 Outstanding: 🚧 4 · ⏳ 2 · 🔍 2 · 👉 1 · 🧠 5`. `scripts/outstanding.py render --counts` drafts it.
+**The count line** names each list by its glyph and count, in the lists' order, Pending, Waiting, Authorizations, Review, Todo, Decide, each list left out when empty: `📌 Outstanding: 🚧 4 · ⏳ 2 · 🔑 1 · 🔍 2 · 👉 1 · 🧠 5`. `scripts/outstanding.py render --counts` drafts it.
 
 **The full roll-up** has the header `📌 **Outstanding from previous turns:**`, underlined with `━` U+2501, one per column, 35 in all, so the heavier rule sets it apart from this turn's lists. Under it the items are grouped by the list they came from, each group under that list's own header, in the lists' order and with no underline, and a blank line before each group's header but the first. Each item is one bullet, never numbered, naming its subject in a line and never reprinting its options, and ends with its 🔖 tag. `scripts/outstanding.py render` drafts it, and the session prunes what is settled. [examples.md](examples.md#the-full-roll-up) draws one.
 
@@ -117,22 +121,22 @@ The final response closes, before any ETA line, on what earlier turns left open 
 
 ## The commands
 
-| The user writes                                                                                           | The final response                                                                  |
-| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `open` (or `pending`, `restate`), or `/coding-agent-kanban-turn-responses open`                           | reprints the open 🔍, 👉 and 🧠 items of earlier turns as written, grouped by topic |
-| `reassess` (or `recheck`, `regenerate`, `recalculate`), or `/coding-agent-kanban-turn-responses reassess` | works out afresh which are still open, and prints them grouped by topic             |
-| `Expand <list>.<n>[.<letter>]`, or an item from 📌 by its subject                                         | reprints that item or option at the depth its list needs                            |
+| The user writes                                                                                           | The final response                                                                      |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `open` (or `pending`, `restate`), or `/coding-agent-kanban-turn-responses open`                           | reprints the open 🔑, 🔍, 👉 and 🧠 items of earlier turns as written, grouped by topic |
+| `reassess` (or `recheck`, `regenerate`, `recalculate`), or `/coding-agent-kanban-turn-responses reassess` | works out afresh which are still open, and prints them grouped by topic                 |
+| `Expand <list>.<n>[.<letter>]`, or an item from 📌 by its subject                                         | reprints that item or option at the depth its list needs                                |
 
 Any prefix of a command's name that is a prefix of no other command's name runs that command too, so `regen` runs `reassess` and `re` runs nothing.
 
 **Grouped by topic.** `open` and `reassess` group their lists under topics, each topic one unit of work as the user thinks of it: a repository, a plan, a pull-request stack, a workstream.
 
-- **Topic header:** the topic's name in bold, alone on its line and ending in a hard line break, and under it one `═` U+2550 per column of the name. The topic's lists follow straight under it in the lists' order, Pending, Waiting, Review, Todo and Decide, each with its own header and `▔` underline, a list with no items in the topic left out. A blank line ends a topic's last list, before the next topic's header.
+- **Topic header:** the topic's name in bold, alone on its line and ending in a hard line break, and under it one `═` U+2550 per column of the name. The topic's lists follow straight under it in the lists' order, Pending, Waiting, Authorizations, Review, Todo and Decide, each with its own header and `▔` underline, a list with no items in the topic left out. A blank line ends a topic's last list, before the next topic's header.
 - **Which topics:** the agent picks them from the items' content. A topic needs 3 items to stand alone, and the rest go under `Miscellaneous`, always last; there are at most 6 topics. The topic with the most to decide or do comes first. A `reassess` keeps the topic names of the previous `reassess` for the items carried over from it.
 - **Numbering:** each list numbers on across topics, so where the first topic's Decide list ends at 3 the next topic's starts at 4, and `Decide.4` still names one item.
 - **`open`** only moves items under their topics and renumbers them; their wording stays as written.
 
-The 📌 roll-up and every other final response are not grouped. [examples.md](examples.md#a-reassess-grouped-by-topic) draws a grouped `reassess`. Read [commands.md](commands.md) before running any of the commands, and put their output into the 🔍 Review, 👉 Todo and 🧠 Decide lists, never ❓ Answers.
+The 📌 roll-up and every other final response are not grouped. [examples.md](examples.md#a-reassess-grouped-by-topic) draws a grouped `reassess`. Read [commands.md](commands.md) before running any of the commands, and put their output into the 🔑 Authorizations, 🔍 Review, 👉 Todo and 🧠 Decide lists, never ❓ Answers.
 
 ## Around the lists
 
@@ -140,7 +144,7 @@ The 📌 roll-up and every other final response are not grouped. [examples.md](e
 - **Time:** say how long work takes, never when it lands or goes out, and set no deadline.
 - **Tables:** a plain Markdown table, as `markdown-hygiene-terminal-rendering` writes it, never a box table in a `text` block. A cell holding a state holds its emoji from the progress-update table, not a word.
 - **Links:** every URL, a local served page as much as a web page, is a Markdown link opened by 🔗 and a space, `🔗 [the trial projection](http://127.0.0.1:8765/…)`, kept out of `text` blocks as `markdown-hygiene-terminal-rendering` says. In a table's cell the link goes without the 🔗, its label short enough not to wrap.
-- **Glyphs:** the only ones in a response are the 8 header glyphs, `▔`, `═`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the 6 state emoji, ⏳ among them being also the Waiting header's glyph, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, `💻 ❯` and `✴️ ❯` before a command for the user to run, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
+- **Glyphs:** the only ones in a response are the 9 header glyphs, `▔`, `═`, 📌, `━` and 🔖, the `·` between the count line's lists and a progress update's steps, the 6 state emoji, ⏳ among them being also the Waiting header's glyph, the 4 option glyphs, ➕ and ➖ on a pro or con line, 🔗 before a link, `💻 ❯` and `✴️ ❯` before a command for the user to run, and the separator character. A new one is width-checked as `markdown-hygiene-terminal-rendering` says before it is used.
 
 ## Why and how to apply
 

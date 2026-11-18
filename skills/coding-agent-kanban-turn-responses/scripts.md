@@ -18,7 +18,7 @@ The one reader of turns and their reply sections.
 | `list [-n N] [--grep TEXT]`                | one line per turn, newest last: id, timestamp, the prompt's first line            |
 | `show ID [--prompt-only] [--section NAME]` | the turn's prompt and reply, or one section from every reply text                 |
 | `decide [--since ID]`                      | each turn's Decide section, from turn ID inclusive; `decisions` and `blocked` too |
-| `open [--since ID]`                        | each turn's Review, Todo and Decide sections, under the turn id                   |
+| `open [--since ID]`                        | each turn's Authorizations, Review, Todo and Decide sections, under the turn id   |
 
 The global `--human-only` flag counts a typed prompt alone as a turn, folding agent reports and task notifications into the turn under way.
 
@@ -26,7 +26,7 @@ It runs from any directory: the transcript is looked up under the working direct
 
 ## The `outstanding.py` script
 
-[`outstanding.py`](scripts/outstanding.py), in this skill's `scripts/` directory, works out what the 📌 roll-up needs. It reads the Pending, Waiting, Review, Todo and Decide lists of every reply, the 📌 section's groups among them, through `reply_turns.py`.
+[`outstanding.py`](scripts/outstanding.py), in this skill's `scripts/` directory, works out what the 📌 roll-up needs. It reads the Pending, Waiting, Authorizations, Review, Todo and Decide lists of every reply, the 📌 section's groups among them, through `reply_turns.py`.
 
 | Subcommand                                              | Prints                                                                                                                                           |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |

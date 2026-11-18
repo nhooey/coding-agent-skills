@@ -9,7 +9,7 @@ reads transcripts through `reply_turns.py` (imported, not copied).
 The relative index counts the turns `reply_turns.py list` prints, which are every turn the user sees a usage
 line for, an agent message (`<agent-message`) or a task notification included: the current turn is
 0 (`₀`), the one before it -1 (`₋₁`), and so on. Items are the top-level bullet or numbered lines of
-the Pending, Waiting, Review, Todo and Decide lists of every reply (or their aliases in older replies: Unfinished or
+the Pending, Waiting, Authorizations, Review, Todo and Decide lists of every reply (or their aliases in older replies: Unfinished or
 Open, To review, To do, Decisions or Blocked), and of the 📌 section's subsections ("Still open from earlier" or
 "Outstanding from previous turns"), which carry the same list headers. An item's summary is its bold text without a trailing colon, else the line. A summary
 alone on its line is joined to the line beneath it, its body.
@@ -69,6 +69,7 @@ import reply_turns as rt  # noqa: E402
 LISTS = {
     "pending": (("Pending", "Unfinished", "Open"), "🚧", "Pending"),
     "waiting": (("Waiting",), "⏳", "Waiting"),
+    "authorizations": (("Authorizations",), "🔑", "Authorizations"),
     "review": (("Review", "To review"), "🔍", "Review"),
     "todo": (("Todo", "To do"), "👉", "Todo"),
     "decide": (("Decide", "Decisions", "Blocked"), "🧠", "Decide"),
@@ -654,7 +655,7 @@ def parser() -> argparse.ArgumentParser:
     def common(sp: argparse.ArgumentParser, pattern: bool = False) -> None:
         sp.add_argument("pattern", metavar="PATTERN") if pattern else None
         sp.add_argument("--since", metavar="ID", help="start at this turn, inclusive")
-        sp.add_argument("--lists", default=",".join(LISTS), help="comma list of pending,waiting,review,todo,decide")
+        sp.add_argument("--lists", default=",".join(LISTS), help="comma list of pending,waiting,authorizations,review,todo,decide")
         sp.add_argument("--latest", action="store_true", help="keep each summary's latest occurrence only")
         sp.add_argument("--width", type=int, default=_DEFAULT_WIDTH, help="cut summaries to this width")
 

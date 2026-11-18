@@ -488,6 +488,42 @@ class RenderTest(unittest.TestCase):
         self.assertIn("⏳ **Waiting:**  \n- **The test run** 🔖 9efb08a1₋₁", self.render(*records))
         self.assertEqual(self.render(*records, counts=True), "📌 Outstanding: ⏳ 1")
 
+    def test_authorization_items_render_under_the_key_header_between_waiting_and_review(self) -> None:
+        text = (
+            "⏳ **Waiting:**  \n▔▔▔▔▔▔▔▔▔▔▔\n1. **The test run**\n\n"
+            "🔑 **Authorizations:**  \n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n"
+            "1. **1Password prompt for the merge token**  \n"
+            "   - #12 Fix the loader\n"
+            "   - #13 Bump the lock\n"
+            f"   {SEP}\n\n"
+            "🔍 **Review:**  \n▔▔▔▔▔▔▔▔▔▔\n1. **#14 The README**\n"
+        )
+        records = (prompt(FIRST, "go"), reply(text), prompt(SECOND, "more", 1), reply("Prose.", 1))
+        self.assertIn(
+            "⏳ **Waiting:**  \n- **The test run** 🔖 9efb08a1₋₁\n\n"
+            "🔑 **Authorizations:**  \n- **1Password prompt for the merge token** 🔖 9efb08a1₋₁\n\n"
+            "🔍 **Review:**  \n",
+            self.render(*records),
+        )
+        self.assertEqual(self.render(*records, counts=True), "📌 Outstanding: ⏳ 1 · 🔑 1 · 🔍 1")
+
+    def test_two_grants_of_one_kind_led_by_what_they_unblock_stay_two_items(self) -> None:
+        def grant(summary: str) -> str:
+            return f"🔑 **Authorizations:**  \n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n1. **{summary}**\n"
+
+        records = (
+            prompt(FIRST, "go"),
+            reply(grant("The `v2.4.0` tag's SSH signature")),
+            prompt(SECOND, "more", 1),
+            reply(grant("The `v2.5.0` tag's SSH signature"), 1),
+            prompt(THIRD, "more", 2),
+            reply("Prose.", 2),
+        )
+        self.assertEqual(self.render(*records, counts=True), "📌 Outstanding: 🔑 2")
+
+    def test_the_authorizations_list_is_one_to_pick(self) -> None:
+        self.assertEqual(outstanding.parse_lists("authorizations,todo"), ("authorizations", "todo"))
+
     def test_nothing_open_renders_nothing(self) -> None:
         self.assertEqual(self.render(prompt(FIRST, "go"), reply("Prose only.")), "")
         self.assertEqual(self.render(prompt(FIRST, "go"), reply("Prose only."), counts=True), "")
