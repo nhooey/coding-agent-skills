@@ -14,6 +14,7 @@ Skills for the shape of an agent's output in isolation, such as a session recap,
 | Skill                                                                                                                    | What it does                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)                                       | Before any Claude in Chrome work, finds which browser app and window the session drives, with a bundled macOS script, and switches until it matches the user's preferences, waking the preferred app when it has no window before any tab is made.            |
+| [`coding-agent-draft-in-browser`](skills/coding-agent-draft-in-browser/SKILL.md)                                         | Drafts anything addressed to other people (an issue, comment, email, chat message or forum post) in the browser it will be sent from, filled in and left unsent for the user to read, edit and send.                                                          |
 | [`coding-agent-headless-in-checkout`](skills/coding-agent-headless-in-checkout/SKILL.md)                                 | Runs a prompt as a headless Claude Code session inside one git checkout, with its own skills and Nix environment, in a worktree, in a new session or a fork of the checkout's last one, and reports how it ended; a caller fans it out across many checkouts. |
 | [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)                                             | Keeps plans as a graph of Markdown nodes in `agents/plans/open/` and `closed/`, with states, typed links and a generated overview of what's in progress, ready, blocked and proposed.                                                                         |
 | [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Pending/Waiting/Answers/Authorizations/Review/Todo/Decide lists closing on what earlier turns left open.                              |
@@ -52,6 +53,7 @@ Package outputs:
 
 - `agent-skills-nhooey-coding-agent-all` — the aggregate of every skill (also `default`)
 - `agent-skill-nhooey-coding-agent-browser-selection`
+- `agent-skill-nhooey-coding-agent-draft-in-browser`
 - `agent-skill-nhooey-coding-agent-headless-in-checkout`
 - `agent-skill-nhooey-coding-agent-plans-as-graph`
 - `agent-skill-nhooey-coding-agent-kanban-turn-responses`
