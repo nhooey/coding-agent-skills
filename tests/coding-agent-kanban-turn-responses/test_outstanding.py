@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for outstanding.py, run from anywhere: `python3 -I scripts/test_outstanding.py`.
+"""Tests for outstanding.py: `skills-dev test coding-agent-kanban-turn-responses`.
 
 Standard library only. The core is tested directly, on turns built from transcript records in memory;
 one test runs the command line on a transcript file.
@@ -11,16 +11,12 @@ import contextlib
 import io
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import timedelta
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-
-import outstanding  # noqa: E402
-import reply_turns  # noqa: E402
+import outstanding
+import reply_turns
 
 SEP = "⠀"
 

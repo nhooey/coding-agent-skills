@@ -38,7 +38,7 @@ The hook comes from the `coding-agent-skills-hooks` plugin, this collection's ho
 
 - A new session's `env` shows the five variables.
 - `cargo test`, `pytest -n auto` and a Gradle build in a session each use at most three workers.
-- `bash scripts/test_session_build_limits.sh` runs the script against a temporary `CLAUDE_ENV_FILE`.
+- In the coding-agent-skills repository's dev shell, `skills-dev test coding-agent-session-build-limits` runs the script's tests, in `tests/coding-agent-session-build-limits/`, against a temporary `CLAUDE_ENV_FILE`.
 
 ## Your preferences
 

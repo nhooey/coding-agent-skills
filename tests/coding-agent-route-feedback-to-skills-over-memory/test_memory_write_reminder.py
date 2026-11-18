@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for memory-write-reminder.sh and memory_write_reminder.py: python3 -I test_memory_write_reminder.py
+"""Tests for memory-write-reminder.sh and memory_write_reminder.py: skills-dev test coding-agent-route-feedback-to-skills-over-memory
 
 fixtures/memory-write.json is a Write of a memory file at the path Claude Code
 uses, `~/.claude/projects/<project>/memory/`. When that layout changes, change
@@ -14,17 +14,15 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import memory_write_reminder as hook  # noqa: E402
+import memory_write_reminder as hook
 
+HERE = Path(hook.__file__).resolve().parent
 HOOK = HERE / "memory-write-reminder.sh"
-FIXTURE = json.loads((HERE / "fixtures" / "memory-write.json").read_text(encoding="utf-8"))
+FIXTURE = json.loads((Path(__file__).resolve().parent / "fixtures" / "memory-write.json").read_text(encoding="utf-8"))
 BASH = shutil.which("bash")
 HOME = "/home/me"
 CONFIG = "/home/me/.claude"

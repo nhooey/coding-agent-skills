@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""skills-dev: the commands for working on this repository, in its dev shell.
+"""skills-dev mods: the commands for working on this repository's mods, in its dev shell.
 
-  skills-dev test [SKILL ...]      run the skills' script tests here, outside the Nix sandbox
   skills-dev mods check [MOD ...]  validate, type-check and test the mods under plugins/
   skills-dev mods try MOD          start Claude Code with a mod loaded from its folder
 
-Exit status: 0 when everything passed, 1 when a test or check failed or a needed file is missing,
+`skills-dev test` is the dev shell's own: flake.nix runs pytest and bash on every test, these tools'
+tests among them.
+
+Exit status: 0 when everything passed, 1 when a check failed or a needed file is missing,
 2 on a usage error. Standard library only.
 """
 
@@ -31,52 +33,6 @@ Runner = Callable[[Sequence[str]], int]
 
 def run(command: Sequence[str]) -> int:
     return subprocess.run(list(command), check=False).returncode
-
-
-# ---- test
-
-
-def test_command(path: pathlib.Path) -> list[str] | None:
-    """The command that runs one test file, or None when it isn't a test this tool knows."""
-    if not path.name.startswith("test_"):
-        return None
-    if path.suffix == ".py":
-        return ["python3", "-I", str(path)]
-    if path.suffix == ".sh":
-        return ["bash", str(path)]
-    return None
-
-
-def find_tests(root: pathlib.Path, skills: Sequence[str]) -> list[list[str]]:
-    """Each test command under skills/<skill>/scripts/, for the skills named or every skill."""
-    names = skills or sorted(p.name for p in (root / "skills").iterdir() if p.is_dir())
-    commands = []
-    for name in names:
-        scripts = root / "skills" / name / "scripts"
-        for path in sorted(scripts.glob("test_*")) if scripts.is_dir() else []:
-            command = test_command(path)
-            if command:
-                commands.append(command)
-    return commands
-
-
-def cmd_test(args: argparse.Namespace, root: pathlib.Path = ROOT, runner: Runner = run) -> int:
-    missing = [s for s in args.skills if not (root / "skills" / s).is_dir()]
-    if missing:
-        print(f"skills-dev test: no such skill: {', '.join(missing)}", file=sys.stderr)
-        return 1
-    commands = find_tests(root, args.skills)
-    if not commands:
-        print("skills-dev test: no script tests found", file=sys.stderr)
-        return 1
-    failed = []
-    for command in commands:
-        print(f"==== {pathlib.Path(command[-1]).relative_to(root)}", flush=True)
-        if runner(command) != 0:
-            failed.append(command[-1])
-    for path in failed:
-        print(f"skills-dev test: FAILED {pathlib.Path(path).relative_to(root)}", file=sys.stderr)
-    return 1 if failed else 0
 
 
 # ---- mods
@@ -164,18 +120,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="skills-dev",
         description="The commands for working on coding-agent-skills.",
-        epilog="`nix fmt` formats and `nix flake check` runs the formatting check and every script test in the sandbox.",
+        epilog="`skills-dev test` runs every test, `nix fmt` formats, and `nix flake check` runs "
+        "the formatting check and every test in the sandbox.",
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
-
-    test = commands.add_parser(
-        "test",
-        help="run the skills' script tests here, outside the Nix sandbox",
-        description="Run each skills/<skill>/scripts/test_*.py with `python3 -I` and test_*.sh with bash, "
-        "then name the ones that failed.",
-    )
-    test.add_argument("skills", nargs="*", metavar="SKILL", help="a skill's folder name under skills/ (default: every skill)")
-    test.set_defaults(func=cmd_test)
 
     mods = commands.add_parser("mods", help="check or try the Claude Code mods under plugins/")
     mods_commands = mods.add_subparsers(dest="mods_command", required=True, metavar="COMMAND")

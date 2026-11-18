@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for which_browser.py, run from anywhere: `python3 -I scripts/test_which_browser.py`.
+"""Tests for which_browser.py: `skills-dev test coding-agent-browser-selection`.
 
 Standard library only, and no osascript: the parsing and output are pure functions, and main takes
 the platform and the running browsers' windows as arguments.
@@ -9,14 +9,9 @@ from __future__ import annotations
 
 import contextlib
 import io
-import pathlib
-import sys
 import unittest
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-
-import which_browser  # noqa: E402
+import which_browser
 
 # WINDOWS_SCRIPT's output for two windows: one named, with two tabs; one unnamed, with none.
 OSASCRIPT_OUT = (

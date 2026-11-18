@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for reply_lint_hook.py and reply-lint-hook.sh: `python3 -I scripts/test_reply_lint_hook.py`.
+"""Tests for reply_lint_hook.py and reply-lint-hook.sh: `skills-dev test coding-agent-kanban-turn-responses`.
 
 Standard library only. The decision is tested on response texts in memory; the hook runs end to
 end through bash on hook input JSON, with preferences files and a transcript in a temporary
@@ -13,16 +13,13 @@ import os
 import pathlib
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+import lint_reply
+import reply_lint_hook as hook
 
-import lint_reply  # noqa: E402
-import reply_lint_hook as hook  # noqa: E402
-
+HERE = pathlib.Path(hook.__file__).resolve().parent
 HOOK = HERE / "reply-lint-hook.sh"
 BASH = shutil.which("bash")
 S = lint_reply.SEPARATOR

@@ -1,5 +1,5 @@
 # The repository's hooks plugin: plugin/ with each hook script copied in from
-# its skill's scripts/ folder, where the skill documents it and its tests run.
+# its skill's scripts/ folder, where the skill documents it.
 #
 # The same derivation as agent-plugins-nixpkgs' `lib.mkClaudePlugin pkgs { src,
 # postPatch }`: name and version from the manifest, `passthru.claudePluginName`
