@@ -95,6 +95,7 @@ Research and audits that plans rest on go in `agents/reports/`, beside `agents/p
 - **A plan node links to the report that justifies it,** with a Markdown link in its body.
 - **Raw or machine-specific data,** such as timing logs, per-run logs and wave summaries, stays under `$XDG_STATE_HOME`; the report links to it or summarises it.
 - **A report is a point-in-time record,** exempt from `git-hygiene-no-history-in-tracked-files` as a decision record is. Its `state` says whether it still holds; a newer finding is a new report that supersedes it, not an edit.
+- **A report leads with its findings:** the summary and what a plan must act on, then its items in groups with their counts, then the evidence, as `writing-hygiene-progressive-disclosure` and `writing-hygiene-group-by-reader-action` lay out.
 
 ## Working from a plan
 
@@ -161,4 +162,6 @@ came from; don't apply it from memory.
 - `coding-agent-headless-in-checkout`: runs a schedule node's wave, one headless session per checkout.
 - `git-hygiene-no-history-in-tracked-files`: a node states the plan as it stands, with its history in commit messages; reports are exempt.
 - `writing-hygiene-declarative-statements`: the snapshot form an end-state node's postconditions are written in.
+- `writing-hygiene-progressive-disclosure`: the order of a report, its summary and findings before its evidence.
+- `writing-hygiene-group-by-reader-action`: the groups a report sorts its items into, each with its count.
 - `coding-agent-skill-references`: the preferences files this skill reads.

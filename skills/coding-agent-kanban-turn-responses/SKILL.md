@@ -53,6 +53,10 @@ A review that is itself a choice goes in 🧠 Decide, and a task that is not a r
 
 **A turn reply is a delta.** Each ✅ Done item states the state reached, such as "`retries`: 3 → 5 in `config.toml`", never the actions taken to reach it, in the delta form `writing-hygiene-declarative-statements` describes.
 
+**An item that reports on many things is grouped and layered.**
+The result of a run over many repositories, files or checks opens on its totals and names what needs action, then gives the groups with their counts, keyed and ordered as `writing-hygiene-group-by-reader-action` says.
+A group that needs nothing from the user is its count and the file or command that lists it, as `writing-hygiene-progressive-disclosure` says of a reply in a terminal, and its items are printed when the user asks for them.
+
 **A pull request is a Review item.** A pull request the user is asked to review or merge goes in 🔍 Review, by its canonical label, linked, as `github-hygiene-refer-to-issues-and-pull-requests` writes it, with what to check in it. When this turn's work opened it, the ✅ Done item for that work names the change in a line and points at the Review item by reference, `see Review.1`, without repeating the pull request's label, link or contents, so the pull request is described once.
 
 ## The shape
@@ -176,4 +180,6 @@ came from; don't apply it from memory.
 - `writing-hygiene-prose-to-lists`: when a sentence is a list in disguise, and how its parts nest.
 - `github-hygiene-refer-to-issues-and-pull-requests`: the canonical, linked label a pull request in the Review list carries.
 - `writing-hygiene-declarative-statements`: a turn reply is a delta, stating the state reached rather than the steps.
+- `writing-hygiene-group-by-reader-action`: the groups, with their counts, of an item that reports on many things.
+- `writing-hygiene-progressive-disclosure`: totals and what needs action first, with the detail left to a file or a request.
 - `coding-agent-skill-references`: how a skill names other skills and reads its preferences files.
