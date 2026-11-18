@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for lint_reply.py, run from anywhere: `python3 -I scripts/test_lint_reply.py`.
+"""Tests for lint_reply.py: `skills-dev test coding-agent-kanban-turn-responses`.
 
 Standard library only.
 """
@@ -13,10 +13,9 @@ import sys
 import unittest
 from contextlib import redirect_stdout
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+import lint_reply
 
-import lint_reply  # noqa: E402
+HERE = pathlib.Path(lint_reply.__file__).resolve().parent
 
 S = lint_reply.SEPARATOR
 NBSP = lint_reply.NBSP

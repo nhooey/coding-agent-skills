@@ -96,12 +96,13 @@ skill is loaded; the skill itself still installs through the packages above.
   built by [`nix/hooks-plugin.nix`](nix/hooks-plugin.nix), the same derivation
   as agent-plugins-nixpkgs' `mkClaudePlugin`, built here because
   agent-plugins-nixpkgs takes this flake as an input.
-- **Adding a hook:** keep the script and its tests in
-  `skills/<skill>/scripts/`, where the skill documents it; list the script in
+- **Adding a hook:** keep the script in `skills/<skill>/scripts/`, where the
+  skill documents it, and its tests in `tests/<skill>/`, where
+  `skills-dev test <skill>` and `nix flake check` run them; list the script in
   `hookScripts` in [`flake.nix`](flake.nix); and add it to `hooks/hooks.json`
   as `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, since a store file has no
-  executable bit to rely on. Wire its tests into `nix flake check`, and keep it
-  under about 50 ms, exiting at once when it has nothing to do.
+  executable bit to rely on. Keep it under about 50 ms, exiting at once when it
+  has nothing to do.
 - **A setting for blocking hooks:** a hook that can deny or block reads a
   setting that turns it down to a reminder or off, since a plugin enabled in
   managed settings can't be disabled in a session. The setting lives in the
@@ -132,13 +133,17 @@ skill is loaded; the skill itself still installs through the packages above.
 ```bash
 nix develop      # enter the dev shell; run `menu` to list commands
 nix fmt          # nixfmt over *.nix, prettier over *.md / *.yaml
-nix flake check  # the treefmt check and the skills' script tests
+nix flake check  # the treefmt check, the hooks plugin's build check and every test
 ```
 
 The dev shell provides `check`, `fmt`, and `update-flake` commands plus
 `reap-skills` / `update-skills-devshell`, and this repository's own tool,
-[`skills-dev`](scripts/skills_dev.py): `skills-dev test` runs the skills' script
-tests outside the sandbox, `skills-dev mods check` validates, type-checks and
+`skills-dev`: `skills-dev test` runs every test outside the sandbox, the same
+set as `nix flake check`'s `python-tests` and `shell-tests` checks: pytest over
+the Python tests under [`tests/`](tests/) and [`scripts/`](scripts/), and bash
+over the shell tests. `skills-dev test python` or `skills-dev test shell` runs
+one language's, and `skills-dev test <skill> ...` the named skills' tests under
+`tests/`. `skills-dev mods check` validates, type-checks and
 tests the Claude Code mods under [`plugins/`](plugins/), and `skills-dev mods
 try` starts Claude Code with one mod loaded. `mods check` runs outside
 `nix flake check` because it needs `claude` itself and the API types its
@@ -152,8 +157,9 @@ skill inputs in its lock.
 
 ```
 skills/                  one directory per skill (SKILL.md + per-skill flake.nix)
+tests/                   each skill's tests in tests/<skill>/, and the layout test
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
-scripts/                 `skills-dev`, the dev shell's tool for this repository, and its tests
+scripts/                 `skills-dev mods`, the hooks plugin's checker, and their tests
 plugins/                 Claude Code mods, checked by `skills-dev mods check`
 plugin/                  the hooks plugin's manifest and hooks.json; scripts come from skills/
 nix/                     the hooks plugin's builder

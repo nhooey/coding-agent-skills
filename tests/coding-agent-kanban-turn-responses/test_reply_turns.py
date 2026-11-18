@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for reply_turns.py, run from anywhere: `python3 -I scripts/test_reply_turns.py`.
+"""Tests for reply_turns.py: `skills-dev test coding-agent-kanban-turn-responses`.
 
 Standard library only. The turn reader, the lookups and the section splitter are tested on records
 in memory; the command line runs on a transcript file.
@@ -11,14 +11,10 @@ import contextlib
 import io
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-
-import reply_turns  # noqa: E402
+import reply_turns
 
 SESSION = "8907a830-6e25-4a1b-ab2b-80ec191e55ac"
 

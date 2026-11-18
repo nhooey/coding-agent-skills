@@ -8,13 +8,12 @@ import os
 import pathlib
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import scratchpad_guard as guard  # noqa: E402
+import scratchpad_guard as guard
+
+HERE = pathlib.Path(guard.__file__).resolve().parent
 
 TMPDIR = "/run/user/1000/tmp"
 SCRATCHPAD = "/private/tmp/claude-501/-Users-x-proj/0a1b/scratchpad"

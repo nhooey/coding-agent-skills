@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for run_headless.py: the pieces, then whole runs against a fake `claude`.
 
-Run with `python3 -I test_run_headless.py`. Needs `git` and `xargs` on PATH;
+Run with `skills-dev test coding-agent-headless-in-checkout`. Needs `git` and `xargs` on PATH;
 uses no network and no real Claude Code.
 """
 
@@ -20,9 +20,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-SCRIPTS = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPTS))
-import run_headless  # noqa: E402
+import run_headless
+
+SCRIPTS = Path(run_headless.__file__).resolve().parent
 
 FAKE_CLAUDE = textwrap.dedent(
     """\

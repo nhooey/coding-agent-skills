@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""Tests for box_table.py, run from anywhere: `python3 -I scripts/test_box_table.py`.
+"""Tests for box_table.py: `skills-dev test coding-agent-kanban-turn-responses`.
 
 Standard library only. main takes its stdin as a string and returns its status and text.
 """
 
 from __future__ import annotations
 
-import pathlib
-import sys
 import unittest
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-
-import box_table  # noqa: E402
+import box_table
 
 
 class WidthTest(unittest.TestCase):

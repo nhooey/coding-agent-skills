@@ -98,6 +98,92 @@
           pkgs,
           ...
         }:
+        let
+          inherit (pkgs) lib;
+
+          # The Python the tests run under: the skills' scripts use only the
+          # standard library, and the tests may use these libraries too.
+          testPython = pkgs.python3.withPackages (ps: [ ps.pytest ]);
+
+          # `skill-tests [python | shell | SKILL ...]`: each language's tests
+          # with its own tool, pytest for test_*.py and bash for each test_*.sh,
+          # under tests/ and scripts/; or only one language's; or only the
+          # named skills' under tests/. A selection that runs no test fails.
+          # `skills-dev test` and the python-tests and shell-tests checks all
+          # run it.
+          skillTests = pkgs.writeShellApplication {
+            name = "skill-tests";
+            runtimeInputs = [
+              testPython
+              pkgs.bash
+              pkgs.git
+            ];
+            text = ''
+              cd "''${PRJ_ROOT:-$PWD}"
+              language=
+              folders=(tests scripts)
+              if [ $# -eq 1 ] && { [ "$1" = python ] || [ "$1" = shell ]; }; then
+                language=$1
+              elif [ $# -gt 0 ]; then
+                folders=()
+                for skill in "$@"; do
+                  case $skill in
+                    python | shell) echo "skill-tests: $skill is a language, which goes alone" >&2; exit 2 ;;
+                    "" | . | .. | */*) echo "skill-tests: $skill: not a skill" >&2; exit 2 ;;
+                  esac
+                  if [ ! -d "skills/$skill" ] || [ ! -d "tests/$skill" ]; then
+                    echo "skill-tests: $skill: no skills/$skill with tests in tests/$skill" >&2
+                    exit 2
+                  fi
+                  folders+=("tests/$skill")
+                done
+              fi
+              python_tests=()
+              shell_tests=()
+              if [ "$language" != shell ]; then
+                mapfile -t python_tests < <(find "''${folders[@]}" -name 'test_*.py' | sort)
+              fi
+              if [ "$language" != python ]; then
+                mapfile -t shell_tests < <(find "''${folders[@]}" -name 'test_*.sh' | sort)
+              fi
+              if [ $((''${#python_tests[@]} + ''${#shell_tests[@]})) -eq 0 ]; then
+                echo "skill-tests: no ''${language:+$language }tests in ''${folders[*]}" >&2
+                exit 1
+              fi
+              status=0
+              if [ ''${#python_tests[@]} -gt 0 ]; then
+                pytest "''${python_tests[@]}" || status=1
+              fi
+              for test in "''${shell_tests[@]}"; do
+                echo "==== $test"
+                bash "$test" </dev/null || status=1
+              done
+              exit "$status"
+            '';
+          };
+
+          # One check per language, running `skill-tests <language>` on a
+          # writable copy of the skills, the dev tools and their tests.
+          testCheck =
+            language:
+            pkgs.runCommand "${language}-tests" { } ''
+              cp -r ${
+                lib.fileset.toSource {
+                  root = ./.;
+                  fileset = lib.fileset.unions [
+                    ./pytest.ini
+                    ./scripts
+                    ./skills
+                    ./tests
+                  ];
+                }
+              } $TMPDIR/src
+              chmod -R u+w $TMPDIR/src
+              export HOME=$TMPDIR PRJ_ROOT=$TMPDIR/src
+              ${lib.getExe skillTests} ${language}
+              touch $out
+            '';
+        in
         {
           # The skills, and the hooks plugin `coding-agent-skills-hooks`: plugin/
           # with each hook script copied in from its skill. A skill adds a hook
@@ -125,8 +211,8 @@
             };
           };
 
-          # The built hooks plugin's manifest, hooks.json and scripts, and the
-          # checker's own tests.
+          # The built hooks plugin's manifest, hooks.json and scripts. The
+          # checker's own tests run in python-tests.
           checks.hooks-plugin =
             pkgs.runCommand "hooks-plugin-check"
               {
@@ -136,126 +222,17 @@
                 ];
               }
               ''
-                python3 -I ${./scripts}/test_check_hooks_plugin.py
                 python3 -I ${./scripts}/check_hooks_plugin.py ${config.packages.hooks-plugin}
                 touch $out
               '';
 
           apps = base.apps.${system};
 
-          # The kanban skill's reply linter, against its fixtures and the
-          # skill's own examples, its transcript readers' and table drawer's
-          # tests, and its Stop hook at each setting, end to end through bash.
-          checks.kanban-lint-reply =
-            pkgs.runCommand "kanban-lint-reply-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.bash
-                ];
-              }
-              ''
-                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_lint_reply.py
-                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_turns.py
-                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_outstanding.py
-                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_box_table.py
-                python3 -I ${./skills/coding-agent-kanban-turn-responses}/scripts/test_reply_lint_hook.py
-                touch $out
-              '';
-
-          # The headless runner, against throwaway git repositories and a fake
-          # `claude` that records how it was called.
-          checks.headless-in-checkout =
-            pkgs.runCommand "headless-in-checkout-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.git
-                ];
-              }
-              ''
-                export HOME=$TMPDIR
-                python3 -I ${./skills/coding-agent-headless-in-checkout}/scripts/test_run_headless.py
-                touch $out
-              '';
-
-          # The session build limits hook, against a temporary CLAUDE_ENV_FILE.
-          checks.session-build-limits =
-            pkgs.runCommand "session-build-limits-tests" { nativeBuildInputs = [ pkgs.bash ]; }
-              ''
-                bash ${./skills/coding-agent-session-build-limits}/scripts/test_session_build_limits.sh
-                touch $out
-              '';
-
-          # The scratchpad guard over its table of hook inputs, and end to end
-          # through bash with real files and preferences.
-          checks.scratchpad-guard =
-            pkgs.runCommand "scratchpad-guard-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.bash
-                ];
-              }
-              ''
-                python3 -I ${./skills/coding-agent-scratchpad-scripts}/scripts/test_scratchpad_guard.py
-                touch $out
-              '';
-
-          # The browser finder's parsing and output, with no osascript, and the
-          # browser check hook at each setting, end to end through bash.
-          checks.browser-selection =
-            pkgs.runCommand "browser-selection-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.bash
-                ];
-              }
-              ''
-                python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_which_browser.py
-                python3 -I ${./skills/coding-agent-browser-selection}/scripts/test_browser_check_hook.py
-                touch $out
-              '';
-
-          # The repository's own dev tool: its argument parsing, test discovery
-          # and mod lookup, with the commands it would run recorded, not run.
-          checks.skills-dev = pkgs.runCommand "skills-dev-tests" { nativeBuildInputs = [ pkgs.python3 ]; } ''
-            python3 -I ${./scripts}/test_skills_dev.py
-            touch $out
-          '';
-
-          # plans.py, and its PostToolUse hook end to end through bash.
-          checks.plans-as-graph =
-            pkgs.runCommand "plans-as-graph-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.git
-                  pkgs.bash
-                ];
-              }
-              ''
-                export HOME=$TMPDIR
-                python3 -I ${./skills/coding-agent-plans-as-graph}/scripts/test_plans.py
-                python3 -I ${./skills/coding-agent-plans-as-graph}/scripts/test_plans_check_hook.py
-                touch $out
-              '';
-
-          # The memory write reminder against its fixture of Claude Code's
-          # memory path, and end to end through bash.
-          checks.memory-write-reminder =
-            pkgs.runCommand "memory-write-reminder-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.bash
-                ];
-              }
-              ''
-                python3 -I ${./skills/coding-agent-route-feedback-to-skills-over-memory}/scripts/test_memory_write_reminder.py
-                touch $out
-              '';
+          # Every test: pytest over the Python tests under tests/ and scripts/,
+          # the layout test and the dev tools' own tests among them, and bash
+          # over each shell test.
+          checks.python-tests = testCheck "python";
+          checks.shell-tests = testCheck "shell";
 
           # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
           # the module also surfaces a `checks.${system}.treefmt` so `nix flake
@@ -285,21 +262,29 @@
           # name, motd, the install-skills startup that reconciles the runtime
           # `skills-devshell/` sub-flake at project scope, the ci/dev/maintenance
           # command trio (check / fmt / update-flake), and the skills commands
-          # (reap-skills / update-skills-devshell). This repo adds `skills-dev`,
+          # (reap-skills / update-skills-devshell). This repo adds `skills-dev`:
+          # `skills-dev test` runs skill-tests, as the python-tests and
+          # shell-tests checks do, and the rest goes to scripts/skills_dev.py,
           # whose `mods check` needs `claude` itself and the Claude Code API
           # types its running build writes, neither of which the Nix sandbox
           # has, so it runs here rather than in `nix flake check`.
           devshells.default = {
             packages = [
-              pkgs.python3
+              testPython
               pkgs.typescript
             ];
             commands = [
               {
                 category = "dev";
                 name = "skills-dev";
-                help = "test: run the skills' script tests; mods check|try: check or try the mods under plugins/";
-                command = ''python3 "$PRJ_ROOT/scripts/skills_dev.py" "$@"'';
+                help = "test [python|shell|SKILL]: run the tests under tests/; mods check|try: check or try the mods under plugins/";
+                command = ''
+                  if [ "''${1-}" = test ]; then
+                    shift
+                    exec ${lib.getExe skillTests} "$@"
+                  fi
+                  exec python3 "$PRJ_ROOT/scripts/skills_dev.py" "$@"
+                '';
               }
             ];
           };

@@ -16,3 +16,7 @@
 !/.agents/skills/*.preferences.md
 /.claude/skills/
 
+# Python's bytecode and pytest's cache, from running the tests.
+__pycache__/
+/.pytest_cache/
+

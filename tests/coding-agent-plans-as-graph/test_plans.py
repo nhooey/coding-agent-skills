@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Tests for plans.py: python3 -I test_plans.py"""
+"""Tests for plans.py: skills-dev test coding-agent-plans-as-graph"""
 from __future__ import annotations
 
 import contextlib
 import io
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import plans  # noqa: E402
+import plans
 
 
 class Plan(unittest.TestCase):

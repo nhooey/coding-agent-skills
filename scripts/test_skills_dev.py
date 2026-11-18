@@ -51,18 +51,12 @@ class Recorder:
 
 
 class Tree:
-    """A throwaway repository: two skills with script tests, and two mods."""
+    """A throwaway repository with two mods."""
 
     def __enter__(self) -> pathlib.Path:
         self.tmp = tempfile.TemporaryDirectory()
         root = pathlib.Path(self.tmp.name)
         for path in [
-            "skills/alpha/scripts/alpha.py",
-            "skills/alpha/scripts/test_alpha.py",
-            "skills/alpha/scripts/test_hook.sh",
-            "skills/alpha/scripts/test_data.json",
-            "skills/beta/scripts/test_beta.py",
-            "skills/gamma/SKILL.md",
             "plugins/one/.claude-plugin/plugin.json",
             f"plugins/one/{skills_dev.LAID_TYPES}",
             "plugins/two/.claude-plugin/plugin.json",
@@ -93,11 +87,6 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(usage_error("build"), 2)
         self.assertEqual(usage_error("mods", "install"), 2)
 
-    def test_test_takes_any_number_of_skills(self) -> None:
-        self.assertEqual(parse("test").skills, [])
-        self.assertEqual(parse("test", "a", "b").skills, ["a", "b"])
-        self.assertIs(parse("test").func, skills_dev.cmd_test)
-
     def test_mods_check_takes_any_number_of_mods(self) -> None:
         self.assertEqual(parse("mods", "check").mods, [])
         self.assertEqual(parse("mods", "check", "one").mods, ["one"])
@@ -109,68 +98,10 @@ class ParserTest(unittest.TestCase):
         self.assertEqual((args.mod, args.claude_args), ("one", ["--model", "x"]))
 
     def test_help_lists_the_command_tokens_on_every_level(self) -> None:
-        top = help_text()
-        self.assertIn("test", top)
-        self.assertIn("mods", top)
+        self.assertIn("mods", help_text())
         self.assertIn("check", help_text("mods"))
         self.assertIn("try", help_text("mods"))
-        self.assertIn("SKILL", help_text("test"))
         self.assertIn("MOD", help_text("mods", "check"))
-
-
-class TestCommandTest(unittest.TestCase):
-    def test_python_tests_run_isolated_and_shell_tests_under_bash(self) -> None:
-        self.assertEqual(skills_dev.test_command(pathlib.Path("s/test_a.py")), ["python3", "-I", "s/test_a.py"])
-        self.assertEqual(skills_dev.test_command(pathlib.Path("s/test_b.sh")), ["bash", "s/test_b.sh"])
-
-    def test_other_files_are_not_tests(self) -> None:
-        for name in ["s/a.py", "s/test_data.json", "s/hook.sh"]:
-            self.assertIsNone(skills_dev.test_command(pathlib.Path(name)))
-
-
-class FindTestsTest(unittest.TestCase):
-    def test_every_skills_tests_in_order_when_none_is_named(self) -> None:
-        with Tree() as root:
-            found = [pathlib.Path(c[-1]).relative_to(root).as_posix() for c in skills_dev.find_tests(root, [])]
-        self.assertEqual(
-            found,
-            ["skills/alpha/scripts/test_alpha.py", "skills/alpha/scripts/test_hook.sh", "skills/beta/scripts/test_beta.py"],
-        )
-
-    def test_only_the_named_skills(self) -> None:
-        with Tree() as root:
-            found = [pathlib.Path(c[-1]).name for c in skills_dev.find_tests(root, ["beta"])]
-        self.assertEqual(found, ["test_beta.py"])
-
-
-class CmdTestTest(unittest.TestCase):
-    def test_runs_every_test_and_passes(self) -> None:
-        with Tree() as root:
-            runner = Recorder()
-            status, _ = quiet(skills_dev.cmd_test, parse("test"), root, runner)
-        self.assertEqual(status, 0)
-        self.assertEqual(len(runner.calls), 3)
-
-    def test_keeps_going_after_a_failure_then_names_it_and_fails(self) -> None:
-        with Tree() as root:
-            runner = Recorder(fail={"test_alpha.py"})
-            status, err = quiet(skills_dev.cmd_test, parse("test"), root, runner)
-        self.assertEqual(status, 1)
-        self.assertEqual(len(runner.calls), 3)
-        self.assertIn("FAILED skills/alpha/scripts/test_alpha.py", err)
-
-    def test_an_unknown_skill_fails_before_running_anything(self) -> None:
-        with Tree() as root:
-            runner = Recorder()
-            status, err = quiet(skills_dev.cmd_test, parse("test", "nope"), root, runner)
-        self.assertEqual((status, runner.calls), (1, []))
-        self.assertIn("no such skill: nope", err)
-
-    def test_a_skill_with_no_tests_fails(self) -> None:
-        with Tree() as root:
-            status, err = quiet(skills_dev.cmd_test, parse("test", "gamma"), root, Recorder())
-        self.assertEqual(status, 1)
-        self.assertIn("no script tests", err)
 
 
 class ResolveModsTest(unittest.TestCase):

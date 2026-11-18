@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Tests for session-build-limits.sh, against a temporary CLAUDE_ENV_FILE.
-# Run with `bash test_session_build_limits.sh`.
+# Run with `skills-dev test coding-agent-session-build-limits`, or
+# `bash test_session_build_limits.sh` from anywhere.
 
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-hook="$here/session-build-limits.sh"
+hook="$here/../../skills/coding-agent-session-build-limits/scripts/session-build-limits.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 passed=0

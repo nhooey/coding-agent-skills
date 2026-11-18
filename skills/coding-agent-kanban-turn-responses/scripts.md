@@ -2,7 +2,7 @@
 
 _What the scripts behind the [`coding-agent-kanban-turn-responses` skill](SKILL.md) read from the session's transcript, and the subcommands each takes._
 
-Both read `~/.claude/projects/<slug>/<session>.jsonl`, the session from `CLAUDE_CODE_SESSION_ID`, overridden by `--session ID`, or the file itself by `--transcript FILE`. Run them by their path in this skill's `scripts/` directory.
+Both read `~/.claude/projects/<slug>/<session>.jsonl`, the session from `CLAUDE_CODE_SESSION_ID`, overridden by `--session ID`, or the file itself by `--transcript FILE`. Run them by their path in this skill's `scripts/` directory. Their tests are in the coding-agent-skills repository, in `tests/coding-agent-kanban-turn-responses/`; `skills-dev test coding-agent-kanban-turn-responses` runs them in its dev shell, and `nix flake check` runs them too.
 
 ## What a turn is
 
@@ -22,7 +22,7 @@ The one reader of turns and their reply sections.
 
 The global `--human-only` flag counts a typed prompt alone as a turn, folding agent reports and task notifications into the turn under way.
 
-It runs from any directory: the transcript is looked up under the working directory's project first, then in whichever one project directory holds the session's `<session>.jsonl`. Its tests run with `python3 -I scripts/test_reply_turns.py`, and `nix flake check` runs them too.
+It runs from any directory: the transcript is looked up under the working directory's project first, then in whichever one project directory holds the session's `<session>.jsonl`.
 
 ## The `outstanding.py` script
 
@@ -53,7 +53,7 @@ It runs from any directory: the transcript is looked up under the working direct
 
 The key reads the summary alone, the bold text before its colon. Different items in one list that name the same branch or entry, or open on the same 3 words, merge in the draft, and the session splits them when it prunes.
 
-**What `decide` counts as open.** A numbered item of a reply's own Decide list that carries at least one option line, read since the latest `reassess` turn, at its latest restatement by subject key, and answered by no later prompt or by no message the user sent while a later turn ran. An answer, on a line holding no question mark, is an option letter after the item's reference, `9efb08a1.Decide.2.B` with or without a note after it, `…Decide.2.B: <note>`, a turn-id prefix of 6 or more characters as good as the whole, `Decide.2: B,C of 9efb08a1`, or, in the prompt right after the reply, `Decide.2.B` or a line `2. B`; or words after a colon, `9efb08a1.Decide.2: <words>`. Letters after a colon or a space count as letters only where they end the line or another reference follows, so `Decide.2: A red one` is an answer in words, not option A. Each JSON item holds `turn`, `list` (`Decide`), `number`, `summary`, `kind` (`radio`, `checkbox` or `binary`, from the option glyphs), `ref` (`<turn>.Decide.<n>`) and `options`, each `{letter, name}`. Its tests run with `python3 -I scripts/test_outstanding.py`, and `nix flake check` runs them too.
+**What `decide` counts as open.** A numbered item of a reply's own Decide list that carries at least one option line, read since the latest `reassess` turn, at its latest restatement by subject key, and answered by no later prompt or by no message the user sent while a later turn ran. An answer, on a line holding no question mark, is an option letter after the item's reference, `9efb08a1.Decide.2.B` with or without a note after it, `…Decide.2.B: <note>`, a turn-id prefix of 6 or more characters as good as the whole, `Decide.2: B,C of 9efb08a1`, or, in the prompt right after the reply, `Decide.2.B` or a line `2. B`; or words after a colon, `9efb08a1.Decide.2: <words>`. Letters after a colon or a space count as letters only where they end the line or another reference follows, so `Decide.2: A red one` is an answer in words, not option A. Each JSON item holds `turn`, `list` (`Decide`), `number`, `summary`, `kind` (`radio`, `checkbox` or `binary`, from the option glyphs), `ref` (`<turn>.Decide.<n>`) and `options`, each `{letter, name}`.
 
 ## The `lint_reply.py` script
 
@@ -79,7 +79,7 @@ python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_repl
 | `l`  | a table with no blank line above it, or a line directly under its last row, drawn as one more row                                |
 | `m`  | a list under a topic header that does not number on from where the same list ended in the topics before                          |
 
-A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them, and may start above 1 under a topic header. A blank line ends it; a header or a line of prose left of its items' text, written with no blank line before it, is a `j`. Its tests run with `python3 -I scripts/test_lint_reply.py`, and `nix flake check` runs them too.
+A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them, and may start above 1 under a topic header. A blank line ends it; a header or a line of prose left of its items' text, written with no blank line before it, is a `j`.
 
 ## The `reply_lint_hook.py` script
 
@@ -91,4 +91,4 @@ A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 rol
 | `block`      | `decision: "block"` with the findings as the `reason`, so the session writes the response again; when `stop_hook_active` is set, the turn ends as at `remind` |
 | `off`        | nothing                                                                                                                                                       |
 
-The setting is the last valid `Reply lint:` line in the user's preferences file, `~/.agents/skills/coding-agent-kanban-turn-responses.preferences.md`, then the project's, the same file under `.agents/skills/` in `CLAUDE_PROJECT_DIR` or the hook's `cwd`. A `block` reason or `systemMessage` reaches the session only through the hook's output: a Stop hook has no way to add text to the model's context without continuing the turn. Its tests run with `python3 -I scripts/test_reply_lint_hook.py`, and `nix flake check` runs them too.
+The setting is the last valid `Reply lint:` line in the user's preferences file, `~/.agents/skills/coding-agent-kanban-turn-responses.preferences.md`, then the project's, the same file under `.agents/skills/` in `CLAUDE_PROJECT_DIR` or the hook's `cwd`. A `block` reason or `systemMessage` reaches the session only through the hook's output: a Stop hook has no way to add text to the model's context without continuing the turn.

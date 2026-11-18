@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for plans-check-hook.sh and plans_check_hook.py: python3 -I test_plans_check_hook.py
+"""Tests for plans-check-hook.sh and plans_check_hook.py: skills-dev test coding-agent-plans-as-graph
 
 The end-to-end tests run the bash hook with real files, a temporary home and
 plugin data folder, and need `bash` on PATH.
@@ -10,15 +10,13 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import plans_check_hook as hook  # noqa: E402
+import plans_check_hook as hook
 
+HERE = Path(hook.__file__).resolve().parent
 HOOK = HERE / "plans-check-hook.sh"
 BASH = shutil.which("bash")
 

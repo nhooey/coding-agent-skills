@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for browser-check-hook.sh and browser_check_hook.py: python3 -I test_browser_check_hook.py
+"""Tests for browser-check-hook.sh and browser_check_hook.py: skills-dev test coding-agent-browser-selection
 
 The end-to-end tests run the bash hook with a temporary home, project and
 plugin data folder, and need `bash` on PATH.
@@ -12,16 +12,14 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import browser_check_hook as hook  # noqa: E402
+import browser_check_hook as hook
 
+HERE = Path(hook.__file__).resolve().parent
 HOOK = HERE / "browser-check-hook.sh"
 BASH = shutil.which("bash")
 NOW = 1_800_000_000.0
