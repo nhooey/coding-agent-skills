@@ -1,6 +1,6 @@
 # Kanban turn response examples
 
-_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decide list, two lists in one response, the full 📌 roll-up and the count line that stands in for it._
+_Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s shapes: a Decide list, two lists in one response, a `reassess` grouped by topic, the full 📌 roll-up and the count line that stands in for it._
 
 ## A Decide list
 
@@ -47,6 +47,66 @@ A list ends at a blank line. The blank line between the Done list's last separat
    It was issued before the leak, and rotating it frees the release.
 
 📌 Outstanding: 🧠 2
+```
+
+## A reassess grouped by topic
+
+A `reassess` with 7 open items in 2 topics of at least 3 items and 1 left over. Each topic header is underlined with `═`, its lists follow in the usual order under it, and each list numbers on from where the same list ended in the topics above: the second topic's Decide list starts at 3, so `Decide.3` names one item. The topic with the most to decide or do comes first, and `Miscellaneous` last.
+
+```text
+**The atomic-reload database swap**  
+═══════════════════════════════
+👉 **Todo:**  
+▔▔▔▔▔▔▔▔
+1. **Run the reload benchmark on the staging box**  
+   `make bench-reload` on `staging-2`; its timings settle Decide.1.
+
+🧠 **Decide:**  
+▔▔▔▔▔▔▔▔▔▔
+1. **Merge order for the 3 `atomic-reload` pull requests**  
+   🔘 A. **Schema, then loader, then the swap**: each lands on a working base.
+      ➕ Every merge leaves master releasable.
+      ➖ 3 review rounds instead of 1.
+   🔘 B. **All 3 in one merge**: one review of the whole swap.
+      ➕ One review round.
+      ➖ A bad merge reverts all 3.
+   ⠀
+2. **Keep the old loader behind a flag for one release?**  
+   👍 Y. **Keep `--legacy-loader` for one release**: a fallback while the swap beds in.
+      ➕ A bad swap is undone by a flag, not a revert.
+      ➖ 2 loaders to test until the flag goes.
+   👎 N. **Delete the old loader with the swap**: one code path.
+      ➕ Less code to test.
+      ➖ A bad swap means a revert and a release.
+
+**The 2026 backup plan**  
+════════════════════
+🔍 **Review:**  
+▔▔▔▔▔▔▔▔▔▔
+1. **#212 Nightly snapshot schedule**  
+   🔗 [nhooey/infra#212](url): check the 02:00 window against the batch jobs.
+
+👉 **Todo:**  
+▔▔▔▔▔▔▔▔
+2. **Rotate the `backup-bot` key in the cloud console**  
+   It was issued before the leak; rotating it frees the first snapshot.
+
+🧠 **Decide:**  
+▔▔▔▔▔▔▔▔▔▔
+3. **Snapshot retention for the nightly backups**  
+   🔘 A. **90 days**: a quarter of history.
+      ➕ Covers a quarterly audit.
+      ➖ About 3 times the storage of 30 days.
+   🔘 B. **30 days**: a month of history.
+      ➕ The cheapest that covers a month-end restore.
+      ➖ An audit past 30 days finds no snapshot.
+
+**Miscellaneous**  
+═════════════
+🔍 **Review:**  
+▔▔▔▔▔▔▔▔▔▔
+2. **The README's new install section**  
+   🔗 [README.md](url): check the 3 commands run as written.
 ```
 
 ## The full roll-up

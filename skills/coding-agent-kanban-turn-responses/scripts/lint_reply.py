@@ -17,7 +17,11 @@ break, 2 trailing spaces, with its sentence on the line beneath; without the bre
 together into one. An option's lines are plain lines of its item's paragraph, not a list, so a
 `-` or `1.` list among them starts a real list, and every line after it, the later options among
 them, joins its last entry and prints at its indent. A header's underline holds one character per
-column of the header as it renders, its emoji counting 2. A table indented under a list item is
+column of the header as it renders, its emoji counting 2: `▔` under a list's header, `━` under the
+📌 roll-up's and `═` under a topic header, which groups the lists of a `reassess` or `open` reply by
+topic. Under topic headers each list numbers on from where the same list ended in the topics before,
+so `Decide.4` still names one item; a list that starts again at 1 gives 2 items one reference. A
+table indented under a list item is
 never drawn: its rows print as raw pipe text. A line of text directly under a table's last row is
 read as one more row, and a table directly under a line of text can be read as part of it, so a
 table has a blank line above and below it.
@@ -37,6 +41,7 @@ message`, and exits 1 if there is any, else 0:
     [j] a header or line of prose directly under a list, with no blank line to end the list
     [k] a table inside a list item, indented to its text
     [l] a table with no blank line above it, or a line directly under its last row
+    [m] a list under a topic header that does not number on from the same list in the topics before
 
 A list is a run of items, `-`, `*`, `+`, `1.` or `1)`, at one indent: every list of the response,
 the 📌 roll-up's groups and an item's own numbered steps among them. An item is multi-line when
@@ -64,7 +69,9 @@ _SEP = re.compile(r"^( *)" + re.escape(SEPARATOR) + r" *$")
 _SPACES = re.compile(r"^[ \t" + NBSP + r"]+$")
 _ITEM = re.compile(r"^( *)([-*+]|\d{1,9}[.)])( +)(?=\S)")
 _SUMMARY = re.compile(r"\*\*.+?\*\*")
-_UNDERLINE = re.compile(r"^\s*[▔━]+\s*$")
+_UNDERLINE = re.compile(r"^\s*[▔━═]+\s*$")
+TOPIC_RULE = "═"  # U+2550, under a topic header; ▔ goes under a list's header and ━ under the 📌 roll-up's
+_LIST_NAME = re.compile(r"\*\*([^*]+?):\*\*")
 _FENCE = re.compile(r"^ *(```|~~~)")
 _OPTION = re.compile(r"^( *)(🔘|🔲|👍|👎) [A-Z]\. ")
 _ROW = re.compile(r"^ *\|")
@@ -108,6 +115,10 @@ def lint(text: str) -> list[tuple[int, str, str]]:
     options: int | None = None  # the indent of the open Decide item's option lines
     blank_under_sep: int | None = None  # a blank line under a separator, fine only if the list ends
     above = "blank"  # the line before, for tables: "blank" (or none), "row" or "text"
+    topics = 0  # topic headers seen so far
+    list_name: str | None = None  # the list under way, once a topic header has been seen
+    first_item = False  # whether the list under way has yet to reach its first numbered item
+    last_number: dict[str, int] = {}  # each list's last number, across the topics before
 
     def grow() -> None:
         for open_item in stack:
@@ -183,6 +194,10 @@ def lint(text: str) -> list[tuple[int, str, str]]:
             want, got = _width(header.rstrip()), len(line.strip())
             if header and got != want:
                 findings.append((number, "i", f"underline of {got}; the header above it is {want} columns wide"))
+            rule = line.strip()[0]
+            topics += rule == TOPIC_RULE
+            named = _LIST_NAME.search(header) if rule == "▔" and topics else None
+            list_name, first_item = (named.group(1), True) if named else (None, False)
             continue
         option = _OPTION.match(line)
         if option:
@@ -199,6 +214,15 @@ def lint(text: str) -> list[tuple[int, str, str]]:
                     options = None
             while stack and stack[-1].indent > indent:
                 stack.pop()
+            if list_name and item.group(2)[0].isdigit() and all(s.indent >= indent for s in stack):
+                count = int(item.group(2)[:-1])
+                want = last_number.get(list_name, 0) + 1
+                if first_item and list_name in last_number and count != want:
+                    findings.append(
+                        (number, "m", f"{list_name} numbers on across topics; this list starts at {want}, not {count}")
+                    )
+                first_item = False
+                last_number[list_name] = count
             new = Item(number, indent, indent + len(item.group(2)) + len(item.group(3)))
             summary = _SUMMARY.match(line, item.end()) if item.group(2)[0].isdigit() else None
             if summary and line[summary.end() :].strip():

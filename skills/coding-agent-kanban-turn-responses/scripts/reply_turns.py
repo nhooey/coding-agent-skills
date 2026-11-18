@@ -2,7 +2,7 @@
 """Find the turns of this session and pull their prompts and reply sections out of the transcript.
 
 Why it exists: a reply names the turn it answers by id, `Decide.2 of 0f311c94`, and
-the `open` and `recheck` commands read every earlier turn's Review, Todo and Decide sections; doing that with
+the `open` and `reassess` commands read every earlier turn's Review, Todo and Decide sections; doing that with
 ad-hoc grep and jq over the session's JSONL was slow and drifted. This script is the one reader.
 
 Takes: the session transcript, `~/.claude/projects/<slug>/<session>.jsonl`. The slug is the main
@@ -26,7 +26,8 @@ naming the candidates.
 A reply section opens on a line `<glyph> **<Name>:**`, Name one of Answers, Done, Pending, Logged,
 Waiting, Review, Todo or Decide, or an alias older replies use (Questions for Answers, Unfinished or Open for
 Pending, To review for Review, To do for Todo, Decisions or Blocked for Decide), matched by name and not glyph; a line of `▔` or `¯` under it belongs to the
-header. A section ends at the next header or at a line starting `Still open from earlier`.
+header. A section ends at the next header, at a line starting `Still open from earlier`, or at a topic
+header, the line above a line of `═` that groups the lists of a `reassess` or `open` reply by topic.
 
 Subcommands, each printing plain text:
   id                              the current turn's id, the last prompt's
@@ -58,6 +59,7 @@ SECTION_NAMES = (
 DECISIONS = ("Decide", "Decisions", "Blocked")
 _HEADER = re.compile(r"^\s*\S+\s+\*\*(" + "|".join(SECTION_NAMES) + r"):\*\*")
 _STOP = "Still open from earlier"
+TOPIC_RULE = "═"  # U+2550, one per column under a topic header
 _ALL_ORIGINS = frozenset({"human", "peer", "task_notification"})
 _HUMAN_ORIGINS = frozenset({"human"})
 _ID_LENGTH = 8
@@ -218,15 +220,21 @@ def current(turns: tuple[Turn, ...]) -> Turn:
 # --- sections of a reply -------------------------------------------------------------------
 
 
-def _fold(state: tuple[str | None, tuple[tuple[str, tuple[str, ...]], ...]], line: str):
+def is_topic_rule(line: str) -> bool:
+    """A topic header's underline: a line of `═` alone."""
+    return bool(line.strip()) and set(line.strip()) == {TOPIC_RULE}
+
+
+def _fold(state: tuple[str | None, tuple[tuple[str, tuple[str, ...]], ...]], pair: tuple[str, str]):
     open_name, done = state
+    line, following = pair
     header = _HEADER.match(line)
     return (
         (header.group(1), (*done, (header.group(1), (line,))))
         if header
         else (
             (None, done)
-            if line.startswith(_STOP)
+            if line.startswith(_STOP) or is_topic_rule(line) or is_topic_rule(following)
             else (
                 (open_name, (*done[:-1], (done[-1][0], (*done[-1][1], line))))
                 if open_name is not None
@@ -238,7 +246,8 @@ def _fold(state: tuple[str | None, tuple[tuple[str, tuple[str, ...]], ...]], lin
 
 def sections(text: str) -> tuple[tuple[str, str], ...]:
     """Each (name, text) section of one reply text, in order, trailing blank lines trimmed."""
-    _, found = reduce(_fold, text.splitlines(), (None, ()))
+    lines = text.splitlines()
+    _, found = reduce(_fold, zip(lines, (*lines[1:], "")), (None, ()))
     return tuple((name, "\n".join(lines).rstrip()) for name, lines in found)
 
 
