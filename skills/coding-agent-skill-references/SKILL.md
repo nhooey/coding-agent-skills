@@ -1,6 +1,6 @@
 ---
 name: coding-agent-skill-references
-description: Refer to another skill by its bare name, never a URL, owner or path, and list every skill a SKILL.md names in a closing Related skills section with its fixed intro; load a listed skill that applies without asking, and ask before installing a missing one. Keep a user's personal choices in a preferences file beside the installed skill, the project's overriding the user's, read by a "Your preferences" section copied from the bundled template. Relationships go in the body, not in custom frontmatter, and a skill states its rules as they stand, with their history in commit messages. Use when writing or editing a SKILL.md that names another skill or reads a preferences file, when loading a skill whose Related skills section lists others, and when deciding whether a lesson about a skill belongs in the skill or in its preferences file.
+description: Refer to another skill by its bare name, never a URL, owner or path, and list every skill a SKILL.md names in a closing Related skills section with its fixed intro; load a listed skill that applies without asking, and ask before installing a missing one. Keep a user's personal choices in a preferences file beside the installed skill, the project's overriding the user's, read by a "Your preferences" section copied from the bundled template. Relationships go in the body, not in custom frontmatter, and a skill states its rules as they stand, with their history in commit messages. A skill's Python scripts use only the standard library; its tests live in `tests/<skill>/`, run through Nix by each language's own tool. Use when writing or editing a SKILL.md that names another skill or reads a preferences file, when adding scripts or tests to a skill, when loading a skill whose Related skills section lists others, and when deciding whether a lesson about a skill belongs in the skill or in its preferences file.
 tags: [skills, authoring]
 ---
 
@@ -80,12 +80,22 @@ When the user corrects how a skill works:
 
 `coding-agent-route-feedback-to-skills-over-memory` covers the routing in full: when a lesson goes into a skill rather than memory, and how to propose the edit.
 
+## Scripts and tests
+
+A skill that bundles scripts keeps what it runs apart from what tests it:
+
+- **Scripts the skill runs:** a script under its `scripts/` written in Python imports only the standard library, so it runs wherever the skill is installed, with nothing to build. The rule covers Python only: a skill written in another language, such as shell or Clojure through babashka, keeps that language, and nothing is rewritten into Python.
+- **Tests:** each language keeps its own test tool: pytest for Python, bats for shell, `clojure.test` through babashka for Clojure. Only maintainers run them, so they may use a library where it replaces hand-written code, such as PyYAML's `yaml.safe_load` in place of a hand-written frontmatter parser, or `pytest.mark.parametrize` in place of repeated test classes. Nix provides the tools and libraries.
+- **Where tests live:** in the repository's `tests/<skill>/`, outside the skill folder, so an installed skill ships only what it runs: SKILL.md, its docs and `scripts/`. A check that applies to every skill is one repository-level test over all skills, not a copy in each.
+- **How they run:** Nix runs them all, with no gatherer. `nix flake check` has one check per language, or per skill, each running that language's tool on its tests. A dev shell command runs the same set, with an optional skill or language filter, by invoking Nix or each tool directly. The repository writes no program of its own that discovers or runs tests, so there is no runner to test.
+
 ## When to apply
 
 - Writing or editing a SKILL.md that names another skill, or that should read a preferences file.
 - Loading a skill whose Related skills section lists others.
 - Deciding where a correction about a skill belongs: the skill, or its preferences file.
 - Writing a lesson into a skill: the rule goes in, its history goes in the commit message.
+- Adding a script or a test to a skill: a Python script uses the standard library only, and the test goes in the repository's `tests/<skill>/`, run by its language's own tool through Nix.
 
 ## Related skills
 
