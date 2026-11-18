@@ -234,14 +234,16 @@
           checks.python-tests = testCheck "python";
           checks.shell-tests = testCheck "shell";
 
-          # The review queue's ordering, chunking and input checks, with no gh:
-          # `bb test` in the skill's tests, on its scripts.
+          # The review queue's ordering, chunking, input checks and edges, with
+          # no gh or browser: `bb test` in the skill's tests, on its scripts and
+          # its SKILL.md.
           checks.review-queue-in-browser =
             pkgs.runCommand "review-queue-in-browser-tests" { nativeBuildInputs = [ pkgs.babashka ]; }
               "cd ${
                 lib.fileset.toSource {
                   root = ./.;
                   fileset = lib.fileset.unions [
+                    ./skills/coding-agent-review-queue-in-browser/SKILL.md
                     ./skills/coding-agent-review-queue-in-browser/scripts
                     ./tests/coding-agent-review-queue-in-browser
                   ];

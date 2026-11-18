@@ -1,13 +1,11 @@
 (ns review-queue.main
   "Reads the review queue, fetches each GitHub item's state and stacks with
   `gh`, and prints the chunks and the finished items, in the queue's
-  format. With `--announce`, it first tells the user what the reconcile
-  will do and waits 1 second. Given the tab group's tabs, it adds the
-  `:tab-actions` that bring the group to its end state, with
-  `--apply-window` parks the window on a new tab and re-points tabs in the
-  background, and with `--notify` sends the notification. With
-  `--focus-window`, it only makes the focus tab its window's active tab
-  and closes the `--unpark` tab, never raising the window or the app."
+  format. It then sets the named Google Chrome tab group to the current
+  chunk's URLs through `declarative-tab-groups`, which never focuses a
+  window or a review tab. With `--announce`, it first tells the user what
+  will load and waits 1 second, and with `--notify` it tells the user once
+  the group is set."
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [babashka.process :as p]
@@ -23,21 +21,20 @@
    :format {:coerce :keyword :desc "edn or json; default from the file's extension, else edn"}
    :no-fetch {:coerce :boolean :desc "Don't ask gh for states and stacks"}
    :chunk-mode {:coerce :keyword :default :current-only :desc "current-only or all-open"}
-   :app {:default "Google Chrome" :desc "The browser app"}
+   :group {:default "Review" :desc "The title of the tab group the review items open in"}
    :sound {:default "/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/EncoreInfinitum/Handoff-EncoreInfinitum.caf"
            :desc "The sound the Review ready notification plays"}
    :announce-sound {:default "/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/EncoreInfinitum/Slide-EncoreInfinitum.caf"
-                    :desc "The sound the notice before a reconcile plays"}
-   :announce {:coerce :boolean :desc "Before a reconcile: show the steps it will take, play --announce-sound, wait 1 s"}
-   :launch {:coerce :boolean :desc "With --announce, the browser check will launch --app"}
-   :open-window {:coerce :boolean :desc "With --announce, the browser check will open a new window"}
-   :tabs {:desc "The tab group's tabs, in its order, as a JSON list of {tabId, url, untouchable}"}
-   :notify {:coerce :boolean :desc "With --tabs, play --sound and show the :notification, if any"}
-   :apply-window {:coerce :long :desc "With --tabs, park on a new tab and re-point tabs in the background in this window id, from the browser check"}
-   :focus-window {:coerce :long :desc "Only make --focus-url's tab active in this window id, from the browser check, and close --unpark's tab"}
-   :focus-url {:desc "With --focus-window, the URL of the tab to make active"}
-   :unpark {:coerce :long :desc "With --focus-window, the parking tab's id, :parked in --apply-window's :tab-actions"}
+                    :desc "The sound the notice before the group is set plays"}
+   :announce {:coerce :boolean :desc "Before setting the group: say what will load, play --announce-sound, wait 1 s"}
+   :notify {:coerce :boolean :desc "Once the group is set: play --sound and show the Review ready notification"}
    :help {:coerce :boolean :alias :h}})
+
+(def ^:private command "declarative-tab-groups")
+
+(def ^:private install
+  (str "Install it, with its Google Chrome extension, as the README of "
+       "https://github.com/nhooey/chrome-extension-declarative-tab-groups says."))
 
 (defn- gh-state [{:keys [type url]}]
   (let [{:keys [exit out err]} (p/shell {:out :string :err :string :continue true}
@@ -68,48 +65,76 @@
    :which #(some? (fs/which %))
    :sleep #(Thread/sleep (long %))})
 
+(defn- applescript-string [s]
+  (str "\"" (-> s (str/replace "\\" "\\\\") (str/replace "\"" "\\\"")) "\""))
+
 (defn notify!
   "Plays `sound` while showing `note`, through terminal-notifier in the
   note's group, else osascript. Through terminal-notifier, it then checks
   with `-list` that the notification was delivered. `env` holds `:run`,
-  which runs a command vector and returns its `:out`, `:spawn`, which
-  starts one without waiting, and `:which`."
+  which runs a command vector and returns its `:exit`, `:out` and `:err`,
+  `:spawn`, which starts one without waiting, `:which` and `:sleep`."
   [{:keys [title message url] group-id :group} sound {:keys [run spawn which]}]
   (spawn ["afplay" sound])
   (if (which "terminal-notifier")
     (do (run (cond-> ["terminal-notifier" "-title" title "-message" message "-group" group-id]
                url (into ["-open" url])))
         {:delivered (group/delivered? group-id (:out (run ["terminal-notifier" "-list" group-id])))})
-    (do (run ["osascript" "-e" (str "display notification " (group/applescript-string message)
-                                    " with title " (group/applescript-string title))])
+    (do (run ["osascript" "-e" (str "display notification " (applescript-string message)
+                                    " with title " (applescript-string title))])
         {})))
 
 (defn announce!
-  "Shows `note`, the steps a reconcile will take, with `sound`, then waits
-  1 second so the user is ready before anything moves."
+  "Shows `note`, what is about to load, with `sound`, then waits 1 second
+  so the user is ready before anything moves."
   [note sound {:keys [sleep] :as env}]
   (let [result (notify! note sound env)]
     (sleep 1000)
     result))
 
-(defn apply!
-  "Starts the update in `app`'s window `window-id` through AppleScript:
-  parks the window on a new tab, with `:park`, then re-points the
-  `actions`' tabs in the background. Returns whether it ran anything, and
-  the parking tab's id as `:parked`."
-  [app window-id actions {:keys [run]}]
-  (if-let [script (group/background-script app window-id actions)]
-    (let [{:keys [out]} (run ["osascript" "-e" script])]
-      (cond-> {:applied true}
-        (:park actions) (assoc :parked (some-> out str/trim parse-long))))
-    {:applied false}))
+(defn response
+  "What a run of `declarative-tab-groups set --json` means, from its
+  `:exit`, `:out` and `:err`: `:tab-group`, the success response, whose
+  `:kept` tabs stay open for their unsubmitted forms, or a `:failure`
+  message."
+  [{:keys [exit out err]}]
+  (let [answer (try (json/parse-string out true) (catch Exception _ nil))
+        {:keys [code message]} (when (map? answer) (:error answer))
+        said (if code (str code ": " message) (str/trim (str err)))]
+    (cond
+      (= exit 4) {:failure (str command " can't reach Google Chrome's extension (" said
+                                "); start Google Chrome with the extension. " install)}
+      (= exit 2) {:failure (str command " refused its arguments: " said)}
+      (not (map? answer)) {:failure (str command " exited " exit " without a JSON response: "
+                                         (str/trim (str out)))}
+      (and (#{0 3} exit) (true? (:ok answer))) {:tab-group (dissoc answer :protocol :ok :command)}
+      :else {:failure (str command " failed: " said)})))
 
-(defn focus!
-  "Lands the update: makes the tab showing `url` the active tab of `app`'s
-  window `window-id`, then closes the `parked` tab, if any, without raising
-  the window or the app."
-  [app window-id url parked {:keys [run]}]
-  (run ["osascript" "-e" (group/focus-script app window-id url parked)]))
+(defn set-group!
+  "Makes the tab group titled `title` hold exactly `urls`, in order, each
+  loaded afresh, through declarative-tab-groups, and returns its
+  `response`. The URLs follow `--`, so none is taken for an option."
+  [title urls {:keys [run]}]
+  (response (run (into [command "set" "--group" title "--json" "--"] urls))))
+
+(defn reconcile!
+  "Sets the group titled `(:group opts)` to the URLs of `items`: with
+  `:announce`, says first what will load, and with `:notify`, tells the
+  user once it is set. Returns `:tab-group` or `:failure`, with the
+  `:announcement` and `:notification` sent. A missing command is a
+  failure, before anything is announced."
+  [opts items {:keys [which] :as env}]
+  (if-not (which command)
+    {:failure (str command " isn't on the PATH. " install)}
+    (let [urls (group/urls items)
+          note (when (:announce opts) (group/announcement (:group opts) urls))
+          announced (when note (merge note (announce! note (:announce-sound opts) env)))
+          result (set-group! (:group opts) urls env)
+          ready (when (and (:notify opts) (:tab-group result)) (group/notification items))
+          told (when ready (merge ready (notify! ready (:sound opts) env)))]
+      (cond-> result
+        announced (assoc :announcement announced)
+        told (assoc :notification told)))))
 
 (defn- parse [format text]
   (if (= format :json) (json/parse-string text true) (edn/read-string text)))
@@ -119,9 +144,12 @@
     (println (json/generate-string data {:pretty true}))
     (pprint/pprint data)))
 
+(defn- warn [message]
+  (binding [*out* *err*] (println (str "review-queue: " message))))
+
 (defn- warn-undelivered [what {:keys [delivered]}]
   (when (false? delivered)
-    (binding [*out* *err*] (println (str "review-queue: the " what " notification wasn't delivered")))))
+    (warn (str "the " what " notification wasn't delivered"))))
 
 (defn- review [opts file]
   (let [format (or (:format opts) (if (some-> file (str/ends-with? ".json")) :json :edn))
@@ -135,21 +163,14 @@
                               items
                               (core/with-stacks (vec (pmap with-state items))
                                 (vec (mapcat open-prs (core/pr-repos items))))))
-            tabs (some-> (:tabs opts) (json/parse-string true))
-            actions (group/for-plan plan (:chunk-mode opts) (or tabs []))
-            note (when (:announce opts) (group/announcement (:app opts) opts actions))
-            announced (when note (merge note (announce! note (:announce-sound opts) system)))
-            actions (when tabs
-                      (cond-> actions
-                        (:apply-window opts)
-                        (merge (apply! (:app opts) (:apply-window opts) actions system))))
-            told (when (and (:notify opts) (:notification actions))
-                   (merge (:notification actions) (notify! (:notification actions) (:sound opts) system)))]
-        (warn-undelivered "announcement" announced)
-        (warn-undelivered "Review ready" told)
-        (render format (cond-> plan
-                         announced (assoc :announcement announced)
-                         actions (assoc :tab-actions (cond-> actions told (assoc :notification told)))))))))
+            result (reconcile! opts (group/group-items plan (:chunk-mode opts)) system)]
+        (warn-undelivered "announcement" (:announcement result))
+        (warn-undelivered "Review ready" (:notification result))
+        (doseq [{:keys [url title]} (get-in result [:tab-group :kept])]
+          (warn (str "left open for its unsubmitted form: " title " " url)))
+        (some-> (:failure result) warn)
+        (render format (merge plan result))
+        (when (:failure result) (System/exit 1))))))
 
 (defn options
   "The options `args` give, with each one's default."
@@ -158,12 +179,8 @@
 
 (defn -main [& args]
   (let [{:keys [opts args]} (cli/parse-args args {:spec spec})]
-    (cond
-      (:help opts)
+    (if (:help opts)
       (println (str "Usage: review-queue [options] [QUEUE-FILE]\n"
                     "Reads the queue from QUEUE-FILE, or stdin.\n\n"
                     (cli/format-opts {:spec spec})))
-      (:focus-window opts)
-      (focus! (:app opts) (:focus-window opts) (:focus-url opts) (:unpark opts) system)
-      :else
       (review opts (first args)))))
