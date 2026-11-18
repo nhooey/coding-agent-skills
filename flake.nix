@@ -249,8 +249,7 @@
           apps = base.apps.${system};
 
           # Every test: pytest over the Python tests under tests/ and scripts/,
-          # the layout test and the dev tools' own tests among them, and bash
-          # over each shell test.
+          # the dev tools' own tests among them, and bash over each shell test.
           checks.python-tests = testCheck "python";
           checks.shell-tests = testCheck "shell";
 

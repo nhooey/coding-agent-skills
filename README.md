@@ -117,7 +117,7 @@ The dev shell's own toolchain skills (the git, shell and Python packs, a few cod
 
 ```
 skills/                  one directory per skill (SKILL.md + per-skill flake.nix)
-tests/                   each skill's tests in tests/<skill>/, and the layout test
+tests/                   each skill's tests in tests/<skill>/
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
 scripts/                 `skills-dev mods` and its tests
 plugins/                 Claude Code mods, checked by `skills-dev mods check`

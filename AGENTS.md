@@ -30,7 +30,8 @@ language's run by its own tool. A Python test imports a script by its module
 name, since `tests/conftest.py` puts the skill's `scripts/` on `sys.path`, and
 finds the files beside it through that module's `__file__`. The skills' Python
 scripts use only the standard library; the tests may use the libraries the dev
-shell's Python has. `tests/test_layout.py` checks both rules.
+shell's Python has. agent-skill-flake's `skill-layout` check enforces both
+rules, and that no two skills' scripts share a module name.
 
 Run `nix fmt` and `nix flake check` before committing: no CI runs them on push,
 so a formatting slip or a failing test is otherwise caught by nothing.
