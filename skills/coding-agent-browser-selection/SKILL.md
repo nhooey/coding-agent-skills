@@ -43,19 +43,20 @@ Do this before the first browser action of a session, and again after any `selec
    - or no app is set never to use.
 
    Of several safe browsers, take the `Preferred device id`, else the one `inUse`. Select it with `select_browser` if it isn't the one `inUse`, and go to step 3. When none is safe, or a `Preferred device id` is set but not listed, wake the preferred app:
-   1. Run the bundled script's `wake`:
+   1. Wake nothing, and go to step 2.4, when no `Preferred app` is set, when `Wake` is `off`, or when the `Preferred app` is an app never to use. The script reads no preferences file, so it refuses only the apps passed to it as `--never-use`. Run `which_browser.py resolve --app '<Preferred app>'`, which prints the app's name, bundle id and path, tab-separated, and compare each `Never use` entry with all three, ignoring case; for an entry that is a path, also compare the bundle id `resolve --app '<entry>'` prints. A match on any of them is an app never to use.
+
+      Otherwise run the bundled script's `wake`, passing the `Preferred app` as `--app`, the `Wake` setting, in lower case, as `--mode`, which defaults to `window`, and every `Never use` entry, without its Markdown formatting, as a `--never-use` of its own:
 
       ```bash
-      python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" wake
+      python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" wake --app '<Preferred app>' --mode '<Wake>' \
+        --never-use '<Never use entry>' --never-use '<another entry>'
       ```
 
-      It reads the same preferences files as this skill, the user's beside the skill's folder and then the project's under `$CLAUDE_PROJECT_DIR`, or the current directory, the project's keys winning; `--skill-dir` and `--project-dir` point it elsewhere. It wakes the `Preferred app` under the `Wake` setting, and `--app` and `--mode` override them. It refuses, with exit 2 and before asking any app anything, an app under `Never use`, matched by name, path or bundle id.
+      It refuses, with exit 2 and before asking any app anything, an app that matches a `--never-use` entry, ignoring case and a `.app` suffix, by its name, bundle id, path or bundle file name, or by the bundle id at an entry's path. It warns about, and ignores, an entry that names none of the browsers it reads. If the app is running with no window, it opens one through AppleScript. Under `launch`, it first launches the app in the background if it isn't running; under `window`, it never does. It acts on that app alone. It prints the app, the window's id and what it did, `opened`, `launched` or `already-open`, tab-separated, and exits 1, saying why, when it can't, or 2 on bad usage, such as a missing `--app`, or on an app under `--never-use`. After `opened` or `launched` it waits 15 seconds before it returns, for the extension to connect; `--settle` changes the wait.
 
-      If the app is running with no window, it opens one through AppleScript. Under `launch`, it first launches the app in the background if it isn't running; under `window`, it never does. It acts on that app alone. It prints the app, the window's id and what it did, `opened`, `launched` or `already-open`, tab-separated, and exits 1, saying why, when it can't, or 2 with no app to wake. After `opened` or `launched` it waits 15 seconds before it returns, for the extension to connect; `--settle` changes the wait. With no preferred app set, or `Wake: off`, go to step 2.4.
-
-   2. Only when it printed `opened` or `launched`, call `list_connected_browsers` again. On exit 1 or `already-open`, wake changed nothing, so go to step 2.4.
+   2. Only when it printed `opened` or `launched`, call `list_connected_browsers` again. On exit 1 or 2, or `already-open`, wake changed nothing, so go to step 2.4, and on exit 2 tell the user what the script said.
    3. If exactly one browser is listed that wasn't before, select it with `select_browser`, and go to step 3 to check it with a marker. If none or several are new, go to step 2.4.
-   4. Stop. Tell the user which browsers are connected and what wake printed, and ask whether to check each browser with a marker anyway, which may make a tab in an app never to use, or to wait while they open a window in the preferred app. Suggest saving a `Preferred device id` once a check has found the preferred app, so the next session selects it directly. Never make a tab to find out.
+   4. Stop. Tell the user which browsers are connected and what wake printed, and ask whether to check each browser with a marker anyway, which may make a tab in an app never to use, or to wait while they open a window in the preferred app. When the `Preferred app` is itself an app never to use, say instead that the two preferences contradict each other, and ask which to change. Suggest saving a `Preferred device id` once a check has found the preferred app, so the next session selects it directly. Never make a tab to find out.
 
 3. Call `tabs_context_mcp` with `createIfEmpty` true, to get this session's tab and its URL.
 4. Navigate that tab to its current URL plus a unique fragment, such as `#which-browser-3f9a1c`. Use a fresh random hex value each time, so an old tab can't match.
@@ -112,7 +113,7 @@ The preferences file holds up to 6 keys, as a Markdown list:
 - **Preferred app:** the app's name, such as `Google Chrome`, or the path to its bundle, such as `/Applications/Google Chrome.app` or a Home Manager or Nix store `.app`. The script finds a name with Spotlight, as `<name>.app`, and reads the bundle id from the app's `Info.plist`; it stops when a name matches no app or several, and then the path is what to set. `which_browser.py resolve --app '<name or path>'` shows what it resolves to.
 - **Preferred window:** the window's given name, such as `Claude in Chrome`. Match it exactly.
 - **Preferred device id:** the `deviceId` that `list_connected_browsers` gives the preferred app, so step 2 selects it directly. It has been seen to survive the extension disconnecting and reconnecting, but may change when the extension or the browser is reinstalled. A stale one is never listed, so step 2 wakes the app; when the marker check then finds the preferred app behind a new `deviceId`, tell the user the saved one is stale and offer the new one.
-- **Never use:** apps not to act in, by the name the script prints, such as `Brave Browser`. One per nested bullet.
+- **Never use:** apps not to act in, by the name the script prints, such as `Brave Browser`, or by bundle id or path. One per nested bullet. Unlike every other key, a project's file doesn't override the user's here: the entries of both files together are the apps never to use, so a project can't drop an app the user never wants touched.
 - **Wake:** what wake may do to the preferred app, `window`, `launch` or `off`; **`window` is the default**:
   - **`window`:** open a window in the app when it is running with none. Never launch it.
   - **`launch`:** also launch the app, in the background, when it isn't running.
