@@ -129,6 +129,18 @@ The ETA's `at` is the transcript entry's timestamp; where the transcript can't b
 
 Report each checkout's outcome to the user by its name, with the branch of any worktree that holds changes. A run's own work, such as a pull request it opened, is in its result text and log.
 
+### A job's figures
+
+How many of a job's runs ended `ok`, `failed`, `limit` or `skipped` comes from the job's outcome files, counted by the jq program `scripts/job_summary.jq` beside the runner:
+
+```bash
+folder="${XDG_STATE_HOME:-$HOME/.local/state}/coding-agent-headless/<job>"
+find "$folder" -maxdepth 1 -name '*.outcome.json' -exec cat {} + |
+  jq --slurp --raw-input --arg job <job> --arg folder "$folder" --from-file scripts/job_summary.jq
+```
+
+It prints one JSON object with the job, the folder, the number of runs and the count in each state, every state listed even at zero; add `--raw-output --arg format table` for a table. For a job run with `--log-dir`, set `folder` to that folder. Run it when writing the report, and name it beside the figures it gave. A run still going has no outcome file yet, so it is in none of the counts; an outcome file without a status counts as `unreadable`. A job with no outcome files prints zero counts, and jq exits 0.
+
 ## Limits and billing
 
 - **Subscription, not the API:** `claude -p` bills `ANTHROPIC_API_KEY` whenever it is set, so the script refuses to start while it is, unless given `--allow-api-key`. `claude auth status` shows the login in use.
@@ -196,5 +208,6 @@ When one of these applies and it's in your skill listing, load it without asking
 If it isn't in your listing, tell the user which skill is missing and ask whether to install it from the same collection this skill came from; don't apply it from memory.
 
 - `coding-agent-usage-line-report-eta`: report a running ETA while a run or a fan-out goes, since either takes minutes to an hour.
+- `coding-agent-kanban-turn-responses`: where a figure in a status item comes from, and how one that can't be queried is given.
 - `shell-hygiene-delete-named-paths`: remove each finished worktree by its own path, never by glob.
 - `git-workflow-tidy-branches`: delete the `headless/<job>` branches once their work is merged or dropped.

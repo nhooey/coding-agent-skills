@@ -106,17 +106,19 @@
           testPython = pkgs.python3.withPackages (ps: [ ps.pytest ]);
 
           # `skill-tests [python | shell | SKILL ...]`: each language's tests
-          # with its own tool, pytest for test_*.py and bash for each test_*.sh,
-          # under tests/ and scripts/; or only one language's; or only the
-          # named skills' under tests/. A selection that runs no test fails.
-          # `skills-dev test` and the python-tests and shell-tests checks all
-          # run it.
+          # with its own tool, pytest for test_*.py, bash for each test_*.sh and
+          # bats for *.bats, the shell language's, under tests/ and scripts/;
+          # or only one language's; or only the named skills' under tests/. A
+          # selection that runs no test fails. `skills-dev test` and the
+          # python-tests and shell-tests checks all run it.
           skillTests = pkgs.writeShellApplication {
             name = "skill-tests";
             runtimeInputs = [
               testPython
               pkgs.bash
+              pkgs.bats
               pkgs.git
+              pkgs.jq
             ];
             text = ''
               cd "''${PRJ_ROOT:-$PWD}"
@@ -140,13 +142,15 @@
               fi
               python_tests=()
               shell_tests=()
+              bats_tests=()
               if [ "$language" != shell ]; then
                 mapfile -t python_tests < <(find "''${folders[@]}" -name 'test_*.py' | sort)
               fi
               if [ "$language" != python ]; then
                 mapfile -t shell_tests < <(find "''${folders[@]}" -name 'test_*.sh' | sort)
+                mapfile -t bats_tests < <(find "''${folders[@]}" -name '*.bats' | sort)
               fi
-              if [ $((''${#python_tests[@]} + ''${#shell_tests[@]})) -eq 0 ]; then
+              if [ $((''${#python_tests[@]} + ''${#shell_tests[@]} + ''${#bats_tests[@]})) -eq 0 ]; then
                 echo "skill-tests: no ''${language:+$language }tests in ''${folders[*]}" >&2
                 exit 1
               fi
@@ -158,6 +162,9 @@
                 echo "==== $test"
                 bash "$test" </dev/null || status=1
               done
+              if [ ''${#bats_tests[@]} -gt 0 ]; then
+                bats "''${bats_tests[@]}" </dev/null || status=1
+              fi
               exit "$status"
             '';
           };
@@ -265,10 +272,12 @@
             # prettier trims trailing spaces even inside fenced code blocks,
             # and the kanban skill's examples need them: each list header there
             # ends in 2 spaces, the hard break the skill itself requires. Its
-            # README's example has the same headers.
+            # README's example has the same headers. The headless runner's
+            # unreadable outcome fixture is not JSON on purpose.
             settings.formatter.prettier.excludes = [
               "skills/coding-agent-kanban-turn-responses/examples.md"
               "skills/coding-agent-kanban-turn-responses/README.md"
+              "tests/coding-agent-headless-in-checkout/fixtures/night/eps.outcome.json"
             ];
           };
 
