@@ -23,6 +23,7 @@ in agent-output-skills.
 | [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)                                             | Keeps plans as a graph of Markdown nodes in `agents/plans/open/` and `closed/`, with states, typed links and a generated overview of what's in progress, ready, blocked and proposed.                                                                         |
 | [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Pending/Waiting/Answers/Review/Todo/Decide lists closing on what earlier turns left open.                                             |
 | [`coding-agent-questions-as-first-class-prompts`](skills/coding-agent-questions-as-first-class-prompts/SKILL.md)         | Routes any question for the user through the agent's structured-question primitive (e.g. `AskUserQuestion`) instead of free-text prose that waits for a reply.                                                                                                |
+| [`coding-agent-review-queue-in-browser`](skills/coding-agent-review-queue-in-browser/SKILL.md)                           | Walks the user through what waits on them one chunk of browser tabs at a time, bringing the tab group to one end state after every change, with a bundled program that orders and chunks the queue and works out the tab actions.                             |
 | [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson into the right existing skill with draft wording, falling back to memory only if no skill fits.                                                                                                |
 | [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools, one-off checks inline and only named data in the scratchpad; anything run twice goes to `shell-hygiene-commands-as-cli-tools`.                                                                                       |
 | [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)                                 | A SessionStart hook that gives every Claude Code session a fixed share of the machine for make, cargo, Rust tests, pytest-xdist and the JVM, leaving variables the user already set alone.                                                                    |
@@ -58,6 +59,7 @@ Package outputs:
 - `agent-skill-nhooey-coding-agent-plans-as-graph`
 - `agent-skill-nhooey-coding-agent-kanban-turn-responses`
 - `agent-skill-nhooey-coding-agent-questions-as-first-class-prompts`
+- `agent-skill-nhooey-coding-agent-review-queue-in-browser`
 - `agent-skill-nhooey-coding-agent-route-feedback-to-skills-over-memory`
 - `agent-skill-nhooey-coding-agent-scratchpad-scripts`
 - `agent-skill-nhooey-coding-agent-session-build-limits`

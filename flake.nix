@@ -234,6 +234,20 @@
           checks.python-tests = testCheck "python";
           checks.shell-tests = testCheck "shell";
 
+          # The review queue's ordering, chunking and input checks, with no gh:
+          # `bb test` in the skill's tests, on its scripts.
+          checks.review-queue-in-browser =
+            pkgs.runCommand "review-queue-in-browser-tests" { nativeBuildInputs = [ pkgs.babashka ]; }
+              "cd ${
+                lib.fileset.toSource {
+                  root = ./.;
+                  fileset = lib.fileset.unions [
+                    ./skills/coding-agent-review-queue-in-browser/scripts
+                    ./tests/coding-agent-review-queue-in-browser
+                  ];
+                }
+              }/tests/coding-agent-review-queue-in-browser && bb test && touch $out";
+
           # `nix fmt` runs nixfmt over `.nix` and prettier over `.md` / `.yaml`;
           # the module also surfaces a `checks.${system}.treefmt` so `nix flake
           # check` fails on any unformatted file. prettier's includes are pinned
