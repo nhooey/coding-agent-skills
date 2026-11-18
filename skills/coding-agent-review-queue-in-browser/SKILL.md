@@ -155,7 +155,7 @@ A tab whose item didn't change already shows its latest version, so only a chang
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-review-queue-in-browser.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-review-queue-in-browser.preferences.md" 2>/dev/null || true`
+!`cat "$(dirname "${CLAUDE_SKILL_DIR}")/coding-agent-review-queue-in-browser.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-review-queue-in-browser.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-review-queue-in-browser.preferences.md` next to this skill's folder, then

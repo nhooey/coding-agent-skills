@@ -65,7 +65,7 @@ A project's file overrides the user's, and the user's overrides the skill's defa
 
 A skill that supports preferences carries this section, just before Related skills. Copy it from [preferences-section.md](preferences-section.md), beside this skill, with the skill's own name in place of `<skill-name>`; read that file rather than copying the section from a loaded skill, where the command line has already been expanded.
 
-The section opens on a line holding an exclamation mark and a `cat` of the two files in a code span, using `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PROJECT_DIR}`. Claude Code runs that line when it loads the skill, even inside a code fence, and puts the files' contents in its place, the user's first and the project's after it, so the later one wins where they differ. Another agent sees the line as text, and the paragraph under it tells it to read the same files itself.
+The section opens on a line holding an exclamation mark and a `cat` of the two files in a code span, using `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PROJECT_DIR}`. It names the folder beside the skill with `dirname` of the skill's folder, never by appending `/..` to it: an installed skill folder is often a symlink into the Nix store, and `..` through it leads into the store, not to the user's file beside the link. Claude Code runs that line when it loads the skill, even inside a code fence, and puts the files' contents in its place, the user's first and the project's after it, so the later one wins where they differ. Another agent sees the line as text, and the paragraph under it tells it to read the same files itself.
 
 ## A skill states its rules as they stand
 

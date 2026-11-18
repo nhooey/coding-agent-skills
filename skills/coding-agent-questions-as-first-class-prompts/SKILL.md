@@ -57,7 +57,7 @@ A question with no fixed set of answers, such as "what should I name this module
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-questions-as-first-class-prompts.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-questions-as-first-class-prompts.preferences.md" 2>/dev/null || true`
+!`cat "$(dirname "${CLAUDE_SKILL_DIR}")/coding-agent-questions-as-first-class-prompts.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-questions-as-first-class-prompts.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-questions-as-first-class-prompts.preferences.md` next to this skill's folder, then

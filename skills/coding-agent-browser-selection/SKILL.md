@@ -160,7 +160,7 @@ With only a preferred app set, any window of it matches. With only apps to never
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-browser-selection.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-browser-selection.preferences.md" 2>/dev/null || true`
+!`cat "$(dirname "${CLAUDE_SKILL_DIR}")/coding-agent-browser-selection.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-browser-selection.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-browser-selection.preferences.md` next to this skill's folder, then

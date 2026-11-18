@@ -148,7 +148,7 @@ Load this skill at the start of every turn, before the first response the user w
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-kanban-turn-responses.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-kanban-turn-responses.preferences.md" 2>/dev/null || true`
+!`cat "$(dirname "${CLAUDE_SKILL_DIR}")/coding-agent-kanban-turn-responses.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-kanban-turn-responses.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-kanban-turn-responses.preferences.md` next to this skill's folder, then
