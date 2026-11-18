@@ -45,7 +45,7 @@ The rules hold for a main agent and a subagent alike.
 `scripts/scratchpad-guard.sh`, in the `coding-agent-skills-hooks` plugin, holds rules 1, 2 and 4 in every session and subagent:
 
 - **PreToolUse on `Bash|Write|Edit`:** catches writing, editing, running or making executable a program file (`.py`, `.sh`, `.js`, `.ts` and the like) under a temporary root (`/tmp`, `/var/folders`, `$TMPDIR`) with no project marker (`.git`, `flake.nix`, `package.json`, an `.html` page, …) between, and `source` of any file there. Its message names the three ways out above.
-- **SubagentStart:** gives each subagent rules 1, 2 and 4 in four lines.
+- **SubagentStart:** gives each subagent rules 1, 2 and 4 in four lines, then rules 1 and 3 of `coding-agent-readable-tool-calls` (short paths, quiet commands) in two more.
 - **The setting:** a line `Scratchpad guard: remind` in this skill's preferences file. `remind`, the default, lets the call run and adds the message; `deny` denies it; `off` silences both hooks.
 
 ## Your preferences
@@ -72,5 +72,6 @@ without asking. If it isn't in your listing, tell the user which skill is
 missing and ask whether to install it from the same collection this skill
 came from; don't apply it from memory.
 
+- `coding-agent-readable-tool-calls`: short paths, plain descriptions and quiet commands in each tool call; this skill's hook passes two of its rules to subagents.
 - `coding-agent-route-feedback-to-skills-over-memory`: a correction about where scripts or scratch files belong lands in this skill, not in memory.
 - `shell-hygiene-commands-as-cli-tools`: rule 3 in full: when a command becomes a tool in the project, and the tool's shape.

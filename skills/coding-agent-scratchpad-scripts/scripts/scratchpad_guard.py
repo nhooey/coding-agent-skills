@@ -17,7 +17,8 @@ stdin. Standard library only, and Python 3.9 or later.
   After the third in a session it is silent. The count lives in
   `$CLAUDE_PLUGIN_DATA/scratchpad-guard/inline-writes/<session id>`; with no
   count to keep, `deny` reminds instead, so a denial can't repeat forever.
-- SubagentStart: gives the subagent the rule in four lines, unless `off`.
+- SubagentStart: gives the subagent the rule in four lines, and rules 1 and 3
+  of coding-agent-readable-tool-calls in two more, unless `off`.
 
 A path counts when it is under a temporary root (/tmp, /private/tmp,
 /var/folders, /private/var/folders, $TMPDIR, or the literal text `$TMPDIR` or
@@ -117,6 +118,11 @@ SUBAGENT_RULES = "\n".join(
         "Write no program files (.py, .sh, .js, ...) to the scratchpad or a temporary directory; "
         "anything run twice becomes a named tool in the project.",
         "Never `source` a generated file; put its commands in the Bash call.",
+        "Keep paths short: relative to the project, with one `cd` at the start of a Bash call "
+        "rather than a long path repeated, and never the scratchpad's absolute path twice in a call.",
+        "Keep commands quiet: one command per call where you can, output trimmed with the tool's own "
+        "options (`--max-count`, `--jq`, Read's `limit`) rather than `| head | cut`, and `2>&1` only "
+        "when the error output matters.",
     )
 )
 

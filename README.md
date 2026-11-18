@@ -18,6 +18,7 @@ Skills for the shape of an agent's output in isolation, such as a session recap,
 | [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)                                             | Keeps plans as a graph of Markdown nodes in `agents/plans/open/` and `closed/`, with states, typed links and a generated overview of what's in progress, ready, blocked and proposed.                                                                         |
 | [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Pending/Waiting/Answers/Authorizations/Review/Todo/Decide lists closing on what earlier turns left open.                              |
 | [`coding-agent-questions-as-first-class-prompts`](skills/coding-agent-questions-as-first-class-prompts/SKILL.md)         | Routes any question for the user through the agent's structured-question primitive (e.g. `AskUserQuestion`) instead of free-text prose that waits for a reply.                                                                                                |
+| [`coding-agent-readable-tool-calls`](skills/coding-agent-readable-tool-calls/SKILL.md)                                   | Keeps each tool call easy to read in the terminal: short relative paths, a description saying what it does and why, and quiet commands trimmed by the tool's own options; a command needed again becomes a tool.                                              |
 | [`coding-agent-review-queue-in-browser`](skills/coding-agent-review-queue-in-browser/SKILL.md)                           | Walks the user through what waits on them one chunk of browser tabs at a time, bringing the tab group to one end state after every change, with a bundled program that orders and chunks the queue and works out the tab actions.                             |
 | [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson to the layer that owns it: a drafted skill or preferences edit, or a plan node for a hook, tool or config.                                                                                     |
 | [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools, one-off checks inline and only named data in the scratchpad; anything run twice goes to `shell-hygiene-commands-as-cli-tools`.                                                                                       |
@@ -55,6 +56,7 @@ Package outputs:
 - `agent-skill-nhooey-coding-agent-plans-as-graph`
 - `agent-skill-nhooey-coding-agent-kanban-turn-responses`
 - `agent-skill-nhooey-coding-agent-questions-as-first-class-prompts`
+- `agent-skill-nhooey-coding-agent-readable-tool-calls`
 - `agent-skill-nhooey-coding-agent-review-queue-in-browser`
 - `agent-skill-nhooey-coding-agent-route-feedback-to-skills-over-memory`
 - `agent-skill-nhooey-coding-agent-scratchpad-scripts`
@@ -72,7 +74,7 @@ A plugin hook runs in every session and subagent, whether or not the skill is lo
 
 - **What's in it:**
   - the SessionStart hook `session-build-limits.sh`, from [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)
-  - the PreToolUse (`Bash|Write|Edit`) and SubagentStart hook `scratchpad-guard.sh`, with its helper `scratchpad_guard.py`, from [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)
+  - the PreToolUse (`Bash|Write|Edit`) and SubagentStart hook `scratchpad-guard.sh`, with its helper `scratchpad_guard.py`, from [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md); its SubagentStart message also carries two rules of [`coding-agent-readable-tool-calls`](skills/coding-agent-readable-tool-calls/SKILL.md)
   - the PostToolUse (`Write|Edit`) hook `plans-check-hook.sh`, with its helpers `plans_check_hook.py` and `plans.py`, from [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)
   - the PreToolUse (`Write|Edit`) hook `memory-write-reminder.sh`, with its helper `memory_write_reminder.py`, from [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md)
   - the PreToolUse (`mcp__claude-in-chrome__.*`) and PostToolUse (`Bash`, `select_browser`, `switch_browser`) hook `browser-check-hook.sh`, with its helper `browser_check_hook.py`, from [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)
