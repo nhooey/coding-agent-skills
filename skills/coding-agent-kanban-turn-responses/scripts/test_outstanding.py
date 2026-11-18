@@ -64,6 +64,34 @@ DECIDE_REPLY = f"""Opening prose.
 """
 
 
+GROUPED_REPLY = """Rechecked: 2 decisions open, in 2 topics.
+
+**The atomic-reload database swap**
+═══════════════════════════════
+🧠 **Decide:**
+▔▔▔▔▔▔▔▔▔▔
+1. **Merge order for the swap**
+   🔘 A. **Schema first**: a working base.
+      ➕ Releasable.
+      ➖ 3 reviews.
+   🔘 B. **All at once**: one review.
+      ➕ 1 review.
+      ➖ One revert undoes all.
+
+**The 2026 backup plan**
+════════════════════
+🧠 **Decide:**
+▔▔▔▔▔▔▔▔▔▔
+2. **Snapshot retention**
+   🔘 A. **90 days**: a quarter.
+      ➕ Audits.
+      ➖ Storage.
+   🔘 B. **30 days**: a month.
+      ➕ Cheap.
+      ➖ Short.
+"""
+
+
 def prompt(prompt_id: str, text: str, minute: int = 0) -> dict:
     return {
         "type": "user",
@@ -227,17 +255,14 @@ class OpenDecideItemsTest(unittest.TestCase):
         )
         self.assertEqual(refs, ["9efb08a1.Decide.2", "9efb08a1.Decide.3", "b2c3d4e5.Decide.4"])
 
-    def test_a_recheck_turn_replaces_every_earlier_item(self) -> None:
+    def test_a_reassess_turn_replaces_every_earlier_item(self) -> None:
         later = DECIDE_REPLY.split("2. **")[0]
-        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "recheck", 1), reply(later, 1))
-        self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
+        for name in ("reassess", "recheck", "regenerate", "recalculate", "regen", "recalc", "reass"):
+            with self.subTest(name=name):
+                refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, name, 1), reply(later, 1))
+                self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
 
-    def test_reassess_is_another_name_for_recheck(self) -> None:
-        later = DECIDE_REPLY.split("2. **")[0]
-        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "reassess", 1), reply(later, 1))
-        self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
-
-    def test_the_slash_command_form_of_recheck(self) -> None:
+    def test_the_slash_command_form_of_reassess(self) -> None:
         later = DECIDE_REPLY.split("2. **")[0]
         refs = self.open_refs(
             prompt(FIRST, "go"),
@@ -246,6 +271,85 @@ class OpenDecideItemsTest(unittest.TestCase):
             reply(later, 1),
         )
         self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
+
+    def test_an_open_turn_replaces_nothing(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0].replace("1. **Which cache", "4. **Which cache")
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "restate", 1), reply(later, 1))
+        self.assertEqual(refs, ["9efb08a1.Decide.2", "9efb08a1.Decide.3", "b2c3d4e5.Decide.4"])
+
+    def test_a_reassess_grouped_by_topic_numbers_on_across_topics(self) -> None:
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "reassess", 1), reply(GROUPED_REPLY, 1))
+        self.assertEqual(refs, ["b2c3d4e5.Decide.1", "b2c3d4e5.Decide.2"])
+        answered = self.open_refs(
+            prompt(FIRST, "go"),
+            reply(DECIDE_REPLY),
+            prompt(SECOND, "reassess", 1),
+            reply(GROUPED_REPLY, 1),
+            prompt(THIRD, "Decide.2: B", 2),
+        )
+        self.assertEqual(answered, ["b2c3d4e5.Decide.1"])
+
+    def test_a_grouped_reply_keeps_each_item_its_own_number(self) -> None:
+        items = outstanding.decide_items_of_text("b2c3d4e5", GROUPED_REPLY)
+        self.assertEqual([(i.number, i.summary) for i in items], [(1, "Merge order for the swap"), (2, "Snapshot retention")])
+
+    def test_a_topic_header_is_no_part_of_the_item_above(self) -> None:
+        text = "**First topic**  \n═══════════\n👉 **Todo:**  \n▔▔▔▔▔▔▔▔\n1. **Run the benchmark**\n\n**Second topic**  \n════════════\n"
+        self.assertEqual(outstanding.items_of_text(text), (("todo", False, "**Run the benchmark**"),))
+
+
+class CommandOfTest(unittest.TestCase):
+    def test_each_name(self) -> None:
+        for name, command in (
+            *((n, "reassess") for n in ("reassess", "recheck", "regenerate", "recalculate")),
+            *((n, "open") for n in ("open", "pending", "restate")),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(outstanding.command_of(name), command)
+
+    def test_a_prefix_no_other_command_shares(self) -> None:
+        for prefix, command in (
+            ("rea", "reassess"),
+            ("rec", "reassess"),
+            ("regen", "reassess"),
+            ("recalc", "reassess"),
+            ("reass", "reassess"),
+            ("res", "open"),
+            ("rest", "open"),
+            ("pend", "open"),
+            ("o", "open"),
+        ):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(outstanding.command_of(prefix), command)
+
+    def test_a_prefix_shared_with_another_command_names_none(self) -> None:
+        for prefix in ("r", "re", "RE"):
+            with self.subTest(prefix=prefix):
+                self.assertIsNone(outstanding.command_of(prefix))
+
+    def test_a_word_that_is_no_prefix_names_none(self) -> None:
+        for prompt_text in ("recall the plan", "reading list", "go", "", "opener", "regen2"):
+            with self.subTest(prompt=prompt_text):
+                self.assertIsNone(outstanding.command_of(prompt_text))
+
+    def test_the_first_word_decides_case_and_trailing_punctuation_aside(self) -> None:
+        self.assertEqual(outstanding.command_of("  Reassess, then stop"), "reassess")
+        self.assertEqual(outstanding.command_of("restate."), "open")
+
+    def test_the_slash_command_typed(self) -> None:
+        self.assertEqual(outstanding.command_of("/coding-agent-kanban-turn-responses regen"), "reassess")
+        self.assertEqual(outstanding.command_of("/coding-agent-kanban-turn-responses restate"), "open")
+        self.assertIsNone(outstanding.command_of("/coding-agent-kanban-turn-responses re"))
+        self.assertIsNone(outstanding.command_of("/other-skill reassess"))
+
+    def test_the_command_name_form(self) -> None:
+        def sent(name: str, args: str) -> str:
+            return f"<command-message>{name}</command-message>\n<command-name>/{name}</command-name>\n<command-args>{args}</command-args>"
+
+        self.assertEqual(outstanding.command_of(sent("coding-agent-kanban-turn-responses", "recalc")), "reassess")
+        self.assertEqual(outstanding.command_of(sent("coding-agent-kanban-turn-responses", "pending")), "open")
+        self.assertIsNone(outstanding.command_of(sent("coding-agent-kanban-turn-responses", "re")))
+        self.assertIsNone(outstanding.command_of(sent("other-skill", "reassess")))
 
 
 class CommandLineTest(unittest.TestCase):

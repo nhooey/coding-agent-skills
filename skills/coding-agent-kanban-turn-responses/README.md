@@ -110,8 +110,8 @@ Commands you can type during a session:
 
 | You type             | The agent                                                     |
 | -------------------- | ------------------------------------------------------------- |
-| `open`, or `pending` | reprints the open Review, Todo and Decide items as written |
-| `recheck`            | works out afresh which earlier items are still open           |
+| `open`, or `pending` or `restate` | reprints the open Review, Todo and Decide items as written, grouped by topic |
+| `reassess`, or `recheck`, `regenerate` or `recalculate` | works out afresh which earlier items are still open, grouped by topic |
 | `Expand Decide.2` | reprints that item in enough detail to act on                 |
 | `Decide.1: B`     | picks option B of Decide item 1                            |
 

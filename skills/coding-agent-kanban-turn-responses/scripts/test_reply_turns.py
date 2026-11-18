@@ -205,6 +205,19 @@ class SectionsTest(unittest.TestCase):
             ),
         )
 
+    def test_a_topic_header_closes_the_section_above_it(self) -> None:
+        text = (
+            "**First topic**  \n═══════════\n🧠 **Decide:**  \n▔▔▔▔▔▔▔▔▔▔\n1. **Merge order**\n\n"
+            "**Second topic**  \n════════════\n🧠 **Decide:**  \n▔▔▔▔▔▔▔▔▔▔\n2. **Retention**\n"
+        )
+        self.assertEqual(
+            reply_turns.sections(text),
+            (
+                ("Decide", "🧠 **Decide:**  \n▔▔▔▔▔▔▔▔▔▔\n1. **Merge order**"),
+                ("Decide", "🧠 **Decide:**  \n▔▔▔▔▔▔▔▔▔▔\n2. **Retention**"),
+            ),
+        )
+
     def test_a_header_is_matched_by_name_not_glyph(self) -> None:
         self.assertEqual(reply_turns.sections("🙃 **Todo:**  \n1. **x**")[0][0], "Todo")
         self.assertEqual(reply_turns.sections("🙃 **Nothing:**  \n1. **x**"), ())

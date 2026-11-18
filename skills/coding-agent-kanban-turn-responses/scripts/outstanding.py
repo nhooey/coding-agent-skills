@@ -25,8 +25,8 @@ Subcommands:
   grep PATTERN [...]         the same lines for items whose line matches the regex, ignoring case
   render [...] [--counts]    a DRAFT 📌 section, each item ending `🔖 <id>₋ₖ`, for the session to prune; by
                              default only the last 20 turns (`--last N`, or `--since ID`), and never a
-                             turn before the latest `recheck` (or `reassess`) turn, whose lists replace
-                             every earlier item; `--counts` prints the draft's one count line instead.
+                             turn before the latest `reassess` turn, whose lists replace every earlier
+                             item; `--counts` prints the draft's one count line instead.
                              Which items are still open is a judgement this script cannot make
   due [--now ISO]            `full` or `counts <time left>`: full once min(30 min, 5 x the average gap
                              of the last 5 completed turns) has passed since the last reply text that
@@ -35,9 +35,11 @@ Subcommands:
                              one object `{"items": [...]}`, each item its turn id, list, number,
                              summary, kind (radio, checkbox or binary), reference and options (letter
                              and name), for a tool to read.
-                             Open: raised since the latest `recheck` (or `reassess`) turn, its latest restatement
-                             only, and answered by no later prompt with an option letter (a line
+                             Open: raised since the latest `reassess` turn, its latest restatement only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing)
+A `reassess` turn is one whose prompt opens on `reassess`, `recheck`, `regenerate` or `recalculate`, or a
+prefix of one of them that is a prefix of no other command's name, such as `regen`, bare or after
+`/coding-agent-kanban-turn-responses`.
 `--latest` keeps each item's latest occurrence. `render` gives each item the turn that first printed it,
 or, where later replies restated it with changed substance (the text after its bold summary), the turn
 that restated it: the first turn of the latest run of identical texts. A restatement in a 📌 section is a
@@ -80,10 +82,14 @@ _PREFIX = re.compile(r"^🔖\s*\w+[₀-₉₋]*:\s*")
 _SUFFIX = re.compile(r"\s*🔖\s+([0-9a-f]{8})[₀-₉₋]*\s*$")
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _RULE = re.compile(r"^\s*[━▀]{3,}\s*$")
-_RECHECK = re.compile(
-    r"^\s*(?:/(?:reply-block|coding-agent-kanban-turn-responses)\s+)?(?:recheck|reassess)\b"
-    r"|<command-name>/(?:reply-block|coding-agent-kanban-turn-responses)</command-name>\s*<command-args>\s*(?:recheck|reassess)\b"
-)
+# command -> its names, the primary one first. Any prefix of a name names its command too, where it is a
+# prefix of no other command's name: `regen` and `rec` are `reassess`, `res` is `open`, `re` is neither.
+COMMANDS = {
+    "reassess": ("reassess", "recheck", "regenerate", "recalculate"),
+    "open": ("open", "pending", "restate"),
+}
+_SKILL_COMMANDS = frozenset({"coding-agent-kanban-turn-responses", "reply-block"})
+_WORD_END = ".,;:!"
 _ENTRY = re.compile(r"\bentr(?:y|ies)\s+(\d{3,4})\b", re.IGNORECASE)
 _SPAN = re.compile(r"`([^`]+)`")
 _BRANCH = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")
@@ -185,6 +191,12 @@ def _scan(
         if header
         else (None, True, found, False)
         if _PIN.match(line)
+        # A topic header's rule ends the list above it, and a blank line ends any list, so neither the
+        # topic header nor prose after a list is read as an item's body.
+        else (None, pinned, found, False)
+        if rt.is_topic_rule(line)
+        else (key, pinned, found, False)
+        if not body
         else (key, pinned, (*found, f"{key}\t{int(pinned)}\t{item.group(1).strip()}"), _awaits_body(item.group(1).strip()))
         if key and item
         # The summary's own line holds no sentence, so the line beneath it is the item's body.
@@ -225,9 +237,47 @@ def latest_only(items: tuple[Item, ...]) -> tuple[Item, ...]:
     return tuple(i for n, i in enumerate(items) if last[(i.list_key, i.subject)] == n)
 
 
-def recheck_start(turns: tuple[rt.Turn, ...]) -> int:
-    """The position of the latest `recheck` (or `reassess`) turn, whose lists replace every item before it; else 0."""
-    return next((n for n in reversed(range(len(turns))) if _RECHECK.search(turns[n].prompt)), 0)
+def command_named(word: str) -> str | None:
+    """The command a word names: one of its names, or a prefix of them that no other command's name shares."""
+    lowered = word.lower()
+    found = frozenset(
+        command for command, names in COMMANDS.items() if lowered and any(n.startswith(lowered) for n in names)
+    )
+    return next(iter(found)) if len(found) == 1 else None
+
+
+def _between(text: str, opening: str, closing: str) -> str | None:
+    """The text between the first `opening` tag and the `closing` tag after it; None where `opening` is absent."""
+    _, found, rest = text.partition(opening)
+    return rest.partition(closing)[0] if found else None
+
+
+def _command_words(prompt: str) -> tuple[str, ...]:
+    """The words a command is read from: the `<command-args>` of the skill's own slash command, else the prompt's
+    words after `/coding-agent-kanban-turn-responses` where it opens on it, else the prompt's words."""
+    name = _between(prompt, "<command-name>", "</command-name>")
+    words = tuple(prompt.split())
+    return (
+        tuple((_between(prompt, "<command-args>", "</command-args>") or "").split())
+        if name is not None and name.strip().lstrip("/") in _SKILL_COMMANDS
+        else ()
+        if name is not None
+        else words[1:]
+        if words and words[0].startswith("/") and words[0][1:] in _SKILL_COMMANDS
+        else words
+    )
+
+
+def command_of(prompt: str) -> str | None:
+    """The command a prompt runs, `reassess` or `open`, by its first word, bare or after the skill's slash command;
+    None where the first word names no command or more than one."""
+    first = next(iter(_command_words(prompt)), "").rstrip(_WORD_END)
+    return command_named(first) if first.isalpha() else None
+
+
+def reassess_start(turns: tuple[rt.Turn, ...]) -> int:
+    """The position of the latest `reassess` turn, whose lists replace every item before it; else 0."""
+    return next((n for n in reversed(range(len(turns))) if command_of(turns[n].prompt) == "reassess"), 0)
 
 
 def raised_by(turns: tuple[rt.Turn, ...], occurrences: tuple[Item, ...]) -> tuple[str, int]:
@@ -562,9 +612,9 @@ def _is_answered(item: DecideItem, answers: frozenset[tuple[str, int]]) -> bool:
 
 
 def open_decide_items(turns: tuple[rt.Turn, ...]) -> tuple[DecideItem, ...]:
-    """The open Decide items, oldest first: raised since the latest `recheck` (or `reassess`) turn, each subject's latest
+    """The open Decide items, oldest first: raised since the latest `reassess` turn, each subject's latest
     restatement only, none a later prompt answered with an option."""
-    kept = turns[recheck_start(turns) :]
+    kept = turns[reassess_start(turns) :]
     raised = tuple(item for t in kept for text in t.replies for item in decide_items_of_text(t.id, text))
     last = {subject_key(item.summary): n for n, item in enumerate(raised)}
     answers = answered(turns)
@@ -636,7 +686,7 @@ def run(args: argparse.Namespace, turns: tuple[rt.Turn, ...]) -> str:
             parse_lists(args.lists),
             args.latest and not rendering,
             getattr(args, "pattern", None),
-            recheck_start(turns) if rendering else 0,
+            reassess_start(turns) if rendering else 0,
         )
         out = (
             (render_counts if args.counts else lambda items: render_draft(items, args.width))(with_origins(turns, found))

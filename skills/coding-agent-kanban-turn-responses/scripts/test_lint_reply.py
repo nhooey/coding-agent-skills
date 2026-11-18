@@ -56,6 +56,27 @@ ONE_LINE_RUN = (
 )
 
 
+def grouped(second_todo: int = 3) -> str:
+    """2 topics, each with a Todo list, the second's numbered from `second_todo`."""
+    return (
+        "**First topic**  \n"
+        "═══════════\n"
+        "👉 **Todo:**  \n"
+        "▔▔▔▔▔▔▔▔\n"
+        "1. **Run the benchmark**  \n"
+        "   It settles the merge order.\n"
+        f"   {S}\n"
+        "2. **Rotate the key**  \n"
+        "   It is still open.\n"
+        "\n"
+        "**Second topic**  \n"
+        "════════════\n"
+        "👉 **Todo:**  \n"
+        "▔▔▔▔▔▔▔▔\n"
+        f"{second_todo}. **Mark up the plan**\n"
+    )
+
+
 def kinds(text: str) -> list[tuple[int, str]]:
     return [(line, kind) for line, kind, _ in lint_reply.lint(text)]
 
@@ -236,6 +257,34 @@ class LintReplyTest(unittest.TestCase):
                 self.assertEqual(kinds(f"{header}  \n{rule * width}\n"), [])
                 self.assertEqual(kinds(f"{header}  \n{rule * (width + 1)}\n"), [(2, "i")])
 
+    def test_topic_underline_widths(self) -> None:
+        for header, width in {"**Miscellaneous**": 13, "📦 **The atomic-reload swap**": 25}.items():
+            with self.subTest(header=header):
+                self.assertEqual(kinds(f"{header}  \n{'═' * width}\n"), [])
+                self.assertEqual(kinds(f"{header}  \n{'═' * (width - 1)}\n"), [(2, "i")])
+
+    def test_numbering_runs_on_across_topics(self) -> None:
+        self.assertEqual(kinds(grouped()), [])
+
+    def test_a_list_numbered_from_1_again_under_a_later_topic(self) -> None:
+        self.assertEqual(kinds(grouped(second_todo=1)), [(15, "m")])
+        self.assertEqual(kinds(grouped(second_todo=4)), [(15, "m")])
+
+    def test_a_list_numbered_above_1_under_a_topic_header(self) -> None:
+        text = "**Miscellaneous**  \n═════════════\n🔍 **Review:**  \n▔▔▔▔▔▔▔▔▔▔\n3. **The README**\n"
+        self.assertEqual(kinds(text), [])
+
+    def test_numbers_outside_topics_are_not_checked(self) -> None:
+        text = "👉 **Todo:**  \n▔▔▔▔▔▔▔▔\n1. **One**\n\n👉 **Todo:**  \n▔▔▔▔▔▔▔▔\n1. **Two**\n"
+        self.assertEqual(kinds(text), [])
+
+    def test_errors_under_topics_are_still_caught(self) -> None:
+        self.assertEqual(kinds(grouped().replace(f"   {S}\n", "")), [(7, "a")])
+        self.assertEqual(kinds(grouped().replace("**  \n   It s", "**\n   It s", 1)), [(5, "g")])
+        self.assertEqual(kinds(grouped().replace("still open.\n\n**Second", "still open.\n**Second")), [(10, "j")])
+        self.assertEqual(kinds(grouped().replace("▔▔▔▔▔▔▔▔\n3.", "▔▔▔▔▔▔▔\n3.")), [(14, "i")])
+        self.assertEqual(kinds(grouped().replace("════════════\n", "═════════════\n")), [(12, "i")])
+
     TABLE = "| Col | Val |\n| --- | --- |\n| a   | 1   |\n"
 
     def test_table_after_the_list_with_blank_lines(self) -> None:
@@ -270,6 +319,7 @@ class LintReplyTest(unittest.TestCase):
         for path, heading in [
             (examples, "## A Decide list"),
             (examples, "## Two lists in one response"),
+            (examples, "## A reassess grouped by topic"),
             (examples, "## The full roll-up"),
             (skill / "README.md", "The final response:"),
         ]:
