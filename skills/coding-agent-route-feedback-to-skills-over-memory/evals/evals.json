@@ -100,6 +100,65 @@
           "text": "Does NOT ask the user about PR / on-disk / markdown persistence options — those are skill-edit questions, not memory questions"
         }
       ]
+    },
+    {
+      "id": 4,
+      "name": "worktree-builds-to-shared-dev-shell-module",
+      "prompt": "Builds in worktrees start from scratch every time. Remember that for next time.",
+      "expected_output": "Agent walks the routing table: not a machine fact, not a GitHub setting, not one repository's alone (every repository's dev shell would need it), so step 4: a shared flake module for dev shells. Proposes a plan node with state proposed in the module's repository's agents/plans/open/, with a title saying what will be true (build caches shared across worktrees), and does not write a memory or a skill line.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "names-shared-dev-shell-module",
+          "text": "Places the lesson in a shared flake module for dev shells, naming the routing step that decided it"
+        },
+        {
+          "id": "proposes-plan-node",
+          "text": "Drafts a plan node (state: proposed, under agents/plans/open/ in the module's repository) rather than a skill edit"
+        },
+        {
+          "id": "no-memory",
+          "text": "Does NOT write a memory, and does NOT propose only a skill line"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "trash-command-to-user-preferences",
+      "prompt": "Use /usr/bin/trash for ad-hoc deletes on this Mac.",
+      "expected_output": "Agent recognizes a fact about this machine that a skill reads as a setting (step 1). Drafts the entry for the delete skill's user-level preferences file, ~/.agents/skills/<skill-name>.preferences.md, and proposes the change to the machine configuration (Home Manager) that writes that file, rather than writing the file directly or editing the skill.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "user-preferences-file",
+          "text": "Places the lesson in a skill's user-level preferences file, not the skill itself and not a memory"
+        },
+        {
+          "id": "through-machine-configuration",
+          "text": "Proposes the change to the machine configuration that generates the user-level file, rather than writing ~/.agents/skills/ directly"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "early-returns-to-skill",
+      "prompt": "From now on, prefer early returns over nested if-else.",
+      "expected_output": "Agent recognizes a style rule that needs judgement and that no path or command pattern can decide (step 9). Drafts a skill edit in the matching style skill's voice, quoting the section heading, and asks where it lands. Proposes no hook, tool or plan node.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "drafts-skill-edit",
+          "text": "Drafts concrete wording for an existing skill, naming the skill and section"
+        },
+        {
+          "id": "no-plan-node",
+          "text": "Does NOT propose a hook, tool, dev shell change or plan node"
+        },
+        {
+          "id": "asks-persistence",
+          "text": "Asks where the edit lands (pull request / on-disk / proposal file, gated on whether the location is known)"
+        }
+      ]
     }
   ]
 }
