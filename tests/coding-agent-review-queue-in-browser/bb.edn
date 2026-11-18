@@ -1,0 +1,5 @@
+{:paths ["../../skills/coding-agent-review-queue-in-browser/scripts/src" "."]
+ :tasks
+ {test {:doc "Run the unit tests"
+        :requires ([review-queue.test-runner :as runner])
+        :task (runner/run)}}}
