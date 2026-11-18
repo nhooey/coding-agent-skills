@@ -94,6 +94,14 @@ A plugin hook runs in every session and subagent, whether or not the skill is lo
   The setting lives in the skill's preferences file, as [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md) describes: `.agents/skills/<skill>.preferences.md` in the project (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
   The skill documents the setting's line.
   `session-build-limits.sh` only adds to the environment and `memory-write-reminder.sh` only adds context, so they have none; `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, `browser-check-hook.sh` reads `Browser check: deny | remind | off` and `reply-lint-hook.sh` reads `Reply lint: block | remind | off`; each is at `remind` unless set.
+- **The browser check hook:** `browser-check-hook.sh` catches, once, a session's first Claude in Chrome call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`.
+  The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass, and a check is good for an hour.
+  A run of `which_browser.py` with `--list`, `resolve` or `wake` isn't a check.
+  By setting:
+  - `remind`: the call runs, and the session is told to load `coding-agent-browser-selection` and check the browser before acting further.
+  - `deny`: the call is denied with that as the reason.
+    The second attempt passes, so a session that can't run the script isn't locked out.
+  - `off`: nothing.
 - **Checks:** `nix flake check` runs each hook script's tests and `checks.hooks-plugin`, which builds the plugin and runs [`check-hooks-plugin.sh`](nix/hooks-plugin-check/check-hooks-plugin.sh) on it.
   `claude plugin validate` on the built plugin checks it as Claude Code reads it.
   `check-hooks-plugin.sh` enforces each rule with an existing tool:

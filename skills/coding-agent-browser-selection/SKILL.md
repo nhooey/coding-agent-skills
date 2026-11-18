@@ -71,22 +71,12 @@ Do this before the first browser action of a session, and again after any `selec
 6. Compare the app and window name with the preferences. When the `Preferred app` is a path, compare with the name `which_browser.py resolve --app '<path>'` prints first.
    - **Matches:** go on.
    - **Doesn't match, or the app is one never to use:** call `select_browser` with the next browser step 2 allows, and go back to step 3. If step 2 allows none and this check hasn't woken the preferred app yet, wake it as in step 2.1; otherwise stop as in step 2.4.
-   - **No browser matches:** stop and ask the user which to use, through `AskUserQuestion`. Never pick one silently.
+   - **No browser matches:** stop and ask the user which to use. Never pick one silently.
    - **Nothing found:** the marker isn't in any running browser the script can read. Say so and ask the user.
 7. Once one matches, navigate the tab back to its URL without the marker if the fragment would change the page. If no `Preferred device id` is set, offer to save this browser's `deviceId` as one, in the user's preferences file on this machine, not the project's, since a `deviceId` belongs to one machine's browser. If that file is generated, by Home Manager for one, give the user the line to add to its source instead.
 8. If the session moved off the browser it started in, tell the user which app and window it uses now.
 
-## The browser check hook
-
-The `coding-agent-skills-hooks` plugin runs `browser-check-hook.sh`, beside `which_browser.py`, on the Claude in Chrome tools. A session's first call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`, is caught once. The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass. A check is good for an hour. A run of `which_browser.py` with `--list`, `resolve` or `wake` isn't a check.
-
-Its setting is a line in the preferences file, `Browser check: deny`, `remind` or `off`; **`remind` is the default**:
-
-- **`remind`:** the call runs, and the session is told to load this skill and check the browser before acting further.
-- **`deny`:** the call is denied with that as the reason. The second attempt passes, so a session that can't run the script isn't locked out.
-- **`off`:** nothing.
-
-When the hook catches a call, do the check above before the next page action.
+When the browser check hook catches a call, do the check above before the next page action.
 
 ## Bring the browser forward
 
@@ -118,7 +108,7 @@ The preferences file holds up to 6 keys, as a Markdown list:
   - **`window`:** open a window in the app when it is running with none. Never launch it.
   - **`launch`:** also launch the app, in the background, when it isn't running.
   - **`off`:** nothing; stop and tell the user instead.
-- **Browser check:** the hook's setting, `deny`, `remind` or `off`, as above.
+- **Browser check:** the browser check hook's setting, `deny`, `remind` or `off`, and `remind` when unset; the hooks plugin's section of the coding-agent-skills README says what each does.
 
 For example:
 
@@ -151,13 +141,6 @@ With only a preferred app set, any window of it matches. With only apps to never
 - **Browser profiles.** `wake` counts and opens windows across all of an app's profiles. If the extension's profile has no window but another profile has one, `wake` prints `already-open` and does nothing, and a window it opens may open in the profile the app last used rather than the extension's. Either way no new browser appears, and step 2.4 applies.
 
 - **No tab groups.** AppleScript can't see tab groups, so the match is by window. The extension keeps its tabs in a tab group; if that group opens in another window of the right app, the window won't match, and only the user can move it. Tell them.
-
-## When to apply
-
-- Before the first `mcp__claude-in-chrome__*` action of a session.
-- After any `select_browser` or `switch_browser`.
-- When `list_connected_browsers` shows only browsers that could be an app never to use, or fewer than before.
-- When the user asks which browser the session is using, or to write browser preferences.
 
 ## Your preferences
 
