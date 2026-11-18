@@ -5,7 +5,8 @@ A Claude Code hook, run by browser-check-hook.sh with the hook's JSON input on
 stdin, for three entries told apart by the event and the tool name:
 
 - PostToolUse on Bash: a command that runs `which_browser.py` with a marker
-  (not `--list`) notes that the session checked its browser.
+  (not `--list`, `resolve` or `wake`) notes that the session checked its
+  browser.
 - PostToolUse on `select_browser` and `switch_browser`: clears the session's
   record, since the session may now drive another browser.
 - PreToolUse on a Claude in Chrome tool that acts on a page (`navigate`,
@@ -54,6 +55,7 @@ PAGE_ACTING = frozenset({"navigate", "computer", "form_input", "javascript_tool"
 SWITCHING = frozenset({"select_browser", "switch_browser"})
 CHECK_RUN = re.compile(r"which_browser\.py(?![\w.])")
 LIST_RUN = re.compile(r"which_browser\.py\S*\s+(\S+\s+)*--list\b")
+SUBCOMMAND_RUN = re.compile(r"""which_browser\.py\S*\s+['"]?(resolve|wake)\b""")
 
 CHECK = (
     f"Browser check (`{SKILL}`): this session hasn't checked which browser it drives "
@@ -92,8 +94,14 @@ def browser_tool(tool_name: object) -> str | None:
 
 
 def is_check_run(command: object) -> bool:
-    """Whether a Bash command runs `which_browser.py` to find a marker, not to list windows."""
-    return isinstance(command, str) and bool(CHECK_RUN.search(command)) and not LIST_RUN.search(command)
+    """Whether a Bash command runs `which_browser.py` to find a marker, not to list windows,
+    resolve an app or wake one."""
+    return (
+        isinstance(command, str)
+        and bool(CHECK_RUN.search(command))
+        and not LIST_RUN.search(command)
+        and not SUBCOMMAND_RUN.search(command)
+    )
 
 
 def caught(setting: str, counted: bool) -> dict:

@@ -9,9 +9,12 @@ description: |
   such as the user's personal browser. Covers marking the session's tab URL,
   finding which app and window holds it with the bundled macOS script,
   switching browsers until one matches the user's preferences, asking when
-  none does, and bringing only the preferred app forward. Load it before the
-  first mcp__claude-in-chrome__* call of a session, and again after any
-  select_browser or switch_browser.
+  none does, waking the preferred app when it has no window and so dropped
+  off the list, before any tab is made, and bringing only the preferred app
+  forward. Load it before the first mcp__claude-in-chrome__* call of a
+  session, again after any select_browser or switch_browser, and when
+  list_connected_browsers shows only browsers that could be one the user said
+  not to use.
 ---
 
 # Browser selection
@@ -26,16 +29,37 @@ The tools can't tell you which app a browser is, but the app can: put a unique m
 
 ## Defaults
 
-With no preferences set, don't switch. Find out which app and window the session is in, tell the user, and go on.
+With no preferences set, don't switch, and wake nothing. Find out which app and window the session is in, tell the user, and go on.
 
 ## Check the browser
 
 Do this before the first browser action of a session, and again after any `select_browser` or `switch_browser`.
 
-1. Call `list_connected_browsers` and note the one marked `inUse`.
-2. Call `tabs_context_mcp` with `createIfEmpty` true, to get this session's tab and its URL.
-3. Navigate that tab to its current URL plus a unique fragment, such as `#which-browser-3f9a1c`. Use a fresh random hex value each time, so an old tab can't match.
-4. Run the bundled script with the marker:
+1. Call `list_connected_browsers`, and note each browser's `deviceId` and the one marked `inUse`.
+2. Choose a browser known not to be an app never to use. Until one is chosen, call no `tabs_context_mcp`, `tabs_create_mcp` or `navigate`: each can make a tab in whichever browser it lands on. A connected browser is known to be safe when:
+   - its `deviceId` is the `Preferred device id`;
+   - it is the one browser that appeared after a wake that printed `opened` or `launched`, below;
+   - a marker check earlier in this session found an allowed app behind its `deviceId`;
+   - or no app is set never to use.
+
+   Of several safe browsers, take the `Preferred device id`, else the one `inUse`. Select it with `select_browser` if it isn't the one `inUse`, and go to step 3. When none is safe, or a `Preferred device id` is set but not listed, wake the preferred app:
+   1. Run the bundled script's `wake`:
+
+      ```bash
+      python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" wake
+      ```
+
+      It reads the same preferences files as this skill, the user's beside the skill's folder and then the project's under `$CLAUDE_PROJECT_DIR`, or the current directory, the project's keys winning; `--skill-dir` and `--project-dir` point it elsewhere. It wakes the `Preferred app` under the `Wake` setting, and `--app` and `--mode` override them. It refuses, with exit 2 and before asking any app anything, an app under `Never use`, matched by name, path or bundle id.
+
+      If the app is running with no window, it opens one through AppleScript. Under `launch`, it first launches the app in the background if it isn't running; under `window`, it never does. It acts on that app alone. It prints the app, the window's id and what it did, `opened`, `launched` or `already-open`, tab-separated, and exits 1, saying why, when it can't, or 2 with no app to wake. After `opened` or `launched` it waits 15 seconds before it returns, for the extension to connect; `--settle` changes the wait. With no preferred app set, or `Wake: off`, go to step 2.4.
+
+   2. Only when it printed `opened` or `launched`, call `list_connected_browsers` again. On exit 1 or `already-open`, wake changed nothing, so go to step 2.4.
+   3. If exactly one browser is listed that wasn't before, select it with `select_browser`, and go to step 3 to check it with a marker. If none or several are new, go to step 2.4.
+   4. Stop. Tell the user which browsers are connected and what wake printed, and ask whether to check each browser with a marker anyway, which may make a tab in an app never to use, or to wait while they open a window in the preferred app. Suggest saving a `Preferred device id` once a check has found the preferred app, so the next session selects it directly. Never make a tab to find out.
+
+3. Call `tabs_context_mcp` with `createIfEmpty` true, to get this session's tab and its URL.
+4. Navigate that tab to its current URL plus a unique fragment, such as `#which-browser-3f9a1c`. Use a fresh random hex value each time, so an old tab can't match.
+5. Run the bundled script with the marker:
 
    ```bash
    python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" 'which-browser-3f9a1c'
@@ -43,17 +67,17 @@ Do this before the first browser action of a session, and again after any `selec
 
    It prints one tab-separated line per window holding the tab: app, window id, the window's given name, and its title. It exits 1 when no window matches.
 
-5. Compare the app and window name with the preferences:
+6. Compare the app and window name with the preferences. When the `Preferred app` is a path, compare with the name `which_browser.py resolve --app '<path>'` prints first.
    - **Matches:** go on.
-   - **Doesn't match, or the app is one never to use:** call `select_browser` with the next browser's `deviceId` and go back to step 2.
+   - **Doesn't match, or the app is one never to use:** call `select_browser` with the next browser step 2 allows, and go back to step 3. If step 2 allows none and this check hasn't woken the preferred app yet, wake it as in step 2.1; otherwise stop as in step 2.4.
    - **No browser matches:** stop and ask the user which to use, through `AskUserQuestion`. Never pick one silently.
    - **Nothing found:** the marker isn't in any running browser the script can read. Say so and ask the user.
-6. Once one matches, navigate the tab back to its URL without the marker if the fragment would change the page.
-7. If the session moved off the browser it started in, tell the user which app and window it uses now.
+7. Once one matches, navigate the tab back to its URL without the marker if the fragment would change the page. If no `Preferred device id` is set, offer to save this browser's `deviceId` as one, in the user's preferences file on this machine, not the project's, since a `deviceId` belongs to one machine's browser. If that file is generated, by Home Manager for one, give the user the line to add to its source instead.
+8. If the session moved off the browser it started in, tell the user which app and window it uses now.
 
 ## The browser check hook
 
-The `coding-agent-skills-hooks` plugin runs `browser-check-hook.sh`, beside `which_browser.py`, on the Claude in Chrome tools. A session's first call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`, is caught once. The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass. A check is good for an hour.
+The `coding-agent-skills-hooks` plugin runs `browser-check-hook.sh`, beside `which_browser.py`, on the Claude in Chrome tools. A session's first call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`, is caught once. The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass. A check is good for an hour. A run of `which_browser.py` with `--list`, `resolve` or `wake` isn't a check.
 
 Its setting is a line in the preferences file, `Browser check: deny`, `remind` or `off`; **`remind` is the default**:
 
@@ -65,13 +89,13 @@ When the hook catches a call, do the check above before the next page action.
 
 ## Bring the browser forward
 
-When someone is watching and the browser should be in front, activate the preferred app, never another one:
+When someone is watching and the browser should be in front, activate the preferred app, never another one, by the bundle id `which_browser.py resolve --app '<Preferred app>'` prints:
 
 ```bash
-osascript -e 'tell application "Google Chrome" to activate'
+osascript -e 'if application id "com.google.Chrome" is running then tell application id "com.google.Chrome" to activate'
 ```
 
-Use the app named in the preferences, or with none set, the app the check found.
+With no preferred app set, use the app the check found. The `is running` guard matters: `activate` launches a stopped app.
 
 ## Writing preferences
 
@@ -83,11 +107,16 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" --list
 
 Add `--urls` to print each window's tab URLs under it, to tell unnamed windows apart. A window has a given name only when the user named it, with Window, then Name Window in Chrome; otherwise its given name is empty and only its title, the active tab's title, shows.
 
-The preferences file holds up to 4 keys, as a Markdown list:
+The preferences file holds up to 6 keys, as a Markdown list:
 
-- **Preferred app:** the app name as macOS knows it, such as `Google Chrome`.
+- **Preferred app:** the app's name, such as `Google Chrome`, or the path to its bundle, such as `/Applications/Google Chrome.app` or a Home Manager or Nix store `.app`. The script finds a name with Spotlight, as `<name>.app`, and reads the bundle id from the app's `Info.plist`; it stops when a name matches no app or several, and then the path is what to set. `which_browser.py resolve --app '<name or path>'` shows what it resolves to.
 - **Preferred window:** the window's given name, such as `Claude in Chrome`. Match it exactly.
-- **Never use:** apps not to act in, such as `Brave Browser`. One per nested bullet.
+- **Preferred device id:** the `deviceId` that `list_connected_browsers` gives the preferred app, so step 2 selects it directly. It has been seen to survive the extension disconnecting and reconnecting, but may change when the extension or the browser is reinstalled. A stale one is never listed, so step 2 wakes the app; when the marker check then finds the preferred app behind a new `deviceId`, tell the user the saved one is stale and offer the new one.
+- **Never use:** apps not to act in, by the name the script prints, such as `Brave Browser`. One per nested bullet.
+- **Wake:** what wake may do to the preferred app, `window`, `launch` or `off`; **`window` is the default**:
+  - **`window`:** open a window in the app when it is running with none. Never launch it.
+  - **`launch`:** also launch the app, in the background, when it isn't running.
+  - **`off`:** nothing; stop and tell the user instead.
 - **Browser check:** the hook's setting, `deny`, `remind` or `off`, as above.
 
 For example:
@@ -95,8 +124,10 @@ For example:
 ```markdown
 - Preferred app: Google Chrome
 - Preferred window: Claude in Chrome
+- Preferred device id: 6f1c0b2e-…
 - Never use:
   - Brave Browser
+- Wake: launch
 ```
 
 With only a preferred app set, any window of it matches. With only apps to never use set, any other app matches.
@@ -112,7 +143,11 @@ With only a preferred app set, any window of it matches. With only apps to never
   - Vivaldi
   - Arc
 
-  It checks that an app is running before asking it, so it never launches one, and skips an app that doesn't answer. Google Chrome and Brave Browser are tested; the others may lack a window's given name or tab URLs.
+  It checks that an app is running before asking it, so it never launches one, except `wake --mode launch`, and skips an app that doesn't answer. Google Chrome and Brave Browser are tested; the others may lack a window's given name or tab URLs.
+
+- **Automation permission.** The script reaches each app through Apple Events, so the terminal, or the app running the agent, needs the Automation permission for it, under System Settings, Privacy & Security, Automation. Without it macOS asks once, or `wake` says the app didn't answer.
+- **No window, no extension.** Observed, not documented: when Google Chrome runs with no window, the extension's service worker disconnects, and the browser drops off `list_connected_browsers`. After a window opened, it came back within about 10 seconds, with the same `deviceId` as before.
+- **Browser profiles.** `wake` counts and opens windows across all of an app's profiles. If the extension's profile has no window but another profile has one, `wake` prints `already-open` and does nothing, and a window it opens may open in the profile the app last used rather than the extension's. Either way no new browser appears, and step 2.4 applies.
 
 - **No tab groups.** AppleScript can't see tab groups, so the match is by window. The extension keeps its tabs in a tab group; if that group opens in another window of the right app, the window won't match, and only the user can move it. Tell them.
 
@@ -120,6 +155,7 @@ With only a preferred app set, any window of it matches. With only apps to never
 
 - Before the first `mcp__claude-in-chrome__*` action of a session.
 - After any `select_browser` or `switch_browser`.
+- When `list_connected_browsers` shows only browsers that could be an app never to use, or fewer than before.
 - When the user asks which browser the session is using, or to write browser preferences.
 
 ## Your preferences
