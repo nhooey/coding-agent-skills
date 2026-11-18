@@ -84,7 +84,7 @@ Each list asks something different of you. Lists you only read need no reply; an
 | 🔑 Authorizations | grant it: answer the prompt or send the approval message; after typing a password in your own terminal, say so: `Authorizations.1 done` | the blocked work goes on; it stays under 📌 until granted or withdrawn |
 | 🔍 Review     | comment on it, or say you looked: `Review.1 looks right`        | it closes once your reply shows you reviewed it                         |
 | 👉 Todo       | do it, then say so: `Todo.1 done`                               | it closes, and the agent starts the work it freed                       |
-| 🧠 Decide  | the item and a letter: `Decide.1: A`, or short, `1. A, 2. Y` | the agent acts on your choice; a checkbox item takes several, `3. A, C` |
+| 🧠 Decide  | the item and a letter: `Decide.1: A`, or short, `1. A, 2. B` | the agent acts on your choice; a checkbox item takes several, `3. A, C` |
 
 For the example above, `Decide.1: A` settles the backport: the next turn cherry-picks `a1b2c3d` onto 2.x, and the item leaves 📌 for good. An item from an earlier turn takes that turn's id, from its usage line: `Decide.2 of 0f311c94: B`.
 

@@ -24,7 +24,7 @@ Both print their lists grouped by topic, as [the skill's commands](SKILL.md#the-
 
 ## `open`: the open items as they were written
 
-The items are reprinted with their wording and options unchanged, so the user can answer the items they were already shown; a Todo item keeps its path and what it frees. Grouping only moves them under their topics and renumbers them. `pending` and `restate` are other names for it.
+The items are reprinted with their wording and options unchanged, so the user can answer the items they were already shown; a Todo item keeps its path and what it frees. A Decide item with 👍 `Y` and 👎 `N` options is reprinted with them as 🔘 `A` and 🔘 `B`, in their order, its source naming the letter it was printed with, `(from 4a8683 2.Y)`. Grouping only moves them under their topics and renumbers them. `pending` and `restate` are other names for it.
 
 ## `reassess`: the open items, worked out afresh
 

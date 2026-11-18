@@ -33,7 +33,8 @@ Subcommands:
                              printed the 📌 header with its rule; a count line never resets the clock
   decide [--json]            every open Decide item with its options, one line each, or with `--json`
                              one object `{"items": [...]}`, each item its turn id, list, number,
-                             summary, kind (radio, checkbox or binary), reference and options (letter
+                             summary, kind (radio, checkbox, or binary for 👍 and 👎 options in
+                             earlier turns), reference and options (letter
                              and name), for a tool to read.
                              Open: raised since the latest `reassess` turn, its latest restatement only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing)
@@ -451,6 +452,8 @@ def render_due(turns: tuple[rt.Turn, ...], now: datetime) -> str:
 # --- open Decide items with their options --------------------------------------------------
 
 _DECIDE_ITEM = re.compile(r"^ {0,3}(\d+)[.)]\s+\*\*(.+?)\*\*", re.MULTILINE)
+# 👍 and 👎 are read so an open yes-or-no item an earlier turn printed with them stays open; lint_reply.py
+# reports them in a new reply, where a yes-or-no question is a 🔘 radio item lettered A and B.
 _DECIDE_OPTION = re.compile(r"^\s*(🔘|🔲|👍|👎)\s+([A-Z])\.\s+\*\*(.+?)\*\*", re.MULTILINE)
 _KIND_OF_GLYPH = {"🔘": "radio", "🔲": "checkbox", "👍": "binary", "👎": "binary"}
 # What follows an item's reference in an answer: its letters after a dot, `.B` or `.A,C`, a note or

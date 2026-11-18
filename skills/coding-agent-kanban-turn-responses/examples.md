@@ -4,7 +4,7 @@ _Worked examples of the [`coding-agent-kanban-turn-responses` skill](SKILL.md)'s
 
 ## A Decide list
 
-A checkbox item and a binary item. Each summary has its own line, ending in a hard line break, and each item is parted from the next by the separator line: the list's indent, one U+2800, and nothing else, directly under the item's last line. `scripts/lint_reply.py` finds no fault in it.
+A checkbox item, and a yes-or-no question as a radio item, its recommended answer first as `A`. Each summary has its own line, ending in a hard line break, and each item is parted from the next by the separator line: the list's indent, one U+2800, and nothing else, directly under the item's last line. `scripts/lint_reply.py` finds no fault in it.
 
 ```text
 🧠 **Decide:**  
@@ -20,12 +20,12 @@ A checkbox item and a binary item. Each summary has its own line, ending in a ha
    ⠀
 2. **Next decision, naming its subject?**  
    Its note.
-   👍 Y. **Name what yes does**: consequence.
-      ➕ What Y gains.
-      ➖ What Y costs or risks.
-   👎 N. **Name what no does**: consequence.
-      ➕ What N gains.
-      ➖ What N costs or risks.
+   🔘 A. **Name what yes does**: consequence.
+      ➕ What A gains.
+      ➖ What A costs or risks.
+   🔘 B. **Name what no does**: consequence.
+      ➕ What B gains.
+      ➖ What B costs or risks.
 ```
 
 ## Two lists in one response
@@ -92,10 +92,10 @@ A `reassess` with 7 open items in 2 topics of at least 3 items and 1 left over. 
       ➖ A bad merge reverts all 3.
    ⠀
 2. **Keep the old loader behind a flag for one release?**  
-   👍 Y. **Keep `--legacy-loader` for one release**: a fallback while the swap beds in.
+   🔘 A. **Keep `--legacy-loader` for one release**: a fallback while the swap beds in.
       ➕ A bad swap is undone by a flag, not a revert.
       ➖ 2 loaders to test until the flag goes.
-   👎 N. **Delete the old loader with the swap**: one code path.
+   🔘 B. **Delete the old loader with the swap**: one code path.
       ➕ Less code to test.
       ➖ A bad swap means a revert and a release.
 
