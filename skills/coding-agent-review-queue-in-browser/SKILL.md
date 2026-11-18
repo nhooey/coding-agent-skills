@@ -6,17 +6,16 @@ description: |
   report pushed, a pull request force-pushed or re-synced, an item settled
   or added. Brings the Claude in Chrome tab group to one end state after
   every change: the current review chunk's items and nothing else, each
-  at its latest version, in order with stacked pull requests side by side bottom first,
-  pull requests on their Overview, the first tab its window's active tab
-  without ever taking focus from the user, and the user told
-  with a sound and one notification, after a first one that lists the
+  at its latest version, in order with stacked pull requests side by side
+  bottom first, pull requests on their Overview, the first tab its
+  window's active tab without ever taking focus from the user, and the
+  user told with a sound and one notification, after one listing the
   steps about to happen. While it updates, the window sits on a new tab,
-  and each changed item's tab closes and reopens at its new version. The review queue is the kanban
-  replies' open Review and Todo items (pull requests to review or merge,
-  reports on GitHub, issue drafts to submit), and the bundled Babashka
-  program finds stacks, drops finished items, orders and chunks the rest,
-  and works out the tab actions. An unsubmitted form or draft is never
-  touched.
+  and each changed item's tab closes and reopens at its new version. The
+  review queue is the kanban replies' open Review and Todo items (pull
+  requests to review or merge, reports on GitHub, issue drafts to
+  submit), and a bundled Babashka program works out the tab actions. An
+  unsubmitted form or draft is never touched.
 ---
 
 # Review queue in the browser
