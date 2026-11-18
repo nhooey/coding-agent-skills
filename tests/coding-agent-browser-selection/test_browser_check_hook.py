@@ -139,6 +139,11 @@ class Choice(unittest.TestCase):
         for command in (
             "python3 scripts/which_browser.py --list",
             "python3 scripts/which_browser.py --list --urls",
+            "python3 scripts/which_browser.py wake --app 'Google Chrome' --mode launch",
+            "python3 \"${CLAUDE_SKILL_DIR}/scripts/which_browser.py\" wake --app 'Google Chrome'",
+            "python3 scripts/which_browser.py resolve --app '/Applications/Google Chrome.app'",
+            "python3 scripts/which_browser.py 'wake' --app 'Google Chrome'",
+            'python3 scripts/which_browser.py "resolve" --app x',
             "cat scripts/which_browser.py.orig",
             "ls",
         ):
