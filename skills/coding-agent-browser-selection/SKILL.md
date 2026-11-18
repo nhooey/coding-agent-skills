@@ -43,15 +43,15 @@ Do this before the first browser action of a session, and again after any `selec
    - or no app is set never to use.
 
    Of several safe browsers, take the `Preferred device id`, else the one `inUse`. Select it with `select_browser` if it isn't the one `inUse`, and go to step 3. When none is safe, or a `Preferred device id` is set but not listed, wake the preferred app:
-   1. Run the bundled script's `wake`:
+   1. Run the bundled script's `wake`, passing the `Preferred app` from your preferences as `--app` and the `Wake` setting as `--mode`, which defaults to `window`:
 
       ```bash
-      python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" wake
+      python3 "${CLAUDE_SKILL_DIR}/scripts/which_browser.py" wake --app 'Google Chrome' --mode window
       ```
 
-      It reads the same preferences files as this skill, the user's beside the skill's folder and then the project's under `$CLAUDE_PROJECT_DIR`, or the current directory, the project's keys winning; `--skill-dir` and `--project-dir` point it elsewhere. It wakes the `Preferred app` under the `Wake` setting, and `--app` and `--mode` override them. It refuses, with exit 2 and before asking any app anything, an app under `Never use`, matched by name, path or bundle id.
+      The script reads no preferences file, so it wakes whatever app it is given: never pass an app under `Never use`. When the `Preferred app` is one, comparing the name `which_browser.py resolve --app '<Preferred app>'` prints first, wake nothing and go to step 2.4. With no preferred app set, or `Wake: off`, go to step 2.4 too.
 
-      If the app is running with no window, it opens one through AppleScript. Under `launch`, it first launches the app in the background if it isn't running; under `window`, it never does. It acts on that app alone. It prints the app, the window's id and what it did, `opened`, `launched` or `already-open`, tab-separated, and exits 1, saying why, when it can't, or 2 with no app to wake. After `opened` or `launched` it waits 15 seconds before it returns, for the extension to connect; `--settle` changes the wait. With no preferred app set, or `Wake: off`, go to step 2.4.
+      If the app is running with no window, it opens one through AppleScript. Under `launch`, it first launches the app in the background if it isn't running; under `window`, it never does. It acts on that app alone. It prints the app, the window's id and what it did, `opened`, `launched` or `already-open`, tab-separated, and exits 1, saying why, when it can't, or 2 on bad usage, such as a missing `--app`. After `opened` or `launched` it waits 15 seconds before it returns, for the extension to connect; `--settle` changes the wait.
 
    2. Only when it printed `opened` or `launched`, call `list_connected_browsers` again. On exit 1 or `already-open`, wake changed nothing, so go to step 2.4.
    3. If exactly one browser is listed that wasn't before, select it with `select_browser`, and go to step 3 to check it with a marker. If none or several are new, go to step 2.4.
