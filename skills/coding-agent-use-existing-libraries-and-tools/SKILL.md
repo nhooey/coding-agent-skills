@@ -36,7 +36,9 @@ Judge a fit by the inputs the job will meet, not by the length of the call that 
 
 - **Writing custom code:** the commit message names each thing considered and why it didn't fit, one line each.
 - **Code that must use only the standard library,** such as a skill's Python scripts: call an external command-line tool on `PATH`, provided through Nix, rather than bundle a library or reimplement it.
-  The code checks the tool is on `PATH` before using it, such as with `shutil.which`, and fails with a message naming the missing tool.
+  The code checks the tool is on `PATH` before using it, with `command -v` or `shutil.which`, and fails with a message naming the missing tool.
+  In a Nix-built install, agent-skill-flake's `scriptInputs` puts the tools on `PATH` for each executable directly in `scripts/`: a shell script gets `PATH=…; export PATH` after its shebang, and any other executable is wrapped by `wrapProgram`.
+  So run a skill script by its path, never as `python3 path`.
 - **Tests:** these may use libraries through Nix, and run under the language's own test tool, such as pytest, bats or `cargo test`.
 - **A language the project has already chosen:** keep to it, and search within it rather than bring in a second language for one library.
 - **Briefs:** a subagent brief that asks for new logic tells the agent to run this search first and to report what it found at each step.
