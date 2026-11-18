@@ -1,6 +1,6 @@
 ---
 name: coding-agent-headless-in-checkout
-description: Run a prompt as a headless Claude Code session inside one git checkout, so it loads that checkout's CLAUDE.md, skills, settings, plugins and Nix dev shell as a session started there by hand would, and fan it out across many checkouts by running the bundled single-checkout script once per checkout, from xargs, a shell loop or parallel Bash calls. Each run works in a git worktree by default, starts a new session or continues the checkout's newest one as a fork, warning when that session may still be running, and reports how it ended as one JSON line and an exit status. Use when the user wants a job done in another repository's own context, or the same job done in several ("run this in all my repos", "do X across these projects", "use up my weekly limit on my recent repos"), instead of subagents, which all start in the parent session's directory with its skills.
+description: Load when a job should run inside another repository's own context, or the same job across several, as in "run this in all my repos", "do X across these projects" or "use up my weekly limit on my recent repos". Runs a headless Claude Code session per checkout, since subagents all start in this session's directory with its skills.
 ---
 
 # Headless sessions in other checkouts, and fanning them out

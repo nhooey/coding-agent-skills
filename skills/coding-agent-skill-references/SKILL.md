@@ -1,6 +1,6 @@
 ---
 name: coding-agent-skill-references
-description: Refer to another skill by its bare name, never a URL, owner or path, and list every skill a SKILL.md names in a closing Related skills section with its fixed intro; load a listed skill that applies without asking, and ask before installing a missing one. Keep a user's personal choices in a preferences file beside the installed skill, the project's overriding the user's, read by a "Your preferences" section copied from the bundled template. Relationships go in the body, not in custom frontmatter, and a skill states its rules as they stand, with their history in commit messages. A skill's Python scripts use only the standard library; its tests live in `tests/<skill>/`, run through Nix by each language's own tool. Use when writing or editing a SKILL.md that names another skill or reads a preferences file, when adding scripts or tests to a skill, when loading a skill whose Related skills section lists others, and when deciding whether a lesson about a skill belongs in the skill or in its preferences file.
+description: Load when writing or editing a SKILL.md that names another skill or reads a preferences file, when adding scripts or tests to a skill, when a loaded skill's Related skills section lists others, and when deciding whether a lesson goes in a skill or its preferences file. Covers bare-name references, the Related skills section, preferences files, and where a skill's scripts and tests go.
 tags: [skills, authoring]
 ---
 

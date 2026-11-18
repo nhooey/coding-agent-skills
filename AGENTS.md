@@ -36,3 +36,9 @@ Run `nix fmt` and `nix flake check` before committing: no CI runs them on push,
 so a formatting slip or a failing test is otherwise caught by nothing.
 Run `skills-dev mods check` too when a change touches `plugins/`, since
 `nix flake check` doesn't cover the mods.
+
+`skill-checks.toml` holds the settings that agent-skill-flake's `skill-layout`
+and `skill-description` checks read. The skills it lists under `trigger-first`
+open their descriptions on `Load ` and keep them within 500 characters. It
+also turns on `tests-name-skills`, so every folder directly under `tests/`
+names a skill.

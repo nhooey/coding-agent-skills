@@ -1,6 +1,6 @@
 ---
 name: coding-agent-kanban-turn-responses
-description: "Every response in a turn is kanban-shaped. A progress update between tool calls is one line whose state emoji show what is done, running and next. The final response is up to 8 underlined, numbered lists of what is new this turn, in a fixed order: Done, Pending, Logged, Waiting, Answers to the user's questions, Review (pull requests to merge among them, which a Done item points at rather than repeats), Todo and Decide, each numbered item's bold summary on its own line, then what earlier turns left open under 📌, in full on an interval and otherwise as one count line. Decide items and their capital-lettered options each read alone, with pros and cons; an answer that asks a question is answered in its item, restated, never taken as a choice; multi-line items are parted by a separator line; `scripts/lint_reply.py` checks the summaries, separators, options, header underlines and table placement. `open` (or `pending`, `restate`) reprints open items as written and `reassess` (or `recheck`, `regenerate`, `recalculate`) works them out afresh, both grouped under `═`-underlined topic headers with numbering running on across topics, any prefix naming one command alone working too, and `Expand <item>` reprints one item in depth. Load at the start of every turn, before the first response the user will read."
+description: "Load at the start of every turn, before the first response the user reads, and again after compaction. Shapes each progress update as one line and the final response as kanban status lists. Also for the commands `open`, `pending`, `restate`, `reassess`, `recheck`, `regenerate`, `recalculate` and `Expand <item>`."
 ---
 
 # Kanban turn responses
@@ -151,6 +151,7 @@ The 📌 roll-up and every other final response are not grouped. [examples.md](e
 ## When to apply
 
 Load this skill at the start of every turn, before the first response the user will read, and follow it for every response in the turn: each progress update and the final response.
+Load it again after the conversation is compacted, since a compacted turn may no longer hold its rules.
 
 ## Your preferences
 

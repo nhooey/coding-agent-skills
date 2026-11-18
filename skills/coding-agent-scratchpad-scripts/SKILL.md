@@ -1,6 +1,6 @@
 ---
 name: coding-agent-scratchpad-scripts
-description: Keep an agent's scratchpad free of cryptic throwaway scripts. Edit a file with the Edit or Write tool, never a generated script; run a one-off check inline in the Bash call, a heredoc to `python3 -` included, with no file written; never `source` a generated file; and keep only data in the scratchpad, each kept file named for what it holds. Anything run twice follows `shell-hygiene-commands-as-cli-tools`. Use before writing any file to a scratchpad or temporary directory, before writing a script to change a file, and before briefing a subagent that will run commands, as a main agent or a subagent.
+description: Load before writing any file to a scratchpad or temporary directory, before scripting a file edit, and before briefing a subagent that runs commands. Keeps throwaway scripts out of the scratchpad; anything run twice goes to `shell-hygiene-commands-as-cli-tools`.
 ---
 
 # Scratchpad scripts
@@ -38,6 +38,7 @@ Each Bash call starts a fresh shell, so a helper the agent wants again gets writ
 **Why:** a scratchpad script with a cryptic name can't be found, trusted or reused, so the next agent writes another. An edit made with the edit tool can be reviewed, and a data file named for what it holds can be found.
 
 **How to apply:** before writing a file anywhere but the project's own source, ask what it is. An edit goes through the Edit or Write tool. A check you'll run once goes inline. Anything you'll run again goes under rule 3. Data you keep gets a name saying what it holds. When briefing a subagent, pass these rules on, the `source` rule included.
+The rules hold for a main agent and a subagent alike.
 
 ## The hook
 

@@ -1,6 +1,6 @@
 ---
 name: coding-agent-plans-as-graph
-description: Keep a project's plans as a graph of Markdown nodes in `agents/plans/`, one node per file, open ones in `open/` and finished ones in `closed/`, a plan of several nodes in a folder of its own, with a generated README showing what's in progress, ready, blocked and proposed. Each node has a state (proposed, approved, in-progress; implemented, rejected, abandoned, superseded), a kind (end state, implementation, schedule) and typed links (`part-of`, `needs`, `after`, `superseded-by`), and its body can be as long as it needs. Plans say what will be true, separately from how to get there and from when and by which agents, with costs in tokens, dollars and weekly-limit percent. The research and audits a plan rests on are dated reports in `agents/reports/`, each current or superseded. The bundled `plans.py` checks the graph, lists ready nodes and writes the overview. Use when writing, updating or reviewing a plan, starting work from one, closing a node, scheduling agents across plan nodes, or tidying plans left in `.claude/plans/` or elsewhere.
+description: Load when writing, updating, reviewing or closing a plan, starting work from one, scheduling agents across plan nodes, writing a report a plan rests on, or tidying plans left in `.claude/plans/` or elsewhere. Keeps plans as a graph of Markdown nodes in `agents/plans/`, checked by the bundled `plans.py`.
 ---
 
 # Plans as a graph of Markdown nodes
@@ -150,6 +150,7 @@ The keys this skill reads, with its own defaults:
 - Writing, updating or reviewing a plan, or turning a request into one.
 - Starting work from a plan, or finishing a node.
 - Scheduling agents across plan nodes, or estimating what a schedule costs.
+- Writing a report, the research or audit a plan rests on, in `agents/reports/`.
 - Finding plans in `.claude/plans/`, `docs/plans/` or another folder.
 
 ## Related skills
