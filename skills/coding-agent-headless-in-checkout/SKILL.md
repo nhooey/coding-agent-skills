@@ -124,7 +124,7 @@ A finished job leaves its worktrees and `headless/<job>` branches. Remove each b
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-headless-in-checkout.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-headless-in-checkout.preferences.md" 2>/dev/null || true`
+!`cat "$(dirname "${CLAUDE_SKILL_DIR}")/coding-agent-headless-in-checkout.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-headless-in-checkout.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-headless-in-checkout.preferences.md` next to this skill's folder, then

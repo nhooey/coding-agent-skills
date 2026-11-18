@@ -49,7 +49,7 @@ Each Bash call starts a fresh shell, so a helper the agent wants again gets writ
 
 ## Your preferences
 
-!`cat "${CLAUDE_SKILL_DIR}/../coding-agent-scratchpad-scripts.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-scratchpad-scripts.preferences.md" 2>/dev/null || true`
+!`cat "$(dirname "${CLAUDE_SKILL_DIR}")/coding-agent-scratchpad-scripts.preferences.md" "${CLAUDE_PROJECT_DIR}/.agents/skills/coding-agent-scratchpad-scripts.preferences.md" 2>/dev/null || true`
 
 If your agent doesn't run the line above, read these files yourself if they
 exist: `coding-agent-scratchpad-scripts.preferences.md` next to this skill's folder, then
