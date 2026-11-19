@@ -21,7 +21,7 @@ Bash) [[ "$input" == *which_browser.py* ]] || exit 0 ;;
 # in step with PAGE_ACTING and SWITCHING in browser_check_hook.py.
 mcp__claude-in-chrome__navigate | mcp__claude-in-chrome__computer | mcp__claude-in-chrome__form_input) ;;
 mcp__claude-in-chrome__javascript_tool | mcp__claude-in-chrome__file_upload) ;;
-mcp__claude-in-chrome__tabs_create_mcp) ;;
+mcp__claude-in-chrome__tabs_create_mcp | mcp__claude-in-chrome__browser_batch) ;;
 mcp__claude-in-chrome__select_browser | mcp__claude-in-chrome__switch_browser) ;;
 *) exit 0 ;;
 esac

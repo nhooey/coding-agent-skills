@@ -18,7 +18,7 @@ The one reader of turns and their reply sections.
 | `list [-n N] [--grep TEXT]`                | one line per turn, newest last: id, timestamp, the prompt's first line            |
 | `show ID [--prompt-only] [--section NAME]` | the turn's prompt and reply, or one section from every reply text                 |
 | `decide [--since ID]`                      | each turn's Decide section, from turn ID inclusive; `decisions` and `blocked` too |
-| `open [--since ID]`                        | each turn's Review, Todo and Decide sections, under the turn id                   |
+| `open [--since ID]`                        | each turn's Authorizations, Review, Todo and Decide sections, under the turn id   |
 
 The global `--human-only` flag counts a typed prompt alone as a turn, folding agent reports and task notifications into the turn under way.
 
@@ -26,7 +26,7 @@ It runs from any directory: the transcript is looked up under the working direct
 
 ## The `outstanding.py` script
 
-[`outstanding.py`](scripts/outstanding.py), in this skill's `scripts/` directory, works out what the 📌 roll-up needs. It reads the Pending, Waiting, Review, Todo and Decide lists of every reply, the 📌 section's groups among them, through `reply_turns.py`.
+[`outstanding.py`](scripts/outstanding.py), in this skill's `scripts/` directory, works out what the 📌 roll-up needs. It reads the Pending, Waiting, Authorizations, Review, Todo and Decide lists of every reply, the 📌 section's groups among them, through `reply_turns.py`.
 
 | Subcommand                                              | Prints                                                                                                                                           |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -53,7 +53,7 @@ It runs from any directory: the transcript is looked up under the working direct
 
 The key reads the summary alone, the bold text before its colon. Different items in one list that name the same branch or entry, or open on the same 3 words, merge in the draft, and the session splits them when it prunes.
 
-**What `decide` counts as open.** A numbered item of a reply's own Decide list that carries at least one option line, read since the latest `reassess` turn, at its latest restatement by subject key, and answered by no later prompt or by no message the user sent while a later turn ran. An answer, on a line holding no question mark, is an option letter after the item's reference, `9efb08a1.Decide.2.B` with or without a note after it, `…Decide.2.B: <note>`, a turn-id prefix of 6 or more characters as good as the whole, `Decide.2: B,C of 9efb08a1`, or, in the prompt right after the reply, `Decide.2.B` or a line `2. B`; or words after a colon, `9efb08a1.Decide.2: <words>`. Letters after a colon or a space count as letters only where they end the line or another reference follows, so `Decide.2: A red one` is an answer in words, not option A. Each JSON item holds `turn`, `list` (`Decide`), `number`, `summary`, `kind` (`radio`, `checkbox` or `binary`, from the option glyphs), `ref` (`<turn>.Decide.<n>`) and `options`, each `{letter, name}`.
+**What `decide` counts as open.** A numbered item of a reply's own Decide list that carries at least one option line, read since the latest `reassess` turn, at its latest restatement by subject key, and answered by no later prompt or by no message the user sent while a later turn ran. An answer, on a line holding no question mark, is an option letter after the item's reference, `9efb08a1.Decide.2.B` with or without a note after it, `…Decide.2.B: <note>`, a turn-id prefix of 6 or more characters as good as the whole, `Decide.2: B,C of 9efb08a1`, or, in the prompt right after the reply, `Decide.2.B` or a line `2. B`; or words after a colon, `9efb08a1.Decide.2: <words>`. Letters after a colon or a space count as letters only where they end the line or another reference follows, so `Decide.2: A red one` is an answer in words, not option A. Each JSON item holds `turn`, `list` (`Decide`), `number`, `summary`, `kind` (`radio` or `checkbox`, from the option glyphs, or `binary` for an item with 👍 and 👎 options, which `lint_reply.py` reports but earlier turns may hold), `ref` (`<turn>.Decide.<n>`), `note` (the lines under its summary) and `options`, each `{letter, name, glyph, consequence, pros, cons, notes}`.
 
 ## The `lint_reply.py` script
 
@@ -78,6 +78,7 @@ python3 -I ~/.claude/skills/coding-agent-kanban-turn-responses/scripts/lint_repl
 | `k`  | a table indented under a list item, which prints as raw pipe rows instead of a drawn table                                       |
 | `l`  | a table with no blank line above it, or a line directly under its last row, drawn as one more row                                |
 | `m`  | a list under a topic header that does not number on from where the same list ended in the topics before                          |
+| `n`  | a Decide option with a 👍 or 👎 glyph, or lettered `Y` or `N`; a yes-or-no question is a 🔘 radio item with `A` and `B`          |
 
 A list is a run of `-`, `*`, `+`, `1.` or `1)` items at one indent, the 📌 roll-up's groups and an item's own steps among them, and may start above 1 under a topic header. A blank line ends it; a header or a line of prose left of its items' text, written with no blank line before it, is a `j`.
 

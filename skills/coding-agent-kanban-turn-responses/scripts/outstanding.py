@@ -9,7 +9,7 @@ reads transcripts through `reply_turns.py` (imported, not copied).
 The relative index counts the turns `reply_turns.py list` prints, which are every turn the user sees a usage
 line for, an agent message (`<agent-message`) or a task notification included: the current turn is
 0 (`₀`), the one before it -1 (`₋₁`), and so on. Items are the top-level bullet or numbered lines of
-the Pending, Waiting, Review, Todo and Decide lists of every reply (or their aliases in older replies: Unfinished or
+the Pending, Waiting, Authorizations, Review, Todo and Decide lists of every reply (or their aliases in older replies: Unfinished or
 Open, To review, To do, Decisions or Blocked), and of the 📌 section's subsections ("Still open from earlier" or
 "Outstanding from previous turns"), which carry the same list headers. An item's summary is its bold text without a trailing colon, else the line. A summary
 alone on its line is joined to the line beneath it, its body.
@@ -33,8 +33,9 @@ Subcommands:
                              printed the 📌 header with its rule; a count line never resets the clock
   decide [--json]            every open Decide item with its options, one line each, or with `--json`
                              one object `{"items": [...]}`, each item its turn id, list, number,
-                             summary, kind (radio, checkbox or binary), reference and options (letter
-                             and name), for a tool to read.
+                             summary, kind (radio, checkbox, or binary for 👍 and 👎 options in
+                             earlier turns), reference, note and options (letter, name, glyph,
+                             consequence, pros, cons and notes), for a tool to read.
                              Open: raised since the latest `reassess` turn, its latest restatement only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing)
 A `reassess` turn is one whose prompt opens on `reassess`, `recheck`, `regenerate` or `recalculate`, or a
@@ -69,6 +70,7 @@ import reply_turns as rt  # noqa: E402
 LISTS = {
     "pending": (("Pending", "Unfinished", "Open"), "🚧", "Pending"),
     "waiting": (("Waiting",), "⏳", "Waiting"),
+    "authorizations": (("Authorizations",), "🔑", "Authorizations"),
     "review": (("Review", "To review"), "🔍", "Review"),
     "todo": (("Todo", "To do"), "👉", "Todo"),
     "decide": (("Decide", "Decisions", "Blocked"), "🧠", "Decide"),
@@ -450,6 +452,8 @@ def render_due(turns: tuple[rt.Turn, ...], now: datetime) -> str:
 # --- open Decide items with their options --------------------------------------------------
 
 _DECIDE_ITEM = re.compile(r"^ {0,3}(\d+)[.)]\s+\*\*(.+?)\*\*", re.MULTILINE)
+# 👍 and 👎 are read so an open yes-or-no item an earlier turn printed with them stays open; lint_reply.py
+# reports them in a new reply, where a yes-or-no question is a 🔘 radio item lettered A and B.
 _DECIDE_OPTION = re.compile(r"^\s*(🔘|🔲|👍|👎)\s+([A-Z])\.\s+\*\*(.+?)\*\*", re.MULTILINE)
 _KIND_OF_GLYPH = {"🔘": "radio", "🔲": "checkbox", "👍": "binary", "👎": "binary"}
 # What follows an item's reference in an answer: its letters after a dot, `.B` or `.A,C`, a note or
@@ -467,8 +471,13 @@ _AFTER_REF = (
 _ANSWER_WITH_ID = re.compile(rf"\b([0-9a-f]{{6,8}})\.Decide\.(\d+){_AFTER_REF}")
 _ANSWER_ID_AFTER = re.compile(rf"\bDecide\.(\d+)(?:\.|:\s*|\s+){_LETTERS}\s+(?:of|from)\s+([0-9a-f]{{6,8}})\b")
 # An answer to the last final response, naming no turn: `Decide.2.B`, `Decide.2: B`, `Decide.2: <words>`,
-# or `2. B` opening a line.
-_ANSWER_BARE = re.compile(rf"(?<![0-9a-f]\.)\bDecide\.(\d+){_AFTER_REF}(?!\s+(?:of|from)\s)")
+# or `2. B` opening a line. Whatever `_ANSWER_ID_AFTER` matches is turned away first, so `Decide.2: B,C of
+# 9efb08a1` can't also pass as words after the colon, or as `.A` stopping partway through `.A, C from 9efb08a1`.
+_ANSWER_BARE = re.compile(
+    rf"(?<![0-9a-f]\.)\bDecide\.(\d+)"
+    rf"(?!(?:\.|:\s*|\s+){_LETTERS}\s+(?:of|from)\s+[0-9a-f]{{6,8}}\b)"
+    rf"{_AFTER_REF}(?!\s+(?:of|from)\s)"
+)
 _ANSWER_NUMBER = re.compile(r"^\s*(\d+)[.:]\s*[A-Z](?:\s*,\s*[A-Z])*\s*$")
 
 
@@ -649,7 +658,7 @@ def parser() -> argparse.ArgumentParser:
     def common(sp: argparse.ArgumentParser, pattern: bool = False) -> None:
         sp.add_argument("pattern", metavar="PATTERN") if pattern else None
         sp.add_argument("--since", metavar="ID", help="start at this turn, inclusive")
-        sp.add_argument("--lists", default=",".join(LISTS), help="comma list of pending,waiting,review,todo,decide")
+        sp.add_argument("--lists", default=",".join(LISTS), help="comma list of pending,waiting,authorizations,review,todo,decide")
         sp.add_argument("--latest", action="store_true", help="keep each summary's latest occurrence only")
         sp.add_argument("--width", type=int, default=_DEFAULT_WIDTH, help="cut summaries to this width")
 

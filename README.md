@@ -2,32 +2,30 @@
 
 A marketplace of coding-agent skills, packaged as a Nix flake.
 
-Each skill is a self-contained directory under [`skills/`](skills/) with a
-`SKILL.md` (frontmatter + instructions) that an agent loads on demand. The flake
-builds every skill into an installable package and exposes apps that reconcile
-an agent's skill directory to exactly the set this flake declares. Skills are
-built by [`agent-skill-flake`](https://github.com/nhooey/agent-skill-flake),
-which turns skill directories into flakes and aggregates them.
+Each skill is a self-contained directory under [`skills/`](skills/) with a `SKILL.md` (frontmatter + instructions) that an agent loads on demand.
+The flake builds every skill into an installable package and exposes apps that reconcile an agent's skill directory to exactly the set this flake declares.
+Skills are built by [`agent-skill-flake`](https://github.com/nhooey/agent-skill-flake), which turns skill directories into flakes and aggregates them.
 
-These skills shape _how a coding agent works_ — workflow habits, prompt
-ergonomics, and where lessons get stored — rather than what it builds. Skills
-for the shape of an agent's output in isolation, such as a session recap, live
-in agent-output-skills.
+These skills shape _how a coding agent works_ — workflow habits, prompt ergonomics, and where lessons get stored — rather than what it builds.
+Skills for the shape of an agent's output in isolation, such as a session recap, live in agent-output-skills.
 
 ## Skills
 
 | Skill                                                                                                                    | What it does                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)                                       | Before any Claude in Chrome work, finds which browser app and window the session drives, with a bundled macOS script, and switches until it matches the user's preferences, waking the preferred app when it has no window before any tab is made.            |
+| [`coding-agent-draft-in-browser`](skills/coding-agent-draft-in-browser/SKILL.md)                                         | Drafts anything addressed to other people (an issue, comment, email, chat message or forum post) in the browser it will be sent from, filled in and left unsent for the user to read, edit and send.                                                          |
 | [`coding-agent-headless-in-checkout`](skills/coding-agent-headless-in-checkout/SKILL.md)                                 | Runs a prompt as a headless Claude Code session inside one git checkout, with its own skills and Nix environment, in a worktree, in a new session or a fork of the checkout's last one, and reports how it ended; a caller fans it out across many checkouts. |
 | [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)                                             | Keeps plans as a graph of Markdown nodes in `agents/plans/open/` and `closed/`, with states, typed links and a generated overview of what's in progress, ready, blocked and proposed.                                                                         |
-| [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Pending/Waiting/Answers/Review/Todo/Decide lists closing on what earlier turns left open.                                             |
+| [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)                               | Shapes every response as kanban lists: one-line emoji progress updates between tool calls, and a final response of Done/Pending/Waiting/Answers/Authorizations/Review/Todo/Decide lists closing on what earlier turns left open.                              |
 | [`coding-agent-questions-as-first-class-prompts`](skills/coding-agent-questions-as-first-class-prompts/SKILL.md)         | Routes any question for the user through the agent's structured-question primitive (e.g. `AskUserQuestion`) instead of free-text prose that waits for a reply.                                                                                                |
+| [`coding-agent-readable-tool-calls`](skills/coding-agent-readable-tool-calls/SKILL.md)                                   | Keeps each tool call easy to read in the terminal: short relative paths, a description saying what it does and why, and quiet commands trimmed by the tool's own options; a command needed again becomes a tool.                                              |
 | [`coding-agent-review-queue-in-browser`](skills/coding-agent-review-queue-in-browser/SKILL.md)                           | Walks the user through what waits on them one chunk of browser tabs at a time, bringing the tab group to one end state after every change, with a bundled program that orders and chunks the queue and works out the tab actions.                             |
-| [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson into the right existing skill with draft wording, falling back to memory only if no skill fits.                                                                                                |
+| [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md) | When the user teaches the agent how to work, routes the lesson to the layer that owns it: a drafted skill or preferences edit, or a plan node for a hook, tool or config.                                                                                     |
 | [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)                                     | Keeps edits in the Edit and Write tools, one-off checks inline and only named data in the scratchpad; anything run twice goes to `shell-hygiene-commands-as-cli-tools`.                                                                                       |
 | [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)                                 | A SessionStart hook that gives every Claude Code session a fixed share of the machine for make, cargo, Rust tests, pytest-xdist and the JVM, leaving variables the user already set alone.                                                                    |
 | [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md)                                         | How a skill names other skills (bare names, a closing Related skills section) and reads its preferences files; its Python scripts use the stdlib, its tests sit in `tests/<skill>/`, run through Nix.                                                         |
+| [`coding-agent-subagent-delegation`](skills/coding-agent-subagent-delegation/SKILL.md)                                   | Keeps the conversation, decisions and approvals in the main session and delegates nearly all other work to subagents and forks, each brief opening on fixed sentences about blocked commands, under one coordinator for a multi-agent effort.                 |
 | [`coding-agent-use-existing-libraries-and-tools`](skills/coding-agent-use-existing-libraries-and-tools/SKILL.md)         | Before writing new logic, uses the built-ins of the tool already in use, a nixpkgs application or a library through Nix, and writes custom code only when none fits.                                                                                          |
 | [`coding-agent-vpn-blocked-domains`](skills/coding-agent-vpn-blocked-domains/SKILL.md)                                   | When a domain blocks a request, checks whether it went through the VPN and suggests excluding the domain from it, or connecting it if it was off.                                                                                                             |
 
@@ -49,88 +47,72 @@ nix run github:nhooey/coding-agent-skills#reconcile
 nix run github:nhooey/coding-agent-skills#uninstall
 ```
 
-Other apps: `reap` (remove garbage-collected/broken entries this flake owns) and
-`purge` (remove every entry this flake's lineage owns, live or broken).
+Other apps: `reap` (remove garbage-collected/broken entries this flake owns) and `purge` (remove every entry this flake's lineage owns, live or broken).
 
 Package outputs:
 
 - `agent-skills-nhooey-coding-agent-all` — the aggregate of every skill (also `default`)
 - `agent-skill-nhooey-coding-agent-browser-selection`
+- `agent-skill-nhooey-coding-agent-draft-in-browser`
 - `agent-skill-nhooey-coding-agent-headless-in-checkout`
 - `agent-skill-nhooey-coding-agent-plans-as-graph`
 - `agent-skill-nhooey-coding-agent-kanban-turn-responses`
 - `agent-skill-nhooey-coding-agent-questions-as-first-class-prompts`
+- `agent-skill-nhooey-coding-agent-readable-tool-calls`
 - `agent-skill-nhooey-coding-agent-review-queue-in-browser`
 - `agent-skill-nhooey-coding-agent-route-feedback-to-skills-over-memory`
 - `agent-skill-nhooey-coding-agent-scratchpad-scripts`
 - `agent-skill-nhooey-coding-agent-session-build-limits`
 - `agent-skill-nhooey-coding-agent-skill-references`
+- `agent-skill-nhooey-coding-agent-subagent-delegation`
 - `agent-skill-nhooey-coding-agent-use-existing-libraries-and-tools`
 - `agent-skill-nhooey-coding-agent-vpn-blocked-domains`
 - `hooks-plugin` — the hooks plugin, below
 
 ## Hooks plugin
 
-A skill whose rule a script can decide in every session ships its hook in
-`coding-agent-skills-hooks`, this repository's one hooks-only Claude Code
-plugin. A plugin hook runs in every session and subagent, whether or not the
-skill is loaded; the skill itself still installs through the packages above.
+A skill whose rule a script can decide in every session ships its hook in `coding-agent-skills-hooks`, this repository's one hooks-only Claude Code plugin.
+A plugin hook runs in every session and subagent, whether or not the skill is loaded; the skill itself still installs through the packages above.
 
 - **What's in it:**
-  - the SessionStart hook `session-build-limits.sh`, from
-    [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)
-  - the PreToolUse (`Bash|Write|Edit`) and SubagentStart hook
-    `scratchpad-guard.sh`, with its helper `scratchpad_guard.py`, from
-    [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md)
-  - the PostToolUse (`Write|Edit`) hook `plans-check-hook.sh`, with its
-    helpers `plans_check_hook.py` and `plans.py`, from
-    [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)
-  - the PreToolUse (`Write|Edit`) hook `memory-write-reminder.sh`, with its
-    helper `memory_write_reminder.py`, from
-    [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md)
-  - the PreToolUse (`mcp__claude-in-chrome__.*`) and PostToolUse (`Bash`,
-    `select_browser`, `switch_browser`) hook `browser-check-hook.sh`, with its
-    helper `browser_check_hook.py`, from
-    [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)
-- **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and
-  `hooks/hooks.json`. It isn't the repository root, so the plugin doesn't load
-  `skills/` a second time under a namespaced name.
-- **The package:** `nix build .#hooks-plugin` copies `plugin/` and adds each
-  hook script from its skill's `scripts/` to the plugin's `scripts/`. It is
-  built by [`nix/hooks-plugin.nix`](nix/hooks-plugin.nix), the same derivation
-  as agent-plugins-nixpkgs' `mkClaudePlugin`, built here because
-  agent-plugins-nixpkgs takes this flake as an input.
-- **Adding a hook:** keep the script in `skills/<skill>/scripts/`, where the
-  skill documents it, and its tests in `tests/<skill>/`, where
-  `skills-dev test <skill>` and `nix flake check` run them; list the script in
-  `hookScripts` in [`flake.nix`](flake.nix); and add it to `hooks/hooks.json`
-  as `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, since a store file has no
-  executable bit to rely on. Keep it under about 50 ms, exiting at once when it
-  has nothing to do.
-- **A setting for blocking hooks:** a hook that can deny or block reads a
-  setting that turns it down to a reminder or off, since a plugin enabled in
-  managed settings can't be disabled in a session. The setting lives in the
-  skill's preferences file, as
-  [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md)
-  describes: `.agents/skills/<skill>.preferences.md` in the project
-  (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
+  - the SessionStart hook `session-build-limits.sh`, from [`coding-agent-session-build-limits`](skills/coding-agent-session-build-limits/SKILL.md)
+  - the PreToolUse (`Bash|Write|Edit`) and SubagentStart hook `scratchpad-guard.sh`, with its helper `scratchpad_guard.py`, from [`coding-agent-scratchpad-scripts`](skills/coding-agent-scratchpad-scripts/SKILL.md); its SubagentStart message also carries two rules of [`coding-agent-readable-tool-calls`](skills/coding-agent-readable-tool-calls/SKILL.md)
+  - the PostToolUse (`Write|Edit`) hook `plans-check-hook.sh`, with its helpers `plans_check_hook.py` and `plans.py`, from [`coding-agent-plans-as-graph`](skills/coding-agent-plans-as-graph/SKILL.md)
+  - the PreToolUse (`Write|Edit`) hook `memory-write-reminder.sh`, with its helper `memory_write_reminder.py`, from [`coding-agent-route-feedback-to-skills-over-memory`](skills/coding-agent-route-feedback-to-skills-over-memory/SKILL.md)
+  - the PreToolUse (`mcp__claude-in-chrome__.*`) and PostToolUse (`Bash`, `select_browser`, `switch_browser`) hook `browser-check-hook.sh`, with its helper `browser_check_hook.py`, from [`coding-agent-browser-selection`](skills/coding-agent-browser-selection/SKILL.md)
+  - the Stop hook `reply-lint-hook.sh`, with its helpers `reply_lint_hook.py`, `lint_reply.py` and `reply_turns.py`, from [`coding-agent-kanban-turn-responses`](skills/coding-agent-kanban-turn-responses/SKILL.md)
+- **Layout:** [`plugin/`](plugin/) holds `.claude-plugin/plugin.json` and `hooks/hooks.json`.
+  It isn't the repository root, so the plugin doesn't load `skills/` a second time under a namespaced name.
+- **The package:** `nix build .#hooks-plugin` copies `plugin/` and adds each hook script from its skill's `scripts/` to the plugin's `scripts/`.
+  It is built by [`nix/hooks-plugin.nix`](nix/hooks-plugin.nix), the same derivation as agent-plugins-nixpkgs' `mkClaudePlugin`, built here because agent-plugins-nixpkgs takes this flake as an input.
+- **Adding a hook:** keep the script in `skills/<skill>/scripts/`, where the skill documents it, and its tests in `tests/<skill>/`, where `skills-dev test <skill>` and `nix flake check` run them; list the script in `hookScripts` in [`flake.nix`](flake.nix); and add it to `hooks/hooks.json` as `bash "${CLAUDE_PLUGIN_ROOT}/scripts/<name>"`, since a store file has no executable bit to rely on.
+  Keep it under about 50 ms, exiting at once when it has nothing to do.
+- **A tool a hook runs:** name its package under the script's name in `scriptInputs` in [`flake.nix`](flake.nix).
+  The plugin's copy of the script puts it on PATH on its second line, and the dev shell and the tests have it too.
+  `plans-check-hook.sh` gets `yq`, which `plans.py` reads frontmatter with.
+- **A setting for blocking hooks:** a hook that can deny or block reads a setting that turns it down to a reminder or off, since a plugin enabled in managed settings can't be disabled in a session.
+  The setting lives in the skill's preferences file, as [`coding-agent-skill-references`](skills/coding-agent-skill-references/SKILL.md) describes: `.agents/skills/<skill>.preferences.md` in the project (`$CLAUDE_PROJECT_DIR`), overriding `~/.agents/skills/<skill>.preferences.md`.
   The skill documents the setting's line.
-  `session-build-limits.sh` only adds to the environment and
-  `memory-write-reminder.sh` only adds context, so they have none;
-  `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, and is
-  at `remind` unless set.
-- **Checks:** `nix flake check` runs each hook script's tests and
-  `checks.hooks-plugin`, which builds the plugin and runs
-  [`check_hooks_plugin.py`](scripts/check_hooks_plugin.py): every hook is a
-  command hook running one of the plugin's scripts through `bash`, every
-  script is run by a hook or named by one as its helper and parses, and the
-  manifest has a name and version.
-  `claude plugin validate` on the built plugin checks it as Claude Code reads
-  it.
-- **Installing it:** agent-plugins-nixpkgs passes `hooks-plugin` through, and a
-  nix-darwin configuration adds it to `services.agent-plugins.plugins`, which
-  enables it in managed settings. To try it in one session, pass the store path
-  to `claude --plugin-dir`.
+  `session-build-limits.sh` only adds to the environment and `memory-write-reminder.sh` only adds context, so they have none; `scratchpad-guard.sh` reads `Scratchpad guard: deny | remind | off`, `browser-check-hook.sh` reads `Browser check: deny | remind | off` and `reply-lint-hook.sh` reads `Reply lint: block | remind | off`; each is at `remind` unless set.
+- **The browser check hook:** `browser-check-hook.sh` catches, once, a session's first Claude in Chrome call that acts on a page (`navigate`, `computer`, `form_input`, `javascript_tool`, `file_upload`, `tabs_create_mcp`) before `which_browser.py` has run with a marker, or after `select_browser` or `switch_browser`.
+  The finding tools, `list_connected_browsers`, `tabs_context_mcp`, `select_browser` and `switch_browser`, always pass, and a check is good for an hour.
+  A run of `which_browser.py` with `--list`, `resolve` or `wake` isn't a check.
+  By setting:
+  - `remind`: the call runs, and the session is told to load `coding-agent-browser-selection` and check the browser before acting further.
+  - `deny`: the call is denied with that as the reason.
+    The second attempt passes, so a session that can't run the script isn't locked out.
+  - `off`: nothing.
+- **Checks:** `nix flake check` runs each hook script's tests and `checks.hooks-plugin`, which builds the plugin and runs [`check-hooks-plugin.sh`](nix/hooks-plugin-check/check-hooks-plugin.sh) on it.
+  `claude plugin validate` on the built plugin checks it as Claude Code reads it.
+  `check-hooks-plugin.sh` enforces each rule with an existing tool:
+  - check-jsonschema, against [`plugin.schema.json`](nix/hooks-plugin-check/plugin.schema.json) and [`hooks.schema.json`](nix/hooks-plugin-check/hooks.schema.json): the manifest has a name and version, and every hook is a command hook running one of the plugin's scripts through `bash`
+  - `bash -n`: every script a hook runs is there and parses
+  - shfmt's syntax tree: every Python helper a hook script names, outside its comments, is there
+  - ruff's `PLC0415`: every import in the plugin's Python is at the top of its module
+  - `python3 -E -s -S`: importing each `.py` compiles it and finds every module it imports, in the standard library or beside it, since the hooks run Python with `-I -S`
+  - `python3 -X importtime`: every script is a hook, a helper a hook names, or a module such a helper imports
+- **Installing it:** agent-plugins-nixpkgs passes `hooks-plugin` through, and a nix-darwin configuration adds it to `services.agent-plugins.plugins`, which enables it in managed settings.
+  To try it in one session, pass the store path to `claude --plugin-dir`.
 
 ## Development
 
@@ -140,33 +122,22 @@ nix fmt          # nixfmt over *.nix, prettier over *.md / *.yaml
 nix flake check  # the treefmt check, the hooks plugin's build check and every test
 ```
 
-The dev shell provides `check`, `fmt`, and `update-flake` commands plus
-`reap-skills` / `update-skills-devshell`, and this repository's own tool,
-`skills-dev`: `skills-dev test` runs every test outside the sandbox, the same
-set as `nix flake check`'s `python-tests` and `shell-tests` checks: pytest over
-the Python tests under [`tests/`](tests/) and [`scripts/`](scripts/), and bash
-over the shell tests. `skills-dev test python` or `skills-dev test shell` runs
-one language's, and `skills-dev test <skill> ...` the named skills' tests under
-`tests/`. `skills-dev mods check` validates, type-checks and
-tests the Claude Code mods under [`plugins/`](plugins/), and `skills-dev mods
-try` starts Claude Code with one mod loaded. `mods check` runs outside
-`nix flake check` because it needs `claude` itself and the API types its
-running build writes. The dev shell's own toolchain skills (the git, shell and
-Python packs, a few coding-agent skills, and skillspkgs' `authoring`
-combination) live in the runtime [`skills-devshell/`](skills-devshell/)
-sub-flake and are invoked at run time, so the root flake stays a leaf with zero
-skill inputs in its lock.
+The dev shell provides `check`, `fmt`, and `update-flake` commands plus `reap-skills` / `update-skills-devshell`, and this repository's own tool, `skills-dev`: `skills-dev test` runs every test outside the sandbox, the same set as `nix flake check`'s `python-tests` and `shell-tests` checks: pytest over the Python tests under [`tests/`](tests/) and [`scripts/`](scripts/), and bash over the shell tests.
+`skills-dev test python` or `skills-dev test shell` runs one language's, and `skills-dev test <skill> ...` the named skills' tests under `tests/`.
+`skills-dev mods check` validates, type-checks and tests the Claude Code mods under [`plugins/`](plugins/), and `skills-dev mods try` starts Claude Code with one mod loaded.
+`mods check` runs outside `nix flake check` because it needs `claude` itself and the API types its running build writes.
+The dev shell's own skills (skillspkgs' `skill-collections` combination, with no additions) live in the runtime [`skills-devshell/`](skills-devshell/) sub-flake and are invoked at run time, so the root flake stays a leaf with zero skill inputs in its lock.
 
 ## Layout
 
 ```
 skills/                  one directory per skill (SKILL.md + per-skill flake.nix)
-tests/                   each skill's tests in tests/<skill>/, and the layout test
+tests/                   each skill's tests in tests/<skill>/
 skills-devshell/         runtime sub-flake supplying the dev shell's own skills
-scripts/                 `skills-dev mods`, the hooks plugin's checker, and their tests
+scripts/                 `skills-dev mods` and its tests
 plugins/                 Claude Code mods, checked by `skills-dev mods check`
 plugin/                  the hooks plugin's manifest and hooks.json; scripts come from skills/
-nix/                     the hooks plugin's builder
+nix/                     the hooks plugin's builder and its check
 agents/plans/            the project's plans, as a graph of Markdown nodes
 source.nix               the upstream owner, shared by the root and every skill flake
 flake.nix                builds skills via agent-skill-flake; wires the dev shell + treefmt
@@ -174,8 +145,6 @@ flake.nix                builds skills via agent-skill-flake; wires the dev shel
 
 ## Authoring a skill
 
-Add a directory under `skills/<name>/` containing a `SKILL.md` and a `flake.nix`
-that calls `agent-skill-flake.lib.mkSkillFlake` with `source = import
-../../source.nix`. The root flake's `mkAllSkillsFlake` picks up every directory
-under `skills/` automatically, so no central registry edit is needed. Run
-`nix fmt` and `nix flake check` before committing.
+Add a directory under `skills/<name>/` containing a `SKILL.md` and a `flake.nix` that calls `agent-skill-flake.lib.mkSkillFlake` with `source = import ../../source.nix`.
+The root flake's `mkAllSkillsFlake` picks up every directory under `skills/` automatically, so no central registry edit is needed.
+Run `nix fmt` and `nix flake check` before committing.

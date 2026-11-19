@@ -1,6 +1,6 @@
 ---
 name: coding-agent-skill-references
-description: Refer to another skill by its bare name, never a URL, owner or path, and list every skill a SKILL.md names in a closing Related skills section with its fixed intro; load a listed skill that applies without asking, and ask before installing a missing one. Keep a user's personal choices in a preferences file beside the installed skill, the project's overriding the user's, read by a "Your preferences" section copied from the bundled template. Relationships go in the body, not in custom frontmatter, and a skill states its rules as they stand, with their history in commit messages. A skill's Python scripts use only the standard library; its tests live in `tests/<skill>/`, run through Nix by each language's own tool. Use when writing or editing a SKILL.md that names another skill or reads a preferences file, when adding scripts or tests to a skill, when loading a skill whose Related skills section lists others, and when deciding whether a lesson about a skill belongs in the skill or in its preferences file.
+description: Load when writing or editing a SKILL.md that names another skill or reads a preferences file, when adding scripts or tests to a skill, when a loaded skill's Related skills section lists others, and when deciding whether a lesson goes in a skill or its preferences file. Covers bare-name references, the Related skills section, preferences files, and where a skill's scripts and tests go.
 tags: [skills, authoring]
 ---
 
@@ -78,7 +78,7 @@ When the user corrects how a skill works:
 - **A lesson right for anyone using the skill:** edit the skill. A gotcha, a missing edge case, a rule every user would want.
 - **A personal choice:** put it in that skill's preferences file, the project's or the user's by where it should hold. Editing the skill would force it on everyone who installs it.
 
-`coding-agent-route-feedback-to-skills-over-memory` covers the routing in full: when a lesson goes into a skill rather than memory, and how to propose the edit.
+`coding-agent-route-feedback-to-skills-over-memory` covers the routing in full: which layer a lesson belongs in, a skill, a preferences file, a hook, a tool, a dev shell or memory among them, and how to propose the edit.
 
 ## Scripts and tests
 
@@ -99,10 +99,8 @@ A skill that bundles scripts keeps what it runs apart from what tests it:
 
 ## Related skills
 
-When one of these applies and it's in your skill listing, load it
-without asking. If it isn't in your listing, tell the user which skill is
-missing and ask whether to install it from the same collection this skill
-came from; don't apply it from memory.
+When one of these applies and it's in your skill listing, load it without asking.
+If it isn't in your listing, tell the user which skill is missing and ask whether to install it from the same collection this skill came from; don't apply it from memory.
 
-- `coding-agent-route-feedback-to-skills-over-memory`: routes a lesson about how the agent works into the right skill, or its preferences file, before memory.
+- `coding-agent-route-feedback-to-skills-over-memory`: routes a lesson about how the agent works to the layer that owns it, a skill or its preferences file among them, before memory.
 - `git-hygiene-no-history-in-tracked-files`: a tracked file states the current rule, and its history goes in the commit message.

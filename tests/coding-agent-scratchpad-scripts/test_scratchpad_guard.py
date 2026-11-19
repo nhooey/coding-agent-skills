@@ -302,12 +302,13 @@ class Decisions(unittest.TestCase):
     def test_off_prints_nothing(self):
         self.assertIsNone(guard.decide(bash("source /tmp/env.sh"), "off", CTX))
 
-    def test_subagent_start_gives_four_lines(self):
+    def test_subagent_start_gives_six_lines(self):
         out = guard.decide({"hook_event_name": "SubagentStart"}, "remind", CTX)["hookSpecificOutput"]
         self.assertEqual(out["hookEventName"], "SubagentStart")
         lines = out["additionalContext"].splitlines()
-        self.assertEqual(len(lines), 4)
-        for words, line in zip(("Edit or Write tool", "inline", "no program files", "`source`"), lines):
+        self.assertEqual(len(lines), 6)
+        expected = ("Edit or Write tool", "inline", "no program files", "`source`", "paths short", "commands quiet")
+        for words, line in zip(expected, lines):
             self.assertIn(words, line)
         self.assertEqual(guard.decide({"hook_event_name": "SubagentStart"}, "deny", CTX)["hookSpecificOutput"], out)
 
@@ -411,7 +412,7 @@ class Hook(unittest.TestCase):
 
     def test_subagent_start(self):
         out = self.run_hook({"hook_event_name": "SubagentStart", "agent_type": "Explore"})
-        self.assertEqual(len(out["additionalContext"].splitlines()), 4)
+        self.assertEqual(len(out["additionalContext"].splitlines()), 6)
 
     def test_input_with_no_temporary_root_exits_at_once(self):
         self.assertIsNone(self.run_hook(bash("python3 tools/report.py")))

@@ -11,7 +11,9 @@
 # the path before the plan folder's first occurrence in `file_path`.
 #
 # Anything else goes to plans_check_hook.py beside this script, which imports
-# plans.py from the same folder. Does nothing when python3 isn't on PATH.
+# plans.py from the same folder. Does nothing when python3, or the yq that
+# plans.py reads frontmatter with, isn't on PATH; the hooks plugin's copy of
+# this script puts yq on PATH itself.
 
 set -u
 
@@ -43,4 +45,5 @@ rest=${path#"$root/$folder/"}
 here=${BASH_SOURCE[0]%/*}
 [ "$here" != "${BASH_SOURCE[0]}" ] || here=.
 command -v python3 >/dev/null 2>&1 || exit 0
+command -v yq >/dev/null 2>&1 || exit 0
 exec python3 -I -S "$here/plans_check_hook.py" "$root" "$folder" "$rest" <<<"$input"

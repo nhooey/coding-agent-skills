@@ -42,16 +42,77 @@ level, `kern.memorystatus_vm_pressure_level`: 1 (normal) starts the run, 2
 (warning) or 4 (critical) holds it, checking again every few seconds and saying
 so on a progress line. A run already going is never stopped. A level that can't
 be read counts as 1, with a note.
-  --no-admission         start at once, whatever the pressure
+It also reads the free space, with shutil.disk_usage, on the checkout's volume
+and on /nix, and holds the run the same way while either is below the build
+floor: the `floors.build_gb` that `git-worktree-manager disk --format json`
+reports in the checkout, or, without the program or when it reports none,
+WORKTREE_MANAGER_FLOOR_BUILD_GB from the environment, else 70 GB. A floor that
+isn't a finite number of GB above 0 counts as none.
+  --no-admission         start at once, whatever the pressure and free space
   --admission-timeout M  give up after M minutes of waiting, with status skipped
+
+Locking: the run's worktree is made locked, by `git worktree add --lock`, with
+the reason `headless <job> pid <pid> since <UTC ISO time>`, so no sweep removes
+it while the session works. When the session ends, however it ends, Ctrl-C
+included, the runner unlocks it while the lock is still this run's own, before
+finishing it, and with --keep-worktree or without the program too; a lock that
+is gone, no longer the run's or can't be read is left, with a note, as is a
+failed unlock. A worktree reused on a rerun of the same --job is locked again:
+a lock an earlier run of the job left, whose process is gone by the program's
+`status` or, where that gives no answer, by its pid, is taken over, and any
+other, a live run's of the job included, is left as it is, with a note naming
+its reason, and not unlocked; a lock that can't be read is a note, and the run
+goes on without one. A runner that is killed leaves its lock.
+
+Finishing worktrees, through `git-worktree-manager` when it is on the PATH:
+before making a worktree the runner calls `git-worktree-manager sweep` in the
+checkout, which waits for a sweep already running in the repository, then acts
+on every worktree and branch of the repository: it deletes each landed branch
+not checked out in a worktree that stays, archives and then deletes
+content-landed branches and those matching `worktreeManager.disposable`
+(`preview/*` by default), removes worktrees that are landed, clean, idle and
+unlocked and hold no kept files of their own, prunes worktrees whose folder is
+gone, and deletes orphaned build output. Each call to the program is cut off
+after 15 minutes, a wait for another sweep included; a `sweep`, `finish` or
+`clean` cut off says `exit 124: timed out after 900s` in its note.
+After the run it calls, on its worktree:
+  git-worktree-manager finish <wt>   a run with no commits, whatever its status:
+                                     the log is outside the worktree. It
+                                     removes the worktree and its branch when
+                                     the worktree's HEAD is merged into
+                                     origin/<default>, or when the branch's
+                                     content has landed or its name matches
+                                     `worktreeManager.disposable`, archiving
+                                     the branch first; otherwise it keeps
+                                     both, exiting 3 with `not-landed`, and
+                                     the runner calls `clean` next, unless the
+                                     reasons include `uncommitted` or `locked`.
+  git-worktree-manager clean <wt>    a run that committed: the worktree waits
+                                     for its branch to land, without its build
+                                     output
+The program decides what it removes, and keeps anything with uncommitted
+changes, exiting 3 with its reasons, which the outcome's cleanup gives,
+followed by what a `clean` after `finish` did. A checkout gone during the
+session makes it `could not finish <worktree>: <error>`. --keep-worktree turns
+the calls off. Without the program the worktree is kept, and the outcome says nothing
+was cleaned.
+A worktree with an `.envrc` is provisioned with `git-worktree-manager
+provision` before the session starts under `direnv exec`, since direnv refuses
+a new worktree's blocked copy; the session starts under `direnv exec` only when
+provisioning's `direnv` step is done, and without the program it starts
+without it.
 
 Output: progress lines go to stderr, each opening on the label: one when the
 session starts, one every --progress-every seconds (default 60) with its time,
 its tool calls so far and the tool it called last, and one when it ends. The
 outcome goes to stdout as one JSON line and to <log-dir>/<label>.outcome.json:
 status (ok, failed, limit or skipped), exit code, session_id, resumed_from,
-turns, the start of the final result, the log path and notes. The session's
-stream-json output and stderr are beside it.
+turns, the start of the final result, the log path, notes and cleanup, what
+became of the worktree (null for a run in the checkout). The session's
+stream-json output and stderr are beside it. --dry-run prints the plan as one
+JSON line instead, with the memory pressure it read (pressure_level,
+pressure_note), the build floor (build_floor_gb), each volume under it
+(disk_short) and the path of git-worktree-manager (worktree_manager).
 
 Live status: while it runs, the script keeps <log-dir>/<label>.status.json up
 to date, rewritten every --status-every seconds (default 10) and once more
@@ -64,7 +125,7 @@ Exit status:
   0    the session ended without an error
   1    it failed, or timed out
   2    bad arguments: not a git checkout, an empty prompt, ANTHROPIC_API_KEY set
-  3    skipped, by --dirty skip or by --admission-timeout
+  3    skipped, by --dirty skip or by --admission-timeout, for memory or disk
   255  it hit a usage limit. xargs, GNU or BSD, starts no more runs after a
        command exits 255, so a fan-out through xargs stops there by itself.
 
@@ -79,6 +140,7 @@ import argparse
 import ctypes
 import datetime as dt
 import json
+import math
 import os
 import re
 import shutil
@@ -86,9 +148,9 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 USAGE_LIMIT = re.compile(
@@ -102,12 +164,24 @@ PRESSURE_NORMAL = 1
 PRESSURE_LEVELS = frozenset({1, 2, 4})
 ADMISSION_POLL_SECONDS = 5.0
 START, WAIT, GIVE_UP = "start", "wait", "give_up"
+LOCK, TAKE, LEAVE = "lock", "take", "leave"
 EXIT = {"ok": 0, "failed": 1, "skipped": 3, "limit": 255}
 ETA_LINE = re.compile(
     r"⛳ skills/coding-agent-usage-line-report-eta: ETA (\d+(?:\.\d+)?)([smh])(?![A-Za-z])"
 )
 ETA_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
 STATUS_EVERY_SECONDS = 10.0
+FLOOR_KEY = "WORKTREE_MANAGER_FLOOR_BUILD_GB"
+DEFAULT_BUILD_FLOOR_GB = 70.0
+GB = 10**9
+NIX_VOLUME = Path("/nix")
+PROGRAM = "git-worktree-manager"
+JSON_FORMAT = ("--format", "json")
+DISK_ARGS = ("disk", *JSON_FORMAT)
+SWEEP_ARGS = ("sweep",)
+REPORT_SCHEMA = 1
+KEPT = 3  # the exit status of a `finish` or `clean` that left its worktree, with the reasons
+PROGRAM_TIMEOUT_SECONDS = 900
 
 
 def project_key(path: Path) -> str:
@@ -227,35 +301,352 @@ def toplevel(path: Path) -> Path | None:
     return Path(out.stdout.strip()) if out.returncode == 0 else None
 
 
-def ensure_worktree(checkout: Path, job: str) -> tuple[Path, str]:
-    """Create (or reuse, on a rerun of the same job) the run's worktree."""
+# Locking the run's worktree while its session works, so no sweep removes it. The
+# reason, reading a lock and what to do with one are pure; git does the rest.
+
+
+def lock_reason(job: str, pid: int, epoch: float) -> str:
+    """The run's lock reason, in the `<who> since <ISO time>` form git-worktree-manager reads."""
+    return f"headless {job} pid {pid} since {iso(epoch)}"
+
+
+def lock_in(contents: str | None) -> str | None:
+    """The lock reason in a worktree's `locked` file, which git writes with a newline after
+    the reason: '' for a lock with no reason, None where there is no such file."""
+    return None if contents is None else contents.removesuffix("\n")
+
+
+def lock_pid(reason: str, job: str) -> int | None:
+    """The pid in a lock a run of `job` took, `headless <job> pid <pid> since <time>`; None
+    for any other lock. Only ASCII digits make a pid."""
+    before, _, after = reason.partition(f"headless {job} pid ")
+    pid = after.partition(" ")[0]
+    return int(pid) if not before and pid.isascii() and pid.isdigit() and int(pid) > 0 else None
+
+
+def lock_action(current: str | None, job: str, alive: bool | None) -> str:
+    """What a run of `job` does with its reused worktree's lock, given whether the process the
+    lock names still runs: lock an unlocked one, take over one an earlier run of the job left
+    when its process is gone, and leave any other as it is, a live run's of the job included."""
+    if current is None:
+        return LOCK
+    return TAKE if lock_pid(current, job) is not None and alive is False else LEAVE
+
+
+def status_lock_alive(stdout: str, path: str) -> bool | None:
+    """The `lock.alive` a `git-worktree-manager status --format json` reply gives the worktree
+    at `path`; None where it gives none."""
+    locks = [w.get("lock") for r in objects(report_of(stdout).get("repositories"))
+             for w in objects(r.get("worktrees")) if w.get("path") == path]
+    alive = locks[0].get("alive") if locks and isinstance(locks[0], dict) else None
+    return alive if isinstance(alive, bool) else None
+
+
+def unreleased_note(path: Path, current: str | None) -> str:
+    """Why the run left its worktree's lock at the end: it was gone, or no longer the run's."""
+    if current is None:
+        return f"the run's lock on {path} was gone when the session ended"
+    return f"left the lock on {path} as it is, since it is no longer this run's: {current or 'no reason given'}"
+
+
+@dataclass(frozen=True)
+class Held:
+    """A worktree lock this run took, with the reason it took it with."""
+
+    path: Path
+    reason: str
+
+
+class LockUnreadable(Exception):
+    """A worktree lock that can't be read, so it is neither held nor known to be free."""
+
+
+def file_or_none(path: Path) -> str | None:
+    """A file's text, or None where there is no such file; any other failure goes on up."""
+    try:
+        return path.read_text(errors="replace")
+    except FileNotFoundError:
+        return None
+
+
+def worktree_lock(path: Path) -> str | None:
+    """The worktree's lock reason, from the `locked` file in its git directory, as
+    gitrepository-layout documents it; None when it is unlocked. Raises LockUnreadable, with
+    git's error, where the worktree's git directory or that file can't be read."""
+    out = git("rev-parse", "--absolute-git-dir", cwd=path)
+    if out.returncode != 0:
+        raise LockUnreadable(f"git rev-parse --absolute-git-dir: exit {out.returncode}: {last_line(out.stderr)}")
+    try:
+        return lock_in(file_or_none(Path(out.stdout.strip()) / "locked"))
+    except OSError as err:
+        raise LockUnreadable(str(err)) from err
+
+
+def pid_alive(pid: int) -> bool:
+    """Whether a process with this pid runs: the plain check, for when the program can't say."""
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except (OSError, OverflowError):
+        return False
+    return True
+
+
+def lock_alive(program: str | None, checkout: Path, path: Path, pid: int) -> bool:
+    """Whether the process a lock names still runs: the program's own `lock.alive`, which also
+    tells a pid a later process reused, else the plain check of the pid."""
+    real = str(path.resolve())
+    reported = (status_lock_alive(run_program(program, ("status", *JSON_FORMAT, real), checkout)[1], real)
+                if program is not None else None)
+    return pid_alive(pid) if reported is None else reported
+
+
+def lock_reused(checkout: Path, path: Path, job: str, reason: str,
+                program: str | None) -> tuple[tuple[str, ...], Held | None]:
+    """Locks a reused worktree for this run, and returns the notes and the lock the run now
+    holds, or None. A lock that can't be read is a note, and the run goes on without one."""
+    try:
+        current = worktree_lock(path)
+    except LockUnreadable as err:
+        return (f"could not read the lock on {path}, so the run goes on without one: {err}",), None
+    pid = lock_pid(current, job) if current is not None else None
+    alive = lock_alive(program, checkout, path, pid) if pid is not None else None
+    action = lock_action(current, job, alive)
+    if action == LEAVE:
+        holder = "a run of this job still holds" if pid is not None else "someone else holds"
+        return (f"left the lock {holder} on {path}: {current or 'no reason given'}",), None
+    released = action == TAKE and git("worktree", "unlock", str(path), cwd=checkout).returncode == 0
+    out = git("worktree", "lock", "--reason", reason, str(path), cwd=checkout)
+    if out.returncode != 0:
+        lost = f"released the lock an earlier run of this job left, {current}, but " if released else ""
+        return (f"{lost}git worktree lock {path}: exit {out.returncode}: {last_line(out.stderr)}",), None
+    took = (f"took over the lock an earlier run of this job left: {current}",) if action == TAKE else ()
+    return took, Held(path, reason)
+
+
+def last_line(text: str) -> str:
+    return text.strip().splitlines()[-1] if text.strip() else ""
+
+
+def ensure_worktree(checkout: Path, job: str, reason: str,
+                    program: str | None = None) -> tuple[Path, tuple[str, ...], Held | None]:
+    """Create (or reuse, on a rerun of the same job) the run's worktree, locked with `reason`.
+    Returns its path, the notes, and the lock the run holds, or None."""
     path, branch = worktree_path(checkout, job), branch_name(job)
     if (path / ".git").exists():
-        return path, f"reused {path}"
+        notes, held = lock_reused(checkout, path, job, reason, program)
+        return path, (f"reused {path}", *notes), held
     path.parent.mkdir(parents=True, exist_ok=True)
     has_branch = git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=checkout)
+    lock = ("--lock", "--reason", reason)
     if has_branch.returncode == 0:
-        out = git("worktree", "add", str(path), branch, cwd=checkout)
+        out = git("worktree", "add", *lock, str(path), branch, cwd=checkout)
     else:
-        out = git("worktree", "add", "-b", branch, str(path), "HEAD", cwd=checkout)
+        out = git("worktree", "add", *lock, "-b", branch, str(path), "HEAD", cwd=checkout)
     if out.returncode != 0:
         raise RuntimeError(f"git worktree add failed: {out.stderr.strip()}")
-    return path, f"created {path} on {branch}"
+    return path, (f"created {path} on {branch}",), Held(path, reason)
 
 
-def allow_direnv(checkout: Path, worktree: Path) -> str | None:
-    """Allow the worktree's `.envrc` when it is the checkout's, byte for byte.
-
-    direnv trusts an `.envrc` by its path, so a new worktree's copy starts out
-    blocked even though the user allowed the same file in the checkout.
-    """
-    main, copy = checkout / ".envrc", worktree / ".envrc"
-    if not (main.is_file() and copy.is_file() and shutil.which("direnv")):
+def release_note(checkout: Path, held: Held) -> str | None:
+    """Unlocks the run's worktree, as its session is over, only while the lock is still the
+    run's own; a note for anything else. A lock that can't be read, as when the checkout went
+    during the session, is left."""
+    try:
+        current = worktree_lock(held.path)
+        if current != held.reason:
+            return unreleased_note(held.path, current)
+        out = git("worktree", "unlock", str(held.path), cwd=checkout)
+    except LockUnreadable as err:
+        return f"left the lock on {held.path}, which could not be read: {err}"
+    except OSError as err:
+        return f"could not unlock {held.path}: {err}"
+    if out.returncode == 0:
         return None
-    if main.read_bytes() != copy.read_bytes():
-        return "worktree .envrc differs from the checkout's; left blocked"
-    subprocess.run(["direnv", "allow", str(worktree)], capture_output=True, check=False)
-    return "allowed the worktree's .envrc, identical to the checkout's"
+    return f"git worktree unlock {held.path}: exit {out.returncode}: {last_line(out.stderr)}"
+
+
+def release(outcome: Outcome, held: Held | None) -> Outcome:
+    """The outcome once the run's lock is released, with a note where it wasn't."""
+    note = release_note(Path(outcome.checkout), held) if held is not None else None
+    return outcome if note is None else replace(outcome, notes=[*outcome.notes, note])
+
+
+# Finishing worktrees through `git-worktree-manager`. Which call a run gets and
+# what its reply says are pure; running the program and asking git are the shell.
+
+
+def finish_args(ahead: int, worktree: str) -> tuple[str, ...]:
+    """The `git-worktree-manager` arguments that finish a worktree once its run has ended.
+
+    Commits win, whatever the status, so committed work is only ever cleaned. A run
+    without commits, failed or not, is finished: its log is outside the worktree, and
+    `finish` keeps a worktree with uncommitted changes.
+    """
+    return ("clean" if ahead > 0 else "finish", *JSON_FORMAT, worktree)
+
+
+def program_note(args: tuple[str, ...], code: int, output: str) -> str:
+    """One line on a `git-worktree-manager` call: its arguments, its exit status and the last
+    line it said."""
+    said = last_line(output)
+    return f"{PROGRAM} {' '.join(args)}: exit {code}" + (f": {said}" if said else "")
+
+
+def objects(value: object) -> list[dict]:
+    """The objects in a JSON array; nothing for anything else."""
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def report_of(stdout: str) -> dict:
+    """A `git-worktree-manager --format json` reply of the schema this runner reads; an empty
+    object for anything else."""
+    reply = json_object(stdout) or {}
+    return reply if reply.get("schema") == REPORT_SCHEMA else {}
+
+
+def reason_objects(stdout: str) -> list[dict]:
+    """The reasons a `finish` or `clean` reply in JSON gives for keeping its worktree:
+    `clean` gives them at its top level, `finish` on its worktree."""
+    reply = report_of(stdout)
+    return (objects(reply.get("reasons")) if reply.get("command") == "clean" else
+            [reason for repository in objects(reply.get("repositories"))
+             for worktree in objects(repository.get("worktrees"))
+             for reason in objects(worktree.get("reasons"))])
+
+
+def kept_reasons(stdout: str) -> tuple[str, ...]:
+    """The reasons a `finish` or `clean` reply gives for keeping its worktree, each `code: detail`."""
+    return tuple(f"{reason.get('code')}: {reason.get('detail')}" for reason in reason_objects(stdout))
+
+
+def follows_with_clean(args: tuple[str, ...], code: int, stdout: str) -> bool:
+    """Whether a `clean` follows this call: a `finish` that kept the worktree as `not-landed`
+    without `uncommitted` or `locked`, so a run that changed nothing in a checkout ahead of
+    origin, or on a branch of its own, leaves its worktree without its build output. `clean`
+    keeps a locked worktree, so one follows no `locked`."""
+    codes = frozenset(reason.get("code") for reason in reason_objects(stdout))
+    return (args[0] == "finish" and code == KEPT and "not-landed" in codes
+            and not codes & {"uncommitted", "locked"})
+
+
+def failed_steps(stdout: str) -> tuple[str, ...]:
+    """What failed, by a `finish` or `clean` reply in JSON: the error of a command that failed
+    before it had a report, an unreadable repository among them, `clean`'s `errors`, and
+    `finish`'s failed worktree and branch steps, and archives that failed their compare."""
+    reply = report_of(stdout)
+    error = reply.get("error")
+    if isinstance(error, dict):
+        return (f"{error.get('code')}: {error.get('detail')}",)
+    if reply.get("command") == "clean":
+        return tuple(f"{e.get('path')}: {e.get('error')}" for e in objects(reply.get("errors")))
+    repositories = objects(reply.get("repositories"))
+    backups = [r["backup"] for r in repositories if isinstance(r.get("backup"), dict)]
+    return (
+        *(f"{w.get('path')}: {w.get('error')}" for r in repositories
+          for w in objects(r.get("worktrees")) if w.get("error")),
+        *(f"branch {b.get('name')}: {b.get('error')}" for r in repositories
+          for b in objects(r.get("branches")) if b.get("error")),
+        *(f"archive {c.get('ref')}: {c.get('detail')}" for b in backups
+          for c in objects(b.get("compares")) if c.get("ok") is False),
+    )
+
+
+def cleanup_note(args: tuple[str, ...], code: int, stdout: str, stderr: str) -> str:
+    """What a `finish` or `clean` call made of the worktree. Exit 3 keeps it, with reasons,
+    which is no failure. Any other status is the call's own note, with what its reply says
+    failed, else the last line it said on stderr."""
+    if code != KEPT:
+        failed = "; ".join(" ".join(step.split()) for step in failed_steps(stdout))
+        return program_note(args, code, failed or stderr)
+    reasons = kept_reasons(stdout) or tuple(stderr.strip().splitlines()[-1:])
+    return f"{PROGRAM} {' '.join(args)}: kept the worktree" + (f": {'; '.join(reasons)}" if reasons else "")
+
+
+def direnv_step(stdout: str) -> tuple[str, str]:
+    """The outcome and detail of the `direnv` step in a `provision` reply in JSON."""
+    steps = [s for s in objects(report_of(stdout).get("steps")) if s.get("step") == "direnv"]
+    if not steps:
+        return "missing", "no direnv step in its output"
+    return str(steps[0].get("outcome")), str(steps[0].get("detail") or "")
+
+
+def run_program(program: str, args: tuple[str, ...], cwd: Path) -> tuple[int, str, str]:
+    """Runs `git-worktree-manager` and returns its exit status, standard output and standard
+    error; a failure to run is a status too."""
+    try:
+        proc = subprocess.run([program, *args], cwd=cwd, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, check=False,
+                              timeout=PROGRAM_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timed out after {PROGRAM_TIMEOUT_SECONDS}s"
+    except OSError as err:
+        return 127, "", str(err)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def commits_ahead(checkout: Path, worktree: Path) -> int:
+    """The worktree's commits that the checkout's HEAD doesn't have."""
+    head = git("rev-parse", "HEAD", cwd=checkout).stdout.strip()
+    out = git("rev-list", "--count", "HEAD", f"^{head}", cwd=worktree) if head else None
+    return int(out.stdout.strip()) if out is not None and out.returncode == 0 else 0
+
+
+# Disk admission. The floor and the shortfalls are pure; asking
+# `git-worktree-manager disk` for the floor and reading the free space are the shell.
+# The runner measures the free space itself, since it measures again while it waits.
+
+
+def parse_gb(value: object) -> float | None:
+    """A floor in GB: a finite number above 0, or a string of one. Anything else, `inf` and
+    `nan` among them, is no floor, since it would hold every run for ever or none."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def reported_floor(code: int, stdout: str) -> float | None:
+    """The `floors.build_gb` of `git-worktree-manager disk --format json`, or None where its
+    reply holds none, or is of a schema this runner doesn't read."""
+    floors = report_of(stdout).get("floors") if code == 0 else None
+    return parse_gb(floors.get("build_gb")) if isinstance(floors, dict) else None
+
+
+def build_floor(reply: tuple[int, str] | None, environ: Mapping[str, str]) -> tuple[float, str | None]:
+    """The build floor in GB and a note. `reply` is the exit status and output of
+    `git-worktree-manager disk --format json`, or None without the program: the floor it
+    reports, else WORKTREE_MANAGER_FLOOR_BUILD_GB, else 70."""
+    reported = reported_floor(*reply) if reply is not None else None
+    if reported is not None:
+        return reported, None
+    value = environ.get(FLOOR_KEY)
+    gb = parse_gb(value) if value else DEFAULT_BUILD_FLOOR_GB
+    notes = (
+        *((f"{PROGRAM} {' '.join(DISK_ARGS)}: exit {reply[0]}, with no build floor in its output",)
+          if reply is not None else ()),
+        *((f"build floor {value!r} from {FLOOR_KEY} is not a finite number of GB above 0",) if gb is None else ()),
+    )
+    floor = DEFAULT_BUILD_FLOOR_GB if gb is None else gb
+    return floor, (f"{'; '.join(notes)}; used {floor:g} GB" if notes else None)
+
+
+def disk_shortfalls(free: tuple[tuple[str, int | None], ...], floor_gb: float) -> tuple[str, ...]:
+    """One reason per volume under the floor; a volume that couldn't be read holds nothing."""
+    return tuple(f"{space / GB:.0f} GB free on {path}, below the {floor_gb:g} GB build floor"
+                 for path, space in free if space is not None and space < floor_gb * GB)
+
+
+def free_bytes(path: Path) -> int | None:
+    """Free space on `path`'s volume, or None where there is no such path, such as /nix without Nix."""
+    try:
+        return shutil.disk_usage(path).free
+    except OSError:
+        return None
 
 
 @dataclass
@@ -283,6 +674,7 @@ class Outcome:
     result: str = ""
     log: str | None = None
     notes: list[str] = field(default_factory=list)
+    cleanup: str | None = None  # what became of the worktree; None for a run in the checkout
 
 
 def elapsed(seconds: float) -> str:
@@ -298,9 +690,17 @@ def taskpolicy_prefix(platform: str) -> list[str]:
     return ["taskpolicy", "-c", "utility"] if platform == "darwin" else []
 
 
-def admission_decision(level: int, waited: float, timeout: float | None) -> str:
-    """Start, wait or give up, from the pressure level and the seconds waited so far."""
-    if level == PRESSURE_NORMAL:
+def hold_reasons(level: int, short: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """Why a run can't start yet: memory pressure above normal, and each volume under the floor."""
+    return ((f"memory pressure level {level}",) if level != PRESSURE_NORMAL else ()) + short
+
+
+def admission_decision(
+    level: int, waited: float, timeout: float | None, short: tuple[str, ...] = ()
+) -> str:
+    """Start, wait or give up, from the pressure level, the disk shortfalls and the seconds
+    waited so far."""
+    if not hold_reasons(level, short):
         return START
     return GIVE_UP if timeout is not None and waited >= timeout else WAIT
 
@@ -344,6 +744,11 @@ class Admission:
     level: int
     waited: float
     notes: tuple[str, ...]
+    reasons: tuple[str, ...] = ()  # what still held the run when it gave up
+
+
+def no_disk_shortfall() -> tuple[str, ...]:
+    return ()
 
 
 def await_admission(
@@ -351,6 +756,7 @@ def await_admission(
     timeout: float | None,
     *,
     read: Callable[[], tuple[int, str | None]],
+    disk: Callable[[], tuple[str, ...]] = no_disk_shortfall,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     poll: float = ADMISSION_POLL_SECONDS,
@@ -359,19 +765,22 @@ def await_admission(
     """The shell around admission_decision: read, say so while waiting, sleep, read again."""
     begin = clock()
     level, note = read()
-    first_level = level
+    short = disk()
+    held_by = " and ".join(
+        (("memory pressure",) if level != PRESSURE_NORMAL else ()) + (("disk space",) if short else ()))
     notes = (note,) if note else ()
     while True:
         waited = clock() - begin
-        action = admission_decision(level, waited, timeout)
+        action = admission_decision(level, waited, timeout, short)
         if action != WAIT:
             break
-        say(f"waiting {label} {elapsed(waited)}: memory pressure level {level}")
+        say(f"waiting {label} {elapsed(waited)}: {'; '.join(hold_reasons(level, short))}")
         on_wait()
         sleep(poll)
         level, _ = read()
-    held = (f"waited {elapsed(waited)} at memory pressure before starting",) if first_level != PRESSURE_NORMAL else ()
-    return Admission(action, level, waited, notes + held)
+        short = disk()
+    held = (f"waited {elapsed(waited)} for {held_by} before starting",) if held_by else ()
+    return Admission(action, level, waited, notes + held, hold_reasons(level, short))
 
 
 def tool_calls(log: Path) -> tuple[int, str | None]:
@@ -596,9 +1005,6 @@ def plan_for(
     resume = newest_session(checkout, args.projects_root) if args.session == "continue" else None
     workdir = worktree_path(checkout, args.job) if args.where == "worktree" else checkout
     notes, skip = [], None
-    live = live_note(resume, args.live_within)
-    if live:
-        notes.append(live)
     dirty = uncommitted(checkout) if args.where == "worktree" and resume else []
     if dirty:
         if args.dirty == "tell":
@@ -609,6 +1015,10 @@ def plan_for(
             notes.append(f"{len(dirty)} uncommitted paths in the checkout; starting a new session")
         else:
             skip = f"{len(dirty)} uncommitted paths in the checkout; commit or stash them and rerun"
+    # Only a session this run will really fork, once `--dirty` has had its say.
+    live = None if skip else live_note(resume, args.live_within)
+    if live:
+        notes.insert(0, live)
     command = claude_command(
         prompt,
         f"headless {args.job}",
@@ -635,44 +1045,148 @@ def run(
     args: argparse.Namespace,
     status: StatusWriter = no_status,
     read: Callable[[], tuple[int, str | None]] = read_pressure_level,
+    disk: Callable[[], tuple[str, ...]] = no_disk_shortfall,
+    program: str | None = None,
 ) -> Outcome:
+    """Admission, the sweep, the session, then finishing its worktree. `program` is the
+    path of `git-worktree-manager`, or None where it isn't installed. The run's lock is
+    released however the session ends, an exception such as Ctrl-C included, which then goes
+    on up."""
+    prepared, workdir, held = prepare(plan, args, status, read, disk, program)
+    try:
+        ended = session(prepared, plan, args, status, workdir, program) if workdir is not None else prepared
+    except BaseException:
+        note = release_note(Path(plan.checkout), held) if held is not None else None
+        if note:
+            say(f"warning {plan.label}: {note}")
+        raise
+    outcome = release(ended, held)
+    made_worktree = args.where == "worktree" and (Path(plan.workdir) / ".git").exists()
+    return finish(outcome, args, program) if made_worktree and outcome.status != "skipped" else outcome
+
+
+def finish(outcome: Outcome, args: argparse.Namespace, program: str | None) -> Outcome:
+    """Finishes the run's worktree through `git-worktree-manager`, and says in the outcome what
+    became of it: a `finish` that kept it as not landed is followed by a `clean`."""
+    if args.keep_worktree:
+        return replace(outcome, cleanup="kept the worktree: --keep-worktree")
+    if program is None:
+        return replace(outcome, cleanup=f"kept the worktree, nothing cleaned: {PROGRAM} is not on the PATH")
+    return replace(outcome, cleanup=finish_note(program, Path(outcome.checkout), Path(outcome.workdir)))
+
+
+def finish_note(program: str, checkout: Path, worktree: Path) -> str:
+    """The `finish` or `clean` calls on the worktree, and what they made of it. A checkout gone
+    during the session, which git can't run in, is the note `could not finish <worktree>`."""
+    try:
+        call = finish_args(commits_ahead(checkout, worktree), str(worktree))
+        code, out, err = run_program(program, call, checkout)
+        note = cleanup_note(call, code, out, err)
+        if not follows_with_clean(call, code, out):
+            return note
+        clean = ("clean", *JSON_FORMAT, str(worktree))
+        return f"{note}; then {cleanup_note(clean, *run_program(program, clean, checkout))}"
+    except OSError as err:
+        return f"could not finish {worktree}: {err}"
+
+
+def sweep_note(checkout: Path, args: argparse.Namespace, program: str | None) -> str | None:
+    """Sweeps the checkout's landed worktrees before this run makes its own. A sweep that
+    exits 1, a step failed, only deleted what was merged or archived, so the run goes on."""
+    if args.where != "worktree" or args.keep_worktree or program is None:
+        return None
+    code, out, err = run_program(program, SWEEP_ARGS, checkout)
+    return program_note(SWEEP_ARGS, code, out + err)
+
+
+def direnv_wrapper(checkout: Path, workdir: Path, where: str, program: str | None) -> tuple[list[str], str | None]:
+    """`direnv exec` for the session, and a note. A new worktree's `.envrc` is blocked, and
+    `direnv exec` refuses a blocked one, so in a worktree it wraps the run only once
+    `git-worktree-manager provision` reports its `direnv` step done; without the program
+    the run starts without it."""
+    wrapper = env_wrapper(workdir)
+    if not wrapper or where != "worktree":
+        return wrapper, None
+    if program is None:
+        return [], f"{PROGRAM} is not on the PATH, so the worktree's .envrc wasn't provisioned; started without direnv exec"
+    call = ("provision", *JSON_FORMAT, str(workdir))
+    code, out, _ = run_program(program, call, checkout)
+    step, detail = direnv_step(out)
+    note = f"{PROGRAM} {' '.join(call)}: exit {code}: direnv {step}" + (f": {detail}" if detail else "")
+    return (wrapper, note) if step == "done" else ([], f"{note}; started without direnv exec")
+
+
+def prepare(
+    plan: Plan,
+    args: argparse.Namespace,
+    status: StatusWriter,
+    read: Callable[[], tuple[int, str | None]],
+    disk: Callable[[], tuple[str, ...]],
+    program: str | None,
+) -> tuple[Outcome, Path | None, Held | None]:
+    """Admission, the sweep and the worktree: the outcome so far, where the session works, or
+    None where it doesn't start, and the lock the run holds, or None."""
     checkout = Path(plan.checkout)
     outcome = Outcome(plan.label, plan.checkout, plan.workdir, "skipped",
                       resumed_from=plan.resume, notes=list(plan.notes))
     if plan.skip:
         outcome.result = f"not started: {plan.skip}"
-        return outcome
+        return outcome, None, None
     if not args.no_admission:
         timeout = args.admission_timeout * 60 if args.admission_timeout is not None else None
         status("waiting")
-        admission = await_admission(plan.label, timeout, read=read,
+        admission = await_admission(plan.label, timeout, read=read, disk=disk,
                                     poll=args.admission_poll, on_wait=lambda: status("waiting"))
         outcome.notes.extend(admission.notes)
         if admission.action == GIVE_UP:
-            outcome.result = (f"not started: memory pressure level {admission.level} for "
+            outcome.result = (f"not started: {'; '.join(admission.reasons)} for "
                               f"{elapsed(admission.waited)}, past --admission-timeout")
-            return outcome
+            return outcome, None, None
+    swept = sweep_note(checkout, args, program)
+    if swept:
+        outcome.notes.append(swept)
     try:
         if args.where == "worktree":
-            workdir, note = ensure_worktree(checkout, args.job)
-            outcome.notes.append(note)
-            direnv_note = allow_direnv(checkout, workdir)
-            if direnv_note:
-                outcome.notes.append(direnv_note)
+            reason = lock_reason(args.job, os.getpid(), time.time())
+            workdir, notes, held = ensure_worktree(checkout, args.job, reason, program)
+            outcome.notes.extend(notes)
         else:
-            workdir = checkout
+            workdir, held = checkout, None
     except RuntimeError as err:
         outcome.status, outcome.result = "failed", str(err)
-        return outcome
+        return outcome, None, None
+    except OSError as err:  # the checkout or its worktrees folder went, such as during the sweep
+        outcome.status, outcome.result = "failed", f"could not make the worktree: {err}"
+        return outcome, None, None
+    return outcome, workdir, held
+
+
+def session(
+    outcome: Outcome,
+    plan: Plan,
+    args: argparse.Namespace,
+    status: StatusWriter,
+    workdir: Path,
+    program: str | None,
+) -> Outcome:
+    """The session, from its `direnv exec` wrapper to its end. A session that can't start, an
+    argument list too long or a `claude` that won't run among them, is a failed outcome."""
+    wrapper, direnv_note = direnv_wrapper(Path(plan.checkout), workdir, args.where, program)
+    if direnv_note:
+        outcome.notes.append(direnv_note)
 
     log = args.log_dir / f"{plan.label}.stream.jsonl"
     err_log = args.log_dir / f"{plan.label}.stderr"
     outcome.log = str(log)
-    command = plan.prefix + env_wrapper(workdir) + plan.command
+    command = plan.prefix + wrapper + plan.command
     say(f"start   {plan.label}")
     start, done = time.monotonic(), threading.Event()
-    with log.open("w"):
-        pass  # the last run's log, under the same label, must not feed this run's status
+    try:
+        with log.open("w"):
+            pass  # the last run's log, under the same label, must not feed this run's status
+    except OSError as err:
+        outcome.status, outcome.result = "failed", f"could not start: {err}"
+        return outcome
     status("running")
     ticks = [
         *([every(args.progress_every, done, lambda: heartbeat_line(plan.label, log, start))]
@@ -690,7 +1204,7 @@ def run(
     except subprocess.TimeoutExpired:
         outcome.status, outcome.result = "failed", f"timed out after {args.timeout} min"
         return outcome
-    except FileNotFoundError as err:
+    except OSError as err:
         outcome.status, outcome.result = "failed", f"could not start: {err}"
         return outcome
     finally:
@@ -756,10 +1270,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         "0 to write it only when the state changes (default: 10)")
     p.add_argument("--log-dir", type=Path, help="default: $XDG_STATE_HOME/coding-agent-headless/<job>")
     p.add_argument("--no-admission", action="store_true",
-                   help="start at once, whatever the memory pressure (the utility priority still applies)")
+                   help="start at once, whatever the memory pressure and free space "
+                        "(the utility priority still applies)")
     p.add_argument("--admission-timeout", type=float, metavar="MINUTES",
-                   help="give up after waiting this long for memory pressure to ease, "
-                        "with status skipped (default: wait as long as it takes)")
+                   help="give up after waiting this long for memory pressure to ease or disk space "
+                        "to free, with status skipped (default: wait as long as it takes)")
+    p.add_argument("--keep-worktree", action="store_true",
+                   help="leave this run's worktree as it ends, and sweep no landed ones before it")
     p.add_argument("--admission-poll", type=float, default=ADMISSION_POLL_SECONDS,
                    help=argparse.SUPPRESS)
     p.add_argument("--projects-root", type=Path, default=PROJECTS_ROOT, help=argparse.SUPPRESS)
@@ -788,9 +1305,12 @@ def main(
     *,
     read: Callable[[], tuple[int, str | None]] | None = None,
     platform: str = sys.platform,
+    free: Callable[[Path], int | None] = free_bytes,
+    find_program: Callable[[str], str | None] = shutil.which,
 ) -> int:
     """The command line. `read` gives the memory pressure level, by default through sysctl on
-    `platform`; tests pass both rather than patching the module."""
+    `platform`, `free` a volume's free bytes, and `find_program` the path of
+    `git-worktree-manager`; tests pass them rather than patching the module."""
     read = read or (lambda: read_pressure_level(platform))
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if os.environ.get("ANTHROPIC_API_KEY") and not args.allow_api_key and not args.dry_run:
@@ -806,9 +1326,18 @@ def main(
     if checkout is None:
         print(f"not a git checkout: {args.checkout}", file=sys.stderr)
         return 2
-    plan = plan_for(checkout, args.label or checkout.name, prompt, args, platform)
+    program = find_program(PROGRAM)
+    reply = run_program(program, DISK_ARGS, checkout)[:2] if program is not None else None
+    floor_gb, floor_note = build_floor(reply, os.environ)
+    volumes = (checkout, NIX_VOLUME)
+
+    def disk() -> tuple[str, ...]:
+        return disk_shortfalls(tuple((str(v), free(v)) for v in volumes), floor_gb)
+
+    planned = plan_for(checkout, args.label or checkout.name, prompt, args, platform)
+    plan = replace(planned, notes=[*planned.notes, *([floor_note] if floor_note else [])])
     for note in plan.notes:
-        if "may still be running" in note:
+        if "may still be running" in note or note == floor_note:
             say(f"warning {plan.label}: {note}")
 
     if args.dry_run:
@@ -817,6 +1346,9 @@ def main(
             "command": plan.command[:2] + ["<prompt>"] + plan.command[3:],
             "pressure_level": level,
             "pressure_note": note,
+            "build_floor_gb": floor_gb,
+            "disk_short": None if args.no_admission else list(disk()),
+            "worktree_manager": program,
         }))
         return 0
 
@@ -831,12 +1363,13 @@ def main(
     }
     status = status_writer(args.log_dir / f"{plan.label}.status.json", base,
                            log=log, projects_root=args.projects_root)
-    outcome = run(plan, args, status, read)
+    outcome = run(plan, args, status, read, disk, program)
     status(outcome.status, ended=time.time(),
            final={"session_id": outcome.session_id, "turns": outcome.turns})
     first = outcome.result.splitlines()[0][:120] if outcome.result else ""
     turns = f" ({outcome.turns} turns)" if outcome.turns is not None else ""
-    say(f"{outcome.status:7} {outcome.label}{turns}: {first}")
+    cleanup = f" [{outcome.cleanup}]" if outcome.cleanup else ""
+    say(f"{outcome.status:7} {outcome.label}{turns}: {first}{cleanup}")
     line = json.dumps(asdict(outcome))
     (args.log_dir / f"{plan.label}.outcome.json").write_text(line + "\n")
     print(line, flush=True)

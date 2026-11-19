@@ -1,6 +1,6 @@
 ---
 name: coding-agent-plans-as-graph
-description: Keep a project's plans as a graph of Markdown nodes in `agents/plans/`, one node per file, open ones in `open/` and finished ones in `closed/`, a plan of several nodes in a folder of its own, with a generated README showing what's in progress, ready, blocked and proposed. Each node has a state (proposed, approved, in-progress; implemented, rejected, abandoned, superseded), a kind (end state, implementation, schedule) and typed links (`part-of`, `needs`, `after`, `superseded-by`), and its body can be as long as it needs. Plans say what will be true, separately from how to get there and from when and by which agents, with costs in tokens, dollars and weekly-limit percent. The research and audits a plan rests on are dated reports in `agents/reports/`, each current or superseded. The bundled `plans.py` checks the graph, lists ready nodes and writes the overview. Use when writing, updating or reviewing a plan, starting work from one, closing a node, scheduling agents across plan nodes, or tidying plans left in `.claude/plans/` or elsewhere.
+description: Load when writing, updating, reviewing or closing a plan, starting work from one, scheduling agents across plan nodes, writing a report a plan rests on, or tidying plans left in `.claude/plans/` or elsewhere. Keeps plans as a graph of Markdown nodes in `agents/plans/`, checked by the bundled `plans.py`.
 ---
 
 # Plans as a graph of Markdown nodes
@@ -21,7 +21,7 @@ agents/plans/
 - **One node per file**, named by its id: lower-case words and dashes that say what it is, such as `uniform-skill-sets`. The id never changes, because links use it.
 - **Open or closed is the folder:** closing a node moves it to the `closed/` beside its `open/` in the same commit that sets its state, with `git mv`, so its history follows it.
 - **A plan of several nodes gets its own folder:** nodes that belong to one plan, such as a cross-repository cleanup or a feature's rollout, go in `agents/plans/<plan>/open/` and `closed/`, the folder named like an id. A lone node stays in the top-level `open/` and `closed/`. Ids stay unique across every plan, so a link never says which folder its target is in, and a node can link into another plan.
-- **A long list may wrap:** a formatter such as prettier breaks a long `needs:` list onto an indented next line, and `plans.py` reads the indented line as part of the one above.
+- **The frontmatter is YAML:** `plans.py` reads it with a YAML parser, so a long `needs:` list that a formatter such as prettier wraps onto an indented next line is still one list, and a `#` comment, on its own line or after a value, is dropped.
 - **`agents/plans/`** sits beside `AGENTS.md`, readable by any agent and committed like code. Plans in `.claude/plans/`, `docs/plans/` or a `_implemented/` folder are moved here (see [Tidying old plans](#tidying-old-plans)).
 
 ## A node
@@ -40,7 +40,7 @@ needs: [skillspkgs-authoring-combination]
 What is true when this is done, and how to check it. As long as it needs.
 ```
 
-The frontmatter is one `key: value` per line, with lists in brackets:
+The frontmatter is one `key: value` per line, with lists in brackets. A value that holds `: ` or ` #`, or opens on a backtick, `[`, `{`, `*` or `&` without being a list, goes in double quotes, as YAML requires: `implemented-by: "wave 7: 9 pull requests, #12 and #13"`. The keys:
 
 | Key              | Holds                                                                         |
 | ---------------- | ----------------------------------------------------------------------------- |
@@ -95,6 +95,7 @@ Research and audits that plans rest on go in `agents/reports/`, beside `agents/p
 - **A plan node links to the report that justifies it,** with a Markdown link in its body.
 - **Raw or machine-specific data,** such as timing logs, per-run logs and wave summaries, stays under `$XDG_STATE_HOME`; the report links to it or summarises it.
 - **A report is a point-in-time record,** exempt from `git-hygiene-no-history-in-tracked-files` as a decision record is. Its `state` says whether it still holds; a newer finding is a new report that supersedes it, not an edit.
+- **A report leads with its findings:** the summary and what a plan must act on, then its items in groups with their counts, then the evidence, as `writing-hygiene-progressive-disclosure` and `writing-hygiene-group-by-reader-action` lay out.
 
 ## Working from a plan
 
@@ -107,7 +108,7 @@ Research and audits that plans rest on go in `agents/reports/`, beside `agents/p
 
 ## The script
 
-`scripts/plans.py`, standard library only, run from the project root:
+`scripts/plans.py`, run from the project root. Its Python is standard library only, and it reads each node's frontmatter with `yq` ([yq-go](https://github.com/mikefarah/yq)), which must be on PATH; without it the script stops with an error naming `yq`.
 
 ```bash
 python3 scripts/plans.py check      # every problem; exits 1 if any
@@ -115,7 +116,7 @@ python3 scripts/plans.py ready      # approved nodes whose needs are all impleme
 python3 scripts/plans.py overview   # rewrites agents/plans/README.md, after a clean check
 ```
 
-`--plans <dir>` points it at another folder. `check` reports a state in the wrong folder, links to missing nodes, cycles in `part-of`, `needs` or `after`, `after` outside a schedule node, unknown keys, missing fields, and nodes left at the plan's root.
+`--plans <dir>` points it at another folder. `check` reports frontmatter that isn't YAML, with the line YAML stopped at, a state in the wrong folder, links to missing nodes, cycles in `part-of`, `needs` or `after`, `after` outside a schedule node, unknown keys, missing fields, and nodes left at the plan's root.
 
 ## Tidying old plans
 
@@ -149,6 +150,7 @@ The keys this skill reads, with its own defaults:
 - Writing, updating or reviewing a plan, or turning a request into one.
 - Starting work from a plan, or finishing a node.
 - Scheduling agents across plan nodes, or estimating what a schedule costs.
+- Writing a report, the research or audit a plan rests on, in `agents/reports/`.
 - Finding plans in `.claude/plans/`, `docs/plans/` or another folder.
 
 ## Related skills
@@ -161,4 +163,6 @@ came from; don't apply it from memory.
 - `coding-agent-headless-in-checkout`: runs a schedule node's wave, one headless session per checkout.
 - `git-hygiene-no-history-in-tracked-files`: a node states the plan as it stands, with its history in commit messages; reports are exempt.
 - `writing-hygiene-declarative-statements`: the snapshot form an end-state node's postconditions are written in.
+- `writing-hygiene-progressive-disclosure`: the order of a report, its summary and findings before its evidence.
+- `writing-hygiene-group-by-reader-action`: the groups a report sorts its items into, each with its count.
 - `coding-agent-skill-references`: the preferences files this skill reads.

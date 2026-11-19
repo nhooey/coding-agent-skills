@@ -24,7 +24,9 @@ so `Decide.4` still names one item; a list that starts again at 1 gives 2 items 
 table indented under a list item is
 never drawn: its rows print as raw pipe text. A line of text directly under a table's last row is
 read as one more row, and a table directly under a line of text can be read as part of it, so a
-table has a blank line above and below it.
+table has a blank line above and below it. An option is 🔘 radio or 🔲 checkbox, lettered from `A`; a
+yes-or-no question is a radio item with `A` and `B`, so a 👍 or 👎 option, or one lettered `Y` or
+`N`, is a finding.
 
 Takes: the response on stdin, or in the FILE given. Prints one line per finding, `LINE: [k]
 message`, and exits 1 if there is any, else 0:
@@ -42,6 +44,7 @@ message`, and exits 1 if there is any, else 0:
     [k] a table inside a list item, indented to its text
     [l] a table with no blank line above it, or a line directly under its last row
     [m] a list under a topic header that does not number on from the same list in the topics before
+    [n] a Decide option with a 👍 or 👎 glyph, or lettered `Y` or `N`
 
 A list is a run of items, `-`, `*`, `+`, `1.` or `1)`, at one indent: every list of the response,
 the 📌 roll-up's groups and an item's own numbered steps among them. An item is multi-line when
@@ -73,7 +76,9 @@ _UNDERLINE = re.compile(r"^\s*[▔━═]+\s*$")
 TOPIC_RULE = "═"  # U+2550, under a topic header; ▔ goes under a list's header and ━ under the 📌 roll-up's
 _LIST_NAME = re.compile(r"\*\*([^*]+?):\*\*")
 _FENCE = re.compile(r"^ *(```|~~~)")
-_OPTION = re.compile(r"^( *)(🔘|🔲|👍|👎) [A-Z]\. ")
+# An option line; 👍 and 👎 are matched only to be reported, since an option is 🔘 or 🔲 lettered from A.
+_OPTION = re.compile(r"^( *)(🔘|🔲|👍|👎) ([A-Z])\. ")
+_YES_NO = frozenset({"👍", "👎", "Y", "N"})
 _ROW = re.compile(r"^ *\|")
 
 
@@ -202,6 +207,10 @@ def lint(text: str) -> list[tuple[int, str, str]]:
         option = _OPTION.match(line)
         if option:
             options = len(option.group(1))
+            if _YES_NO & {option.group(2), option.group(3)}:
+                findings.append(
+                    (number, "n", "an option is 🔘 or 🔲 lettered from A; write a yes-or-no question as 🔘 A. and 🔘 B.")
+                )
         item = _ITEM.match(line)
         if item:
             indent = len(item.group(1))

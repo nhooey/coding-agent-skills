@@ -34,7 +34,7 @@ def decide(gap: str) -> str:
         f"{gap}\n"
         "2. **Which other fast-changing data moves into rows of its own**  \n"
         "   Prices.\n"
-        "   👍 Y. **Move prices too**: one migration.\n"
+        "   🔘 A. **Move prices too**: one migration.\n"
         "      ➕ One pattern for both.\n"
         "      ➖ A second migration to review.\n"
     )
@@ -90,6 +90,23 @@ def fenced_block(path: pathlib.Path, heading: str) -> str:
 class LintReplyTest(unittest.TestCase):
     def test_correct_decide_list(self) -> None:
         self.assertEqual(kinds(decide(f"   {S}")), [])
+
+    def test_a_thumbs_option_line(self) -> None:
+        for glyph in ("👍 B.", "👎 B."):
+            with self.subTest(glyph=glyph):
+                self.assertEqual(kinds(decide(f"   {S}").replace("🔘 A. **Move", f"{glyph} **Move")), [(11, "n")])
+
+    def test_a_y_or_n_letter(self) -> None:
+        for letter in ("🔘 Y.", "🔲 N."):
+            with self.subTest(letter=letter):
+                self.assertEqual(kinds(decide(f"   {S}").replace("🔘 A. **Move", f"{letter} **Move")), [(11, "n")])
+
+    def test_thumbs_and_capitals_outside_an_option_line(self) -> None:
+        text = (
+            "✅ **Done:**  \n▔▔▔▔▔▔▔▔\n1. **Y. and N. read by the parser, 👍 from the user**  \n"
+            "   👍 Merged after review.\n"
+        )
+        self.assertEqual(kinds(text), [])
 
     def test_one_space_runs_items_together(self) -> None:
         self.assertEqual(kinds(decide(" ")), [(8, "c"), (9, "a")])
@@ -245,6 +262,7 @@ class LintReplyTest(unittest.TestCase):
             "⏳ **Waiting:**": 11,
             "🤔 **Waiting:**": 11,
             "❓ **Answers:**": 11,
+            "🔑 **Authorizations:**": 18,
             "🔍 **Review:**": 10,
             "👉 **Todo:**": 8,
             "🧠 **Decide:**": 10,
@@ -318,6 +336,7 @@ class LintReplyTest(unittest.TestCase):
         for path, heading in [
             (examples, "## A Decide list"),
             (examples, "## Two lists in one response"),
+            (examples, "## An Authorizations list"),
             (examples, "## A reassess grouped by topic"),
             (examples, "## The full roll-up"),
             (skill / "README.md", "The final response:"),

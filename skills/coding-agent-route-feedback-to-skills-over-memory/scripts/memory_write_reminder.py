@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""memory_write_reminder: route a lesson about how to work into a skill.
+"""memory_write_reminder: route a lesson about how to work to its layer.
 
 A Claude Code PreToolUse hook on Write and Edit, run by memory-write-reminder.sh
 once the written path has a `/memory/` folder in it, with the hook's input on
@@ -29,7 +29,7 @@ TOOLS = frozenset({"Write", "Edit"})
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 REMINDER = (
     "If this records how to work (a correction, a standing rule, a tool gotcha), "
-    f"load `{SKILL}` and route it to a skill. "
+    f"load `{SKILL}` and route it to the layer that owns it. "
     "Identity, project state and pointers stay in memory."
 )
 

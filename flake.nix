@@ -74,8 +74,7 @@
         # (motd, install-skills startup, the ci/dev/maintenance command trio,
         # and the reap-skills/update-skills-devshell pair). Configured via the
         # `agent-skill-flake.devshellSkills` options block below. The dev-shell
-        # skill set (the git/GitHub pack plus skillspkgs' `authoring`
-        # combination) is defined in the runtime `skills-devshell/` sub-flake
+        # skill set (skillspkgs' `skill-collections` combination) is defined in the runtime `skills-devshell/` sub-flake
         # and invoked at RUNTIME, never as a root input, so this repo keeps zero
         # skill inputs in its own lock.
         inputs.agent-skill-flake.flakeModules.devshellSkills
@@ -105,19 +104,30 @@
           # standard library, and the tests may use these libraries too.
           testPython = pkgs.python3.withPackages (ps: [ ps.pytest ]);
 
+          # The tools a skill's scripts run, by the hook script that runs
+          # them: on PATH in the dev shell and the tests, and set on PATH in
+          # the hooks plugin's copy of that script. plans.py reads frontmatter
+          # with yq, and plans-check-hook.sh runs plans.py.
+          scriptInputs = {
+            "plans-check-hook.sh" = [ pkgs.yq-go ];
+          };
+
           # `skill-tests [python | shell | SKILL ...]`: each language's tests
-          # with its own tool, pytest for test_*.py and bash for each test_*.sh,
-          # under tests/ and scripts/; or only one language's; or only the
-          # named skills' under tests/. A selection that runs no test fails.
-          # `skills-dev test` and the python-tests and shell-tests checks all
-          # run it.
+          # with its own tool, pytest for test_*.py, bash for each test_*.sh and
+          # bats for *.bats, the shell language's, under tests/ and scripts/;
+          # or only one language's; or only the named skills' under tests/. A
+          # selection that runs no test fails. `skills-dev test` and the
+          # python-tests and shell-tests checks all run it.
           skillTests = pkgs.writeShellApplication {
             name = "skill-tests";
             runtimeInputs = [
               testPython
               pkgs.bash
+              pkgs.bats
               pkgs.git
-            ];
+              pkgs.jq
+            ]
+            ++ lib.concatLists (lib.attrValues scriptInputs);
             text = ''
               cd "''${PRJ_ROOT:-$PWD}"
               language=
@@ -140,13 +150,15 @@
               fi
               python_tests=()
               shell_tests=()
+              bats_tests=()
               if [ "$language" != shell ]; then
                 mapfile -t python_tests < <(find "''${folders[@]}" -name 'test_*.py' | sort)
               fi
               if [ "$language" != python ]; then
                 mapfile -t shell_tests < <(find "''${folders[@]}" -name 'test_*.sh' | sort)
+                mapfile -t bats_tests < <(find "''${folders[@]}" -name '*.bats' | sort)
               fi
-              if [ $((''${#python_tests[@]} + ''${#shell_tests[@]})) -eq 0 ]; then
+              if [ $((''${#python_tests[@]} + ''${#shell_tests[@]} + ''${#bats_tests[@]})) -eq 0 ]; then
                 echo "skill-tests: no ''${language:+$language }tests in ''${folders[*]}" >&2
                 exit 1
               fi
@@ -158,8 +170,31 @@
                 echo "==== $test"
                 bash "$test" </dev/null || status=1
               done
+              if [ ''${#bats_tests[@]} -gt 0 ]; then
+                bats "''${bats_tests[@]}" </dev/null || status=1
+              fi
               exit "$status"
             '';
+          };
+
+          # `check-hooks-plugin PLUGIN`: the hooks plugin's rules, each enforced
+          # by an existing tool: check-jsonschema, bash, shfmt, ruff and python3.
+          checkHooksPlugin = pkgs.writeShellApplication {
+            name = "check-hooks-plugin";
+            runtimeInputs = [
+              pkgs.bash
+              pkgs.check-jsonschema
+              pkgs.gawk
+              pkgs.jq
+              pkgs.python3
+              pkgs.ruff
+              pkgs.shfmt
+            ];
+            runtimeEnv.HOOKS_PLUGIN_SCHEMAS = lib.fileset.toSource {
+              root = ./nix/hooks-plugin-check;
+              fileset = lib.fileset.fileFilter (file: file.hasExt "json") ./nix/hooks-plugin-check;
+            };
+            text = builtins.readFile ./nix/hooks-plugin-check/check-hooks-plugin.sh;
           };
 
           # One check per language, running `skill-tests <language>` on a
@@ -190,7 +225,7 @@
           # by listing its script here and running it from plugin/hooks/hooks.json.
           packages = base.packages.${system} // {
             hooks-plugin = import ./nix/hooks-plugin.nix {
-              inherit pkgs;
+              inherit pkgs scriptInputs;
               src = ./plugin;
               hookScripts = [
                 ./skills/coding-agent-session-build-limits/scripts/session-build-limits.sh
@@ -211,26 +246,18 @@
             };
           };
 
-          # The built hooks plugin's manifest, hooks.json and scripts. The
-          # checker's own tests run in python-tests.
-          checks.hooks-plugin =
-            pkgs.runCommand "hooks-plugin-check"
-              {
-                nativeBuildInputs = [
-                  pkgs.python3
-                  pkgs.bash
-                ];
-              }
-              ''
-                python3 -I ${./scripts}/check_hooks_plugin.py ${config.packages.hooks-plugin}
-                touch $out
-              '';
+          # The built hooks plugin's manifest, hooks.json and scripts, each rule
+          # checked by the tool that owns it, as check-hooks-plugin.sh lists.
+          checks.hooks-plugin = pkgs.runCommand "hooks-plugin-check" { } ''
+            export HOME=$TMPDIR
+            ${lib.getExe checkHooksPlugin} ${config.packages.hooks-plugin}
+            touch $out
+          '';
 
           apps = base.apps.${system};
 
           # Every test: pytest over the Python tests under tests/ and scripts/,
-          # the layout test and the dev tools' own tests among them, and bash
-          # over each shell test.
+          # the dev tools' own tests among them, and bash over each shell test.
           checks.python-tests = testCheck "python";
           checks.shell-tests = testCheck "shell";
 
@@ -265,10 +292,12 @@
             # prettier trims trailing spaces even inside fenced code blocks,
             # and the kanban skill's examples need them: each list header there
             # ends in 2 spaces, the hard break the skill itself requires. Its
-            # README's example has the same headers.
+            # README's example has the same headers. The headless runner's
+            # unreadable outcome fixture is not JSON on purpose.
             settings.formatter.prettier.excludes = [
               "skills/coding-agent-kanban-turn-responses/examples.md"
               "skills/coding-agent-kanban-turn-responses/README.md"
+              "tests/coding-agent-headless-in-checkout/fixtures/night/eps.outcome.json"
             ];
           };
 
@@ -286,7 +315,8 @@
             packages = [
               testPython
               pkgs.typescript
-            ];
+            ]
+            ++ lib.concatLists (lib.attrValues scriptInputs);
             commands = [
               {
                 category = "dev";

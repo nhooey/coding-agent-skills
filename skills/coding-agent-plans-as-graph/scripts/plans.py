@@ -9,26 +9,30 @@ A plan is a folder of Markdown nodes, `agents/plans/` by default:
   <plan>/closed/<id>.md
   README.md               the overview this script writes; never edited by hand
 
-Each node opens on a frontmatter block between `---` lines, one `key: value`
-per line, lists in brackets: `needs: [a, b]`; an indented line continues the
-one above, as a formatter wraps a long list. The node's id is its file name
-without `.md`, unique across every plan. SKILL.md lists the keys.
+Each node opens on a frontmatter block between `---` lines, a YAML mapping:
+`key: value` lines, lists in brackets, such as `needs: [a, b]`. YAML reads
+it, through yq (yq-go), so comments and a list wrapped onto an indented line
+follow YAML's rules, and a value keeps the text it was written as, so
+`cost: 1.50` stays `1.50`. The node's id is its file name without `.md`,
+unique across every plan. SKILL.md lists the keys.
 
 Commands:
   check      report every problem, exit 1 if there is any
   overview   rewrite README.md from the nodes (runs check first)
   ready      print the ids of approved nodes whose needs are all implemented
 
-Standard library only, so it runs anywhere Python 3.9+ does. Everything but
-`read_plan` and `main` is pure: it takes values and returns new ones.
+Its Python is standard library only, so it runs anywhere Python 3.9+ does,
+with `yq` (yq-go) on PATH. Everything above `# The shell` is pure: it takes
+values and returns new ones.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
-from functools import reduce
 from itertools import accumulate, chain, groupby, islice, repeat
 from pathlib import Path
 from types import MappingProxyType
@@ -44,6 +48,18 @@ LIST_KEYS = ("needs", "after", "touches")
 KNOWN_KEYS = frozenset({"title", "state", "kind", "owner", "implemented-by", "cost", *LINK_KEYS, *LIST_KEYS})
 ID = re.compile(r"[a-z0-9][a-z0-9-]*")
 OVERVIEW_MARK = "<!-- Written by plans.py overview; edit the nodes, not this file. -->"
+# yq reads a JSON list of frontmatter blocks and parses each as YAML. Every scalar in a mapping is
+# retagged as a string, so a value keeps the text it was written as: `1.50`, `true` and `null` stay
+# as written. Without header preprocessing, yq's line numbers count from the block's opening `---`,
+# which is the file's first line.
+YQ = (
+    "yq",
+    "--header-preprocess=false",
+    "--input-format=json",
+    "--output-format=json",
+    "--indent=0",
+    '.[] |= from_yaml | (.[] | select(tag == "!!map") | .. | select(tag != "!!map" and tag != "!!seq")) tag = "!!str"',
+)
 
 Meta = Mapping[str, object]
 Problems = Tuple[str, ...]
@@ -71,10 +87,15 @@ class Node:
 
 @dataclass(frozen=True)
 class RawPlan:
-    """What the shell read: (plan, folder, file stem, text) per node, and stray file paths."""
+    """What the shell read: (plan, folder, file stem, frontmatter as YAML read it, problems reading it)
+    per node, and stray file paths."""
 
-    files: Tuple[Tuple[str, str, str, str], ...]
+    files: Tuple[Tuple[str, str, str, object, Problems], ...]
     strays: Tuple[str, ...]
+
+
+class NoYq(OSError):
+    """yq, which reads the frontmatter, isn't on PATH."""
 
 
 Graph = Mapping[str, Node]
@@ -83,50 +104,50 @@ Graph = Mapping[str, Node]
 # Parsing
 
 
-def parse_value(value: str) -> object:
-    if value.startswith("[") and value.endswith("]"):
-        return tuple(v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip())
-    return value.strip("\"'")
-
-
-def parse_line(number: int, line: str) -> Tuple[Optional[Tuple[str, object]], Problems]:
-    key, sep, value = (part.strip() for part in line.partition(":"))
-    return ((key, parse_value(value)), ()) if sep and key else (None, (f"line {number}: not `key: value`",))
-
-
-def fold(lines: Tuple[str, ...]) -> Tuple[Tuple[int, str], ...]:
-    """Each logical line with its first line's number: an indented line joins the one above."""
-
-    def step(acc: Tuple[Tuple[int, str], ...], numbered: Tuple[int, str]) -> Tuple[Tuple[int, str], ...]:
-        n, line = numbered
-        joins = acc and line[:1].isspace() and line.strip()
-        return acc[:-1] + ((acc[-1][0], f"{acc[-1][1]} {line.strip()}"),) if joins else acc + ((n, line),)
-
-    return reduce(step, enumerate(lines, start=2), ())
-
-
-def parse_frontmatter(text: str) -> Tuple[Meta, Problems]:
+def frontmatter(text: str) -> Tuple[Optional[str], Problems]:
+    """The frontmatter block for YAML, from its opening `---` line to the line before the closing one."""
     lines = tuple(text.splitlines())
     if not lines or lines[0].strip() != "---":
-        return MappingProxyType({}), ("no frontmatter: the file must open on a `---` line",)
+        return None, ("no frontmatter: the file must open on a `---` line",)
     end = next((i for i, line in enumerate(lines[1:], start=1) if line.strip() == "---"), None)
     if end is None:
-        return MappingProxyType({}), ("frontmatter never closed with a `---` line",)
-    parsed = tuple(
-        parse_line(n, line)
-        for n, line in fold(lines[1:end])
-        if line.strip() and not line.lstrip().startswith("#")
-    )
+        return None, ("frontmatter never closed with a `---` line",)
+    return "\n".join(("---",) + lines[1:end]) + "\n", ()
+
+
+def text_of(value: object) -> str:
+    """A value as text: a string as it is, a nested list or mapping as JSON."""
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+def meta_of(document: object) -> Tuple[Meta, Problems]:
+    """A node's keys from its frontmatter as YAML read it: each value a string or a tuple of strings."""
+    if document is None:
+        return MappingProxyType({}), ()
+    if not isinstance(document, dict):
+        return MappingProxyType({}), ("frontmatter isn't `key: value` pairs",)
     return (
-        MappingProxyType(dict(pair for pair, _ in parsed if pair)),
-        tuple(chain.from_iterable(problems for _, problems in parsed)),
+        MappingProxyType(
+            {str(k): tuple(map(text_of, v)) if isinstance(v, list) else text_of(v) for k, v in document.items()}
+        ),
+        (),
     )
+
+
+def yaml_problem(stderr: str) -> str:
+    """yq's complaint about a block, from its last line, without yq's own prefixes."""
+    last = next((line for line in reversed(stderr.splitlines()) if line.strip()), "yq failed")
+    return "frontmatter isn't YAML: " + last.strip().removeprefix("Error: ").removeprefix("yaml: ")
 
 
 def build(raw: RawPlan) -> Tuple[Graph, Problems]:
     """The graph by node id, and the problems found while reading it."""
-    parsed = tuple((Node(stem, folder, MappingProxyType({}), plan), parse_frontmatter(text)) for plan, folder, stem, text in raw.files)
-    nodes = tuple(Node(n.id, n.folder, meta, n.plan) for n, (meta, _) in parsed)
+    parsed = tuple(
+        (Node(stem, folder, meta, plan), problems + shape)
+        for plan, folder, stem, document, problems in raw.files
+        for meta, shape in (meta_of(document),)
+    )
+    nodes = tuple(n for n, _ in parsed)
     duplicates = tuple(
         f"{later.where}: id `{node_id}` is also {first.where}"
         for node_id, group in groupby(sorted(nodes, key=lambda n: n.id), key=lambda n: n.id)
@@ -135,7 +156,7 @@ def build(raw: RawPlan) -> Tuple[Graph, Problems]:
     )
     return (
         MappingProxyType({n.id: n for n in nodes}),
-        tuple(f"{n.where}: {p}" for n, (_, problems) in parsed for p in problems)
+        tuple(f"{n.where}: {p}" for n, problems in parsed for p in problems)
         + duplicates
         + tuple(f"{name}: a node goes in an open/ or closed/ folder" for name in raw.strays),
     )
@@ -274,14 +295,40 @@ def overview(graph: Graph) -> str:
 # The shell: the only functions that touch the file system or the streams
 
 
+def run_yq(blocks: Tuple[str, ...]) -> Tuple[Optional[list], str]:
+    """Each block as YAML reads it, or None and yq's complaint when any block isn't YAML."""
+    try:
+        done = subprocess.run(YQ, input=json.dumps(blocks), capture_output=True, text=True)
+    except FileNotFoundError as error:
+        raise NoYq("plans.py reads each node's frontmatter with `yq` (yq-go), which isn't on PATH") from error
+    return (json.loads(done.stdout), "") if done.returncode == 0 else (None, done.stderr)
+
+
+def read_yaml(blocks: Tuple[str, ...]) -> Tuple[Tuple[object, Problems], ...]:
+    """Each block as YAML reads it, with its problem: all in one yq run, or one run each when a block
+    isn't YAML, so the problem names its block."""
+    documents, _ = run_yq(blocks) if blocks else ([], "")
+    if documents is not None:
+        return tuple((document, ()) for document in documents)
+    alone = tuple(run_yq((block,)) for block in blocks)
+    return tuple((None, (yaml_problem(stderr),)) if one is None else (one[0], ()) for one, stderr in alone)
+
+
 def read_plan(root: Path) -> RawPlan:
     plans = ("",) + tuple(p.name for p in sorted(root.iterdir()) if p.is_dir() and p.name not in FOLDERS)
+    paths = tuple(
+        (plan, folder, path)
+        for plan in plans
+        for folder in FOLDERS
+        for path in sorted((root / plan / folder).glob("*.md"))
+    )
+    found = tuple(frontmatter(path.read_text(encoding="utf-8")) for _, _, path in paths)
+    with_block = tuple(i for i, (block, _) in enumerate(found) if block is not None)
+    read = dict(zip(with_block, read_yaml(tuple(found[i][0] for i in with_block))))
     return RawPlan(
         files=tuple(
-            (plan, folder, path.stem, path.read_text(encoding="utf-8"))
-            for plan in plans
-            for folder in FOLDERS
-            for path in sorted((root / plan / folder).glob("*.md"))
+            (plan, folder, path.stem, *read.get(i, (None, found[i][1])))
+            for i, (plan, folder, path) in enumerate(paths)
         ),
         strays=tuple(
             str(path.relative_to(root))
@@ -300,7 +347,11 @@ def main(argv: Optional[list] = None) -> int:
     if not args.plans.is_dir():
         print(f"error: no plan folder at {args.plans}", file=sys.stderr)
         return 2
-    graph, load_problems = build(read_plan(args.plans))
+    try:
+        graph, load_problems = build(read_plan(args.plans))
+    except NoYq as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
     problems = load_problems + check(graph)
     if args.command == "ready":
         print("".join(f"{n.id}\n" for n in ready(graph)), end="")

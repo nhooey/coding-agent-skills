@@ -1,0 +1,5 @@
+[layout]
+tests-name-skills = true
+
+[description]
+trigger-first = ["coding-agent-headless-in-checkout", "coding-agent-kanban-turn-responses", "coding-agent-plans-as-graph", "coding-agent-scratchpad-scripts", "coding-agent-skill-references"]

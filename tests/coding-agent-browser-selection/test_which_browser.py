@@ -221,32 +221,6 @@ class FakeClock:
         self.now += seconds
 
 
-class PreferencesTest(unittest.TestCase):
-    def test_keys_values_and_nested_lists_are_read_from_the_markdown_list(self) -> None:
-        text = (
-            "# Browser\n\n"
-            "- **Preferred app:** `Google Chrome`\n"
-            "- Wake: launch\n"
-            "- Never use:\n"
-            "  - Brave Browser\n"
-            "  - `/Applications/Arc.app`\n"
-            "\n```markdown\n- Wake: off\n```\n"
-            "Some prose: not a key.\n"
-        )
-        self.assertEqual(
-            which_browser.parse_preferences(text),
-            {
-                "preferred app": "Google Chrome",
-                "wake": "launch",
-                "never use": ["Brave Browser", "/Applications/Arc.app"],
-            },
-        )
-
-    def test_a_missing_file_adds_nothing(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(which_browser.load_preferences((pathlib.Path(tmp) / "none.md",)), {})
-
-
 class AppsTest(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -412,79 +386,80 @@ class WakeTest(AppsTest):
 
 
 class SubcommandMainTest(AppsTest):
-    """`main` with `wake` pointed at a skill folder and project under the test's own directory, so
-    no real preferences file is read."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.skill_dir = self.root / "skills" / "coding-agent-browser-selection"
-        self.project_dir = self.root / "project"
-        self.brave = make_app(self.root, "Brave Browser", info_plist("com.brave.Browser"))
-
-    def write_preferences(self, user: str | None = None, project: str | None = None) -> None:
-        for path, text in zip(which_browser.preference_paths(self.skill_dir, self.project_dir), (user, project)):
-            if text is not None:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(text, encoding="utf-8")
-
     def run_main(self, mac: FakeMac, *args: str) -> tuple[int, str, str]:
-        dirs = ("--skill-dir", str(self.skill_dir), "--project-dir", str(self.project_dir))
-        argv = ["which_browser.py", *args, *(dirs if args[:1] == ("wake",) else ())]
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             clock = FakeClock()
-            status = which_browser.main(argv, "darwin", lambda: FOUND, mac, clock.sleep, clock)
+            status = which_browser.main(["which_browser.py", *args], "darwin", lambda: FOUND, mac, clock.sleep, clock)
         return status, out.getvalue(), err.getvalue()
 
+    def test_wake_without_an_app_is_a_usage_error_naming_app(self) -> None:
+        for args in (("wake",), ("wake", "--mode", "launch")):
+            with self.subTest(args=args):
+                mac = FakeMac()
+                status, out, err = self.run_main(mac, *args)
+                self.assertEqual((status, out, mac.calls), (2, "", []))
+                self.assertIn("usage:", err)
+                self.assertIn("--app", err)
+
+    def test_wake_launch_starts_the_app_passed(self) -> None:
+        mac = FakeMac(running=False)
+        self.assertEqual(
+            self.run_main(mac, "wake", "--app", str(self.chrome), "--mode", "launch")[:2],
+            (0, "Google Chrome\t200\tlaunched\n"),
+        )
+
     def test_a_never_use_app_named_is_refused_before_any_applescript(self) -> None:
-        self.write_preferences(user="- Never use:\n  - Brave Browser\n")
-        mac = FakeMac(bundle_id="com.brave.Browser", found=(str(self.brave),))
-        status, out, err = self.run_main(mac, "wake", "--app", "Brave Browser", "--mode", "launch")
+        mac = FakeMac(found=(str(self.chrome),))
+        status, out, err = self.run_main(
+            mac, "wake", "--app", "Google Chrome", "--mode", "launch", "--never-use", "Google Chrome"
+        )
         self.assertEqual((status, out), (2, ""))
-        self.assertIn("never to use Brave Browser", err)
+        self.assertIn("refusing to wake Google Chrome: it matches --never-use Google Chrome", err)
         self.assertEqual(mac.commands(), ["mdfind"])
 
-    def test_a_path_resolving_to_a_never_use_bundle_id_is_refused(self) -> None:
-        for entry in ("Brave Browser", "com.brave.Browser", str(self.brave)):
+    def test_a_never_use_entry_matches_by_name_bundle_id_or_path_ignoring_case(self) -> None:
+        nix_copy = make_app(self.root / "nix", "Google Chrome", info_plist(CHROME_ID))
+        for entry in ("google chrome", CHROME_ID.upper(), str(self.chrome), str(nix_copy)):
             with self.subTest(entry=entry):
-                self.write_preferences(user=f"- **Never use:**\n  - `{entry}`\n")
-                mac = FakeMac(bundle_id="com.brave.Browser")
-                status, _, err = self.run_main(mac, "wake", "--app", str(self.brave))
-                self.assertEqual((status, mac.calls), (2, []))
-                self.assertIn("refusing to wake Brave Browser", err)
+                mac = FakeMac()
+                status, out, err = self.run_main(
+                    mac, "wake", "--app", str(self.chrome), "--never-use", "Brave Browser", "--never-use", entry
+                )
+                self.assertEqual((status, out, mac.calls), (2, "", []))
+                self.assertIn(f"matches --never-use {entry}", err)
 
-    def test_the_project_file_overrides_the_user_file(self) -> None:
-        self.write_preferences(
-            user="- Preferred app: Brave Browser\n- Wake: off\n- Never use:\n  - Google Chrome\n",
-            project=f"- Preferred app: {self.chrome}\n- Wake: window\n- Never use:\n  - Brave Browser\n",
-        )
+    def test_a_never_use_entry_given_as_wake_would_take_the_app_is_refused(self) -> None:
+        work = make_app(self.root / "work", "Chrome Work", info_plist(CHROME_ID))
+        for app, found in (("Google Chrome.app", self.chrome), ("Chrome Work", work), ("Chrome Work.app", work)):
+            with self.subTest(app=app):
+                mac = FakeMac(found=(str(found),))
+                status, out, err = self.run_main(mac, "wake", "--app", app, "--never-use", app)
+                self.assertEqual((status, out, mac.commands()), (2, "", ["mdfind"]))
+                self.assertIn(f"matches --never-use {app}", err)
+
+    def test_never_use_entries_naming_no_browser_are_ignored_with_a_warning(self) -> None:
+        entries = ("Safari", "~nosuchuser-which-browser/X.app", str(self.root / "Missing.app"))
         mac = FakeMac(running=True)
-        self.assertEqual(self.run_main(mac, "wake")[:2], (0, "Google Chrome\t300\topened\n"))
+        args = [arg for entry in entries for arg in ("--never-use", entry)]
+        status, out, err = self.run_main(mac, "wake", "--app", str(self.chrome), *args)
+        self.assertEqual((status, out), (0, "Google Chrome\t300\topened\n"))
+        for entry in entries:
+            self.assertIn(f"--never-use {entry} names no browser this script reads; ignored", err)
 
-    def test_the_user_file_alone_sets_the_app_and_mode(self) -> None:
-        self.write_preferences(user=f"- Preferred app: {self.chrome}\n- Wake: launch\n")
-        mac = FakeMac(running=False)
-        self.assertEqual(self.run_main(mac, "wake")[:2], (0, "Google Chrome\t200\tlaunched\n"))
-
-    def test_with_no_preferences_files_wake_needs_an_app_and_defaults_to_window(self) -> None:
-        status, _, err = self.run_main(FakeMac(), "wake")
-        self.assertEqual(status, 2)
-        self.assertIn("no app to wake", err)
-        mac = FakeMac(running=False)
-        status, _, err = self.run_main(mac, "wake", "--app", str(self.chrome))
-        self.assertEqual(status, 1)
-        self.assertIn("never launches", err)
-
-    def test_an_unknown_wake_setting_exits_2(self) -> None:
-        self.write_preferences(user="- Wake: sometimes\n")
-        mac = FakeMac()
-        self.assertEqual(self.run_main(mac, "wake", "--app", str(self.chrome))[0], 2)
-        self.assertEqual(mac.calls, [])
+    def test_never_use_entries_naming_other_apps_let_wake_run(self) -> None:
+        brave = make_app(self.root, "Brave Browser", info_plist("com.brave.Browser"))
+        mac = FakeMac(running=True)
+        args = ("--never-use", "Brave Browser", "--never-use", "com.brave.Browser", "--never-use", str(brave))
+        self.assertEqual(
+            self.run_main(mac, "wake", "--app", str(self.chrome), *args)[:2], (0, "Google Chrome\t300\topened\n")
+        )
 
     def test_wake_help_exits_0(self) -> None:
         status, out, _ = self.run_main(FakeMac(), "wake", "--help")
         self.assertEqual(status, 0)
         self.assertIn("--settle", out)
+        self.assertIn("--never-use", out)
 
     def test_resolve_prints_name_bundle_id_and_path(self) -> None:
         status, out, _ = self.run_main(FakeMac(), "resolve", "--app", str(self.chrome))
