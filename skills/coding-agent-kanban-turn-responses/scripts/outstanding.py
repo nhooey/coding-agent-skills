@@ -47,7 +47,8 @@ Subcommands:
                              answers the last final response. Only the user's own text answers: a prompt
                              they typed or a message they sent while a turn ran, never a report, a
                              notification or a mod's prompt
-A `reassess` turn is one whose prompt opens on `reassess`, `recheck`, `regenerate` or `recalculate`, or a
+A `reassess` turn is one whose prompt, typed by the user or sent by a mod, opens on `reassess`, `recheck`,
+`regenerate` or `recalculate`, or a
 prefix of one of them that is a prefix of no other command's name, such as `regen`, bare or after
 `/coding-agent-kanban-turn-responses`.
 `--latest` keeps each item's latest occurrence. `render` gives each item the turn that first printed it,
@@ -165,13 +166,15 @@ def subject_key(summary: str) -> str:
 
 
 def merge_repeats(turns: tuple[rt.Turn, ...]) -> tuple[rt.Turn, ...]:
-    """One turn per prompt id: a prompt record a continuation repeats folds its replies and reports into the first."""
+    """One turn per prompt id: a prompt record a continuation repeats folds its replies, the user's messages and the
+    reports that came while it ran into the first."""
     first = {t.prompt_id: t for t in reversed(turns)}
     return tuple(
         replace(
             first[t.prompt_id],
             replies=tuple(r for u in turns if u.prompt_id == t.prompt_id for r in u.replies),
             reply_times=tuple(r for u in turns if u.prompt_id == t.prompt_id for r in u.reply_times),
+            asides=tuple(a for u in turns if u.prompt_id == t.prompt_id for a in u.asides),
             reports=tuple(r for u in turns if u.prompt_id == t.prompt_id for r in u.reports),
         )
         for n, t in enumerate(turns)
@@ -291,8 +294,16 @@ def command_of(prompt: str) -> str | None:
 
 
 def reassess_start(turns: tuple[rt.Turn, ...]) -> int:
-    """The position of the latest `reassess` turn, whose lists replace every item before it; else 0."""
-    return next((n for n in reversed(range(len(turns))) if command_of(turns[n].prompt) == "reassess"), 0)
+    """The position of the latest `reassess` turn, whose lists replace every item before it; else 0. Only the user's
+    own prompt or a mod's, such as its Reassess button, runs the command; a report or a notification runs none."""
+    return next(
+        (
+            n
+            for n in reversed(range(len(turns)))
+            if (turns[n].is_own or turns[n].is_plugin) and command_of(turns[n].prompt) == "reassess"
+        ),
+        0,
+    )
 
 
 def raised_by(turns: tuple[rt.Turn, ...], occurrences: tuple[Item, ...]) -> tuple[str, int]:
@@ -583,7 +594,7 @@ def unsettled(turns: tuple[rt.Turn, ...], items: tuple[Item, ...], merged: froze
     - a Review item settles once every pull request it names with its repository has merged;
     - a Decide item settles once the user answers its latest restatement, as `decide` reads answers;
     - a Waiting item settles once a report names it in a turn after the last that printed it in its own list, the
-      report the turn's prompt or one that came while the turn ran. A 📌 roll-up's restatement is no reprint, so a
+      report the turn's prompt, where the user didn't type it, or one that came while the turn ran. A 📌 roll-up's restatement is no reprint, so a
       roll-up copied from an earlier draft reopens nothing."""
     position = {t.id: n for n, t in enumerate(turns)}
     floor = reassess_start(turns)
@@ -595,7 +606,7 @@ def unsettled(turns: tuple[rt.Turn, ...], items: tuple[Item, ...], merged: froze
     reports = tuple(
         (n, names, report)
         for n, t in enumerate(turns)
-        for report in (t.prompt, *t.reports)
+        for report in (*(() if t.is_own else (t.prompt,)), *t.reports)
         if (names := report_names(report)) is not None
     )
     decided = answered_subjects(turns)

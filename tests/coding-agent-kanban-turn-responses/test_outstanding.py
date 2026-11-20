@@ -304,6 +304,27 @@ class OpenDecideItemsTest(unittest.TestCase):
         )
         self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
 
+    def test_only_the_user_or_a_mod_s_button_runs_a_reassess(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0]
+        button = prompt(SECOND, "The mod sent:\nreassess", 1, origin="system", pluginPrompt={"name": "mod", "text": "reassess"})
+        self.assertEqual(self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), button, reply(later, 1)), ["b2c3d4e5.Decide.1"])
+        for origin in ("peer", "task_notification"):
+            with self.subTest(origin=origin):
+                other = prompt(SECOND, "Recheck the build after the merge.", 1, origin=origin)
+                refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), other, reply(later, 1))
+                self.assertEqual(refs, ["9efb08a1.Decide.2", "9efb08a1.Decide.3", "b2c3d4e5.Decide.1"])
+
+    def test_an_answer_sent_while_a_repeated_prompt_ran_settles_its_item(self) -> None:
+        refs = self.open_refs(
+            prompt(FIRST, "go"),
+            reply(DECIDE_REPLY),
+            prompt(SECOND, "more", 1),
+            reply("Working.", 1),
+            prompt(SECOND, "more", 1),
+            queued("Decide.2.B", "human"),
+        )
+        self.assertEqual(refs, ["9efb08a1.Decide.1", "9efb08a1.Decide.3"])
+
     def test_an_open_turn_replaces_nothing(self) -> None:
         later = DECIDE_REPLY.split("2. **")[0].replace("1. **Which cache", "4. **Which cache")
         refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "restate", 1), reply(later, 1))
@@ -698,7 +719,12 @@ class SettledWaitingTest(unittest.TestCase):
         records = (
             prompt(FIRST, "go"),
             reply(waiting("Watcher on #143 (`b8a83gfv0`)") + "\n" + pending("Rework the loader", "x")),
-            prompt(SECOND, task_notification("b8a83gfv0", "completed", 'Background command "watch" completed'), 1),
+            prompt(
+                SECOND,
+                task_notification("b8a83gfv0", "completed", 'Background command "watch" completed'),
+                1,
+                origin="task_notification",
+            ),
             reply("Prose.", 1),
         )
         self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: 🚧 1")
@@ -708,7 +734,7 @@ class SettledWaitingTest(unittest.TestCase):
         records = (
             prompt(FIRST, "go"),
             reply(waiting("The implementer, on branch `outstanding-settled-items`")),
-            prompt(SECOND, report, 1),
+            prompt(SECOND, report, 1, origin="peer"),
             reply("Prose.", 1),
         )
         self.assertEqual(render_with(*records), "")
@@ -718,7 +744,7 @@ class SettledWaitingTest(unittest.TestCase):
             '<cross-session-message from="uds:/tmp/x.sock" from-name="github-config" from-mode="prompting">\n'
             "Done.\n</cross-session-message>"
         )
-        records = (prompt(FIRST, "go"), reply(waiting("github-config: the two fixes")), prompt(SECOND, message, 1), reply("Prose.", 1))
+        records = (prompt(FIRST, "go"), reply(waiting("github-config: the two fixes")), prompt(SECOND, message, 1, origin="peer"), reply("Prose.", 1))
         self.assertEqual(render_with(*records), "")
 
     def test_a_report_naming_something_else_settles_nothing(self) -> None:
@@ -726,7 +752,7 @@ class SettledWaitingTest(unittest.TestCase):
             '<cross-session-message from="uds:/tmp/x.sock" from-name="MyNixOS" from-mode="prompting">\n'
             "FYI.\n</cross-session-message>"
         )
-        records = (prompt(FIRST, "go"), reply(waiting("github-config: the two fixes")), prompt(SECOND, message, 1), reply("Prose.", 1))
+        records = (prompt(FIRST, "go"), reply(waiting("github-config: the two fixes")), prompt(SECOND, message, 1, origin="peer"), reply("Prose.", 1))
         self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
 
     def test_a_report_sent_while_a_turn_ran_settles_its_item(self) -> None:
@@ -745,6 +771,16 @@ class SettledWaitingTest(unittest.TestCase):
                 )
                 self.assertEqual(render_with(*records), "")
 
+    def test_a_report_the_user_pastes_into_a_prompt_settles_nothing(self) -> None:
+        pasted = (
+            '<agent-message from="b8a83gfv0">\n  Pushed.\n</agent-message>',
+            task_notification("b8a83gfv0", "completed", 'Background command "watch" completed'),
+        )
+        for text in pasted:
+            with self.subTest(text=text):
+                records = (prompt(FIRST, "go"), reply(waiting("Watcher (`b8a83gfv0`)")), prompt(SECOND, text, 1), reply("Prose.", 1))
+                self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
+
     def test_a_task_still_running_settles_nothing(self) -> None:
         for note in (
             task_notification("b8a83gfv0", "completed", 'Agent "x" is waiting on its own background work'),
@@ -752,14 +788,14 @@ class SettledWaitingTest(unittest.TestCase):
             "<event>CHECK ok</event>\n</task-notification>",
         ):
             with self.subTest(note=note):
-                records = (prompt(FIRST, "go"), reply(waiting("Watcher (`b8a83gfv0`)")), prompt(SECOND, note, 1), reply("Prose.", 1))
+                records = (prompt(FIRST, "go"), reply(waiting("Watcher (`b8a83gfv0`)")), prompt(SECOND, note, 1, origin="task_notification"), reply("Prose.", 1))
                 self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
 
     def test_an_item_its_own_list_restates_after_the_report_stays_open(self) -> None:
         records = (
             prompt(FIRST, "go"),
             reply(waiting("Watcher (`b8a83gfv0`)")),
-            prompt(SECOND, task_notification("b8a83gfv0", "completed", "done"), 1),
+            prompt(SECOND, task_notification("b8a83gfv0", "completed", "done"), 1, origin="task_notification"),
             reply(waiting("Watcher (`b8a83gfv0`)") + "   Re-armed.\n", 1),
             prompt(THIRD, "more", 2),
             reply("Prose.", 2),
@@ -774,7 +810,7 @@ class SettledWaitingTest(unittest.TestCase):
         records = (
             prompt(FIRST, "go"),
             reply(waiting("Watcher (`b8a83gfv0`)")),
-            prompt(SECOND, task_notification("b8a83gfv0", "failed", "gone"), 1),
+            prompt(SECOND, task_notification("b8a83gfv0", "failed", "gone"), 1, origin="task_notification"),
             reply("Prose.", 1),
             prompt(THIRD, "more", 2),
             reply(roll_up, 2),
