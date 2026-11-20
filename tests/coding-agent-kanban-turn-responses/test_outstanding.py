@@ -10,10 +10,13 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import pathlib
+import sys
 import tempfile
 import unittest
 from datetime import timedelta
+from unittest import mock
 
 import outstanding
 import reply_turns
@@ -527,6 +530,239 @@ class RenderTest(unittest.TestCase):
     def test_nothing_open_renders_nothing(self) -> None:
         self.assertEqual(self.render(prompt(FIRST, "go"), reply("Prose only.")), "")
         self.assertEqual(self.render(prompt(FIRST, "go"), reply("Prose only."), counts=True), "")
+
+
+FOURTH = "d4e5f6a7-0000-4000-8000-000000000000"
+REVIEW_REPLY = (
+    "🔍 **Review:**  \n▔▔▔▔▔▔▔▔▔▔\n"
+    "1. **🔗 [#21 Close the pane](https://github.com/nhooey/kanban/pull/21)**\n"
+    "2. **nhooey/kanban#22 Bump the lock**, on top of nhooey/kanban#21\n"
+    "3. **#23 The README**\n"
+)
+
+
+def waiting(summary: str) -> str:
+    return f"⏳ **Waiting:**  \n▔▔▔▔▔▔▔▔▔▔▔\n1. **{summary}**\n"
+
+
+def task_notification(task_id: str, status: str, summary: str) -> str:
+    return (
+        f"<task-notification>\n<task-id>{task_id}</task-id>\n<status>{status}</status>\n"
+        f"<summary>{summary}</summary>\n</task-notification>"
+    )
+
+
+def render_with(*records: dict, merged: frozenset[str] = frozenset(), counts: bool = False) -> str:
+    args = outstanding.parser().parse_args(["render", *(["--counts"] if counts else [])])
+    return outstanding.run(args, turns(*records), merged=lambda refs: merged & refs)
+
+
+class SettledReviewTest(unittest.TestCase):
+    def records(self) -> tuple[dict, ...]:
+        return (prompt(FIRST, "go"), reply(REVIEW_REPLY), prompt(SECOND, "more", 1), reply("Prose.", 1))
+
+    def test_the_pull_requests_an_item_names(self) -> None:
+        refs = outstanding.pull_requests_of(REVIEW_REPLY)
+        self.assertEqual(refs, frozenset({"nhooey/kanban#21", "nhooey/kanban#22"}))
+
+    def test_a_merged_pull_request_settles_its_review_item(self) -> None:
+        out = render_with(*self.records(), merged=frozenset({"nhooey/kanban#21"}))
+        self.assertNotIn("Close the pane", out)
+        # #22 names #21 too, but #22 itself is open; #23 names no repository, so nothing settles it
+        self.assertIn("nhooey/kanban#22 Bump the lock", out)
+        self.assertIn("#23 The README", out)
+
+    def test_an_item_settles_once_every_pull_request_it_names_has_merged(self) -> None:
+        both = frozenset({"nhooey/kanban#21", "nhooey/kanban#22"})
+        self.assertEqual(render_with(*self.records(), merged=both, counts=True), "📌 Outstanding: 🔍 1")
+
+    def test_no_merged_pull_request_keeps_every_item(self) -> None:
+        self.assertEqual(render_with(*self.records(), counts=True), "📌 Outstanding: 🔍 3")
+
+    def test_the_graphql_response_names_the_merged_ones(self) -> None:
+        ordered = ("nhooey/kanban#21", "nhooey/kanban#22", "nhooey/kanban#24")
+        response = json.dumps(
+            {"data": {"pr0": {"pullRequest": {"state": "MERGED"}}, "pr1": {"pullRequest": {"state": "OPEN"}}, "pr2": None}}
+        )
+        self.assertEqual(outstanding.merged_of_response(ordered, response), frozenset({"nhooey/kanban#21"}))
+        for broken in ("", "not json", "[]", '{"data": null}'):
+            with self.subTest(response=broken):
+                self.assertEqual(outstanding.merged_of_response(ordered, broken), frozenset())
+
+
+class SettledReviewCommandLineTest(unittest.TestCase):
+    """`render` asks `gh` which pull requests merged, and keeps every Review item when `gh` fails or is missing."""
+
+    def render(self, gh: str | None) -> tuple[int, str, str]:
+        with tempfile.TemporaryDirectory() as folder:
+            root = pathlib.Path(folder)
+            path = root / "session.jsonl"
+            records = (prompt(FIRST, "go"), reply(REVIEW_REPLY), prompt(SECOND, "more", 1), reply("Prose.", 1))
+            path.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            calls = root / "calls"
+            if gh is not None:
+                stub = bin_dir / "gh"
+                stub.write_text(
+                    f"#!{sys.executable}\nimport sys\n"
+                    f"open({str(calls)!r}, 'a').write(' '.join(sys.argv[1:]) + '\\n')\n{gh}\n",
+                    encoding="utf-8",
+                )
+                stub.chmod(0o755)
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {"PATH": str(bin_dir)}), contextlib.redirect_stdout(out):
+                status = outstanding.main(["--transcript", str(path), "render", "--counts"])
+            return status, out.getvalue().strip(), calls.read_text(encoding="utf-8") if calls.exists() else ""
+
+    def test_the_merged_pull_request_gh_reports_settles_its_item(self) -> None:
+        response = {"data": {"pr0": {"pullRequest": {"state": "MERGED"}}, "pr1": {"pullRequest": {"state": "OPEN"}}}}
+        status, out, calls = self.render(f"print({json.dumps(json.dumps(response))})")
+        self.assertEqual((status, out), (0, "📌 Outstanding: 🔍 2"))
+        self.assertIn("api graphql", calls)
+        self.assertIn('owner: "nhooey", name: "kanban") { pullRequest(number: 21)', calls)
+
+    def test_a_failing_gh_keeps_every_item(self) -> None:
+        self.assertEqual(self.render("sys.exit(1)")[:2], (0, "📌 Outstanding: 🔍 3"))
+
+    def test_a_missing_gh_keeps_every_item(self) -> None:
+        self.assertEqual(self.render(None)[:2], (0, "📌 Outstanding: 🔍 3"))
+
+
+class SettledDecideTest(unittest.TestCase):
+    def test_numbered_answers_on_one_line(self) -> None:
+        for line in ("1. A / 3. Y", "1. A; 3. Y", "1. A, 3. Y", "1.A/3.Y"):
+            with self.subTest(line=line):
+                self.assertEqual(
+                    outstanding._answers_of_line(line, "9efb08a1"), frozenset({("9efb08a1", 1), ("9efb08a1", 3)})
+                )
+        self.assertEqual(outstanding._answers_of_line("2. A, C", "9efb08a1"), frozenset({("9efb08a1", 2)}))
+        self.assertEqual(outstanding._answers_of_line("1. A / 3. Y?", "9efb08a1"), frozenset())
+
+    def test_an_answered_decide_item_leaves_the_draft(self) -> None:
+        for answer in ("9efb08a1.Decide.1.A", "Decide.1: B", "1. A", "1. A / 3. Y"):
+            with self.subTest(answer=answer):
+                records = (prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, answer, 1), reply("Prose.", 1))
+                out = render_with(*records)
+                self.assertNotIn("Which cache to keep", out)
+                self.assertIn("Backlog cleanups to start", out)
+
+    def test_answers_to_items_1_and_3_leave_item_2(self) -> None:
+        records = (prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "1. A / 3. Y", 1), reply("Prose.", 1))
+        # the 📌 roll-up's "An older decision" was never answered
+        self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: 🧠 2")
+
+    def test_an_answer_holding_a_question_leaves_its_item_open(self) -> None:
+        records = (prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "1. B? how would B work", 1), reply("Prose.", 1))
+        self.assertIn("Which cache to keep", render_with(*records))
+
+    def test_a_roll_up_restating_an_answered_item_does_not_reopen_it(self) -> None:
+        roll_up = (
+            f"Prose.\n\n📌 **Outstanding from previous turns:**  \n{RULE}\n🧠 **Decide:**  \n"
+            "- **Which cache to keep for the loader** 🔖 9efb08a1₋₁\n"
+        )
+        records = (prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "Decide.1: A", 1), reply(roll_up, 1))
+        self.assertNotIn("Which cache to keep", render_with(*records))
+
+
+class SettledWaitingTest(unittest.TestCase):
+    def test_a_completed_task_notification_naming_the_task_settles_its_item(self) -> None:
+        records = (
+            prompt(FIRST, "go"),
+            reply(waiting("Watcher on #143 (`b8a83gfv0`)") + "\n" + pending("Rework the loader", "x")),
+            prompt(SECOND, task_notification("b8a83gfv0", "completed", 'Background command "watch" completed'), 1),
+            reply("Prose.", 1),
+        )
+        self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: 🚧 1")
+
+    def test_an_agent_report_naming_the_item_s_branch_settles_it(self) -> None:
+        report = '<agent-message from="a48bb9142825233bb">\n  Pushed branch outstanding-settled-items at 1234abc.\n</agent-message>'
+        records = (
+            prompt(FIRST, "go"),
+            reply(waiting("The implementer, on branch `outstanding-settled-items`")),
+            prompt(SECOND, report, 1),
+            reply("Prose.", 1),
+        )
+        self.assertEqual(render_with(*records), "")
+
+    def test_a_message_from_the_session_the_item_names_settles_it(self) -> None:
+        message = (
+            '<cross-session-message from="uds:/tmp/x.sock" from-name="github-config" from-mode="prompting">\n'
+            "Done.\n</cross-session-message>"
+        )
+        records = (prompt(FIRST, "go"), reply(waiting("github-config: the two fixes")), prompt(SECOND, message, 1), reply("Prose.", 1))
+        self.assertEqual(render_with(*records), "")
+
+    def test_a_report_naming_something_else_settles_nothing(self) -> None:
+        message = (
+            '<cross-session-message from="uds:/tmp/x.sock" from-name="MyNixOS" from-mode="prompting">\n'
+            "FYI.\n</cross-session-message>"
+        )
+        records = (prompt(FIRST, "go"), reply(waiting("github-config: the two fixes")), prompt(SECOND, message, 1), reply("Prose.", 1))
+        self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
+
+    def test_a_task_still_running_settles_nothing(self) -> None:
+        for note in (
+            task_notification("b8a83gfv0", "completed", 'Agent "x" is waiting on its own background work'),
+            "<task-notification>\n<task-id>b8a83gfv0</task-id>\n<summary>Monitor event</summary>\n"
+            "<event>CHECK ok</event>\n</task-notification>",
+        ):
+            with self.subTest(note=note):
+                records = (prompt(FIRST, "go"), reply(waiting("Watcher (`b8a83gfv0`)")), prompt(SECOND, note, 1), reply("Prose.", 1))
+                self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
+
+    def test_an_item_its_own_list_restates_after_the_report_stays_open(self) -> None:
+        records = (
+            prompt(FIRST, "go"),
+            reply(waiting("Watcher (`b8a83gfv0`)")),
+            prompt(SECOND, task_notification("b8a83gfv0", "completed", "done"), 1),
+            reply(waiting("Watcher (`b8a83gfv0`)") + "   Re-armed.\n", 1),
+            prompt(THIRD, "more", 2),
+            reply("Prose.", 2),
+        )
+        self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
+
+    def test_a_roll_up_restating_it_after_the_report_does_not_reopen_it(self) -> None:
+        roll_up = (
+            f"Prose.\n\n📌 **Outstanding from previous turns:**  \n{RULE}\n⏳ **Waiting:**  \n"
+            "- **Watcher (`b8a83gfv0`)** 🔖 9efb08a1₋₂\n"
+        )
+        records = (
+            prompt(FIRST, "go"),
+            reply(waiting("Watcher (`b8a83gfv0`)")),
+            prompt(SECOND, task_notification("b8a83gfv0", "failed", "gone"), 1),
+            reply("Prose.", 1),
+            prompt(THIRD, "more", 2),
+            reply(roll_up, 2),
+            prompt(FOURTH, "more", 3),
+        )
+        self.assertEqual(render_with(*records), "")
+
+
+class CutTest(unittest.TestCase):
+    # 45 columns as shown: the label is 34, `🔗 ` 2 and ` and more` 9
+    LINKED = "🔗 [#21 Close the pane and split nodes](https://github.com/nhooey/kanban/pull/21) and more"
+
+    def test_a_cut_inside_a_link_keeps_the_link_and_shortens_its_label(self) -> None:
+        self.assertEqual(outstanding._cut(self.LINKED, 20), "🔗 [#21 Close the pan…](https://github.com/nhooey/kanban/pull/21)")
+
+    def test_the_width_counts_a_link_s_label_alone(self) -> None:
+        self.assertEqual(outstanding._cut(self.LINKED, 45), self.LINKED)
+        self.assertEqual(outstanding._cut(self.LINKED, 44), self.LINKED[:-2] + "…")
+
+    def test_a_cut_right_after_a_link_puts_the_ellipsis_outside_it(self) -> None:
+        self.assertEqual(outstanding._cut(self.LINKED, 37), self.LINKED.split(")")[0] + ")…")
+
+    def test_text_without_a_link_cuts_as_before(self) -> None:
+        self.assertEqual(outstanding._cut("abcdefgh", 5), "abcd…")
+        self.assertEqual(outstanding._cut("abcdefgh", 8), "abcdefgh")
+        self.assertEqual(outstanding._cut("a [b] (c) [d]", 5), "a [b…")
+
+    def test_render_never_leaves_a_broken_link(self) -> None:
+        records = (prompt(FIRST, "go"), reply(REVIEW_REPLY.replace("Close the pane", "Close the pane " + "x" * 120)))
+        self.assertRegex(
+            render_with(*records), r"- \*\*🔗 \[#21 Close the pane x+…\]\(https://github\.com/nhooey/kanban/pull/21\)\*\* 🔖"
+        )
 
 
 FULL = f"Done.\n\n📌 **Outstanding from previous turns:**  \n{RULE}\n🚧 **Pending:**  \n- **x** 🔖 9efb08a1₋₁\n"

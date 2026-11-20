@@ -27,7 +27,12 @@ Subcommands:
                              default only the last 20 turns (`--last N`, or `--since ID`), and never a
                              turn before the latest `reassess` turn, whose lists replace every earlier
                              item; `--counts` prints the draft's one count line instead.
-                             Which items are still open is a judgement this script cannot make
+                             It leaves out what it can tell is settled: a Review item once every pull
+                             request it names with its repository (a GitHub URL or `owner/repo#N`) has
+                             merged, asked of `gh` in one call and kept when `gh` fails; a Decide item
+                             once a later prompt answers it, as `decide` reads answers; a Waiting item once
+                             a report (an agent's message or a finished task's notification) names it after
+                             the last turn that printed it in its own list. The rest is the session's call
   due [--now ISO]            `full` or `counts <time left>`: full once min(30 min, 5 x the average gap
                              of the last 5 completed turns) has passed since the last reply text that
                              printed the 📌 header with its rule; a count line never resets the clock
@@ -37,7 +42,8 @@ Subcommands:
                              earlier turns), reference, note and options (letter, name, glyph,
                              consequence, pros, cons and notes), for a tool to read.
                              Open: raised since the latest `reassess` turn, its latest restatement only, and answered by no later prompt with an option letter (a line
-                             holding a question mark answers nothing)
+                             holding a question mark answers nothing); a bare line of answers, `1. A / 3. B`,
+                             answers the last final response
 A `reassess` turn is one whose prompt opens on `reassess`, `recheck`, `regenerate` or `recalculate`, or a
 prefix of one of them that is a prefix of no other command's name, such as `regen`, bare or after
 `/coding-agent-kanban-turn-responses`.
@@ -55,10 +61,13 @@ import json
 import os
 import itertools
 import re
+import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from functools import reduce
+from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -317,8 +326,58 @@ def select(
     return latest_only(chosen) if latest and first else chosen
 
 
+def _closing(text: str, start: int, opening: str, closing: str) -> int | None:
+    """The index of the `closing` bracket matching the `opening` one at `start`, nested pairs counted; None if unclosed."""
+    depths = itertools.accumulate(1 if c == opening else -1 if c == closing else 0 for c in text[start:])
+    return next((start + n for n, depth in enumerate(depths) if depth == 0), None)
+
+
+def _link_at(text: str, start: int) -> tuple[int, int, int] | None:
+    """The Markdown link `[label](url)` opening at `start`, as the indices of its `[`, `]` and `)`."""
+    label_end = _closing(text, start, "[", "]") if text[start] == "[" else None
+    url_end = (
+        _closing(text, label_end + 1, "(", ")") if label_end is not None and text[label_end + 1 : label_end + 2] == "(" else None
+    )
+    return (start, label_end, url_end) if label_end is not None and url_end is not None else None
+
+
+def _segments(text: str) -> tuple[tuple[str, str, str], ...]:
+    """The text as (opening, shown, closing) runs: plain text is `("", text, "")`, a link `("[", label, "](url)")`."""
+    links = reduce(
+        lambda found, n: found if found and n <= found[-1][2] else (*found, link) if (link := _link_at(text, n)) else found,
+        range(len(text)),
+        (),
+    )
+    bounds = tuple(zip((0, *(end + 1 for _, _, end in links)), (*(start for start, _, _ in links), len(text))))
+    plain = tuple(("", text[a:b], "") for a, b in bounds)
+    linked = tuple(("[", text[start + 1 : mid], text[mid:end + 1]) for start, mid, end in links)
+    return tuple(s for pair in itertools.zip_longest(plain, linked) for s in pair if s and (s[0] or s[1]))
+
+
 def _cut(text: str, width: int) -> str:
-    return text if len(text) <= width else text[: max(width - 1, 0)] + "…"
+    """The text cut to `width` columns as shown, a link counting its label alone, with `…` where it was cut. A cut
+    inside a link shortens its label and keeps the link whole, so no `[label](url` fragment is left."""
+    runs = _segments(text)
+
+    def step(state: tuple[str, int, bool], run: tuple[str, str, str]) -> tuple[str, int, bool]:
+        out, budget, done = state
+        opening, shown, closing = run
+        return (
+            state
+            if done
+            else (out + opening + shown + closing, budget - len(shown), False)
+            if len(shown) <= budget
+            # a cut right after a link leaves the link alone, the `…` after it
+            else (out + "…", 0, True)
+            if budget <= 0
+            else (out + opening + shown[:budget] + "…" + closing, 0, True)
+        )
+
+    return (
+        text
+        if sum(len(shown) for _, shown, _ in runs) <= width
+        else reduce(step, runs, ("", max(width - 1, 0), False))[0]
+    )
 
 
 def parse_lists(text: str) -> tuple[str, ...]:
@@ -386,6 +445,171 @@ def render_counts(items: tuple[Item, ...]) -> str:
     counts = tuple((LISTS[key][1], sum(1 for i in items if i.list_key == key)) for key in LISTS)
     shown = tuple(f"{glyph} {n}" for glyph, n in counts if n)
     return "📌 Outstanding: " + " · ".join(shown) if shown else ""
+
+
+# --- items a later turn or GitHub settled --------------------------------------------------
+
+# A pull request an item names with its repository: a GitHub URL, or `owner/repo#N`. A bare `#N` names no
+# repository, so it is never looked up.
+_PULL_URL = re.compile(r"https?://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)")
+_PULL_REF = re.compile(r"(?<![\w./-])([\w.-]+)/([\w.-]+)#(\d+)\b")
+_GH_TIMEOUT = 20  # seconds; a `gh` that takes longer settles nothing
+# A task notification reports a finished task by its status, unless its agent is still waiting on work of its own;
+# a Monitor reports its end in its event.
+_DONE_STATUSES = frozenset({"completed", "failed", "killed", "stopped", "cancelled"})
+_STILL_WAITING = "is waiting on its own background work"
+_MONITOR_ENDED = "[Monitor expired"
+_QUOTED = re.compile(r'"([^"]+)"')
+
+
+def pull_requests_of(text: str) -> frozenset[str]:
+    """Each pull request the text names with its repository, as `owner/repo#N`, lowercased."""
+    found = (*_PULL_URL.findall(text), *_PULL_REF.findall(text))
+    return frozenset(f"{owner}/{repo}#{number}".lower() for owner, repo, number in found)
+
+
+def merged_of_response(ordered: tuple[str, ...], response: str) -> frozenset[str]:
+    """The pull requests a GraphQL response, aliased `pr<n>` after their place in `ordered`, reports merged; none
+    where the response is no JSON object."""
+    try:
+        parsed = json.loads(response)
+    except ValueError:
+        parsed = None
+    data = (parsed.get("data") if isinstance(parsed, dict) else None) or {}
+    states = {
+        key: (value.get("pullRequest") or {}).get("state")
+        for key, value in (data.items() if isinstance(data, dict) else ())
+        if isinstance(value, dict)
+    }
+    return frozenset(ref for n, ref in enumerate(ordered) if states.get(f"pr{n}") == "MERGED")
+
+
+def merged_pull_requests(refs: frozenset[str]) -> frozenset[str]:
+    """The pull requests among `refs` that GitHub reports merged, asked in one `gh api graphql` call; none where
+    `gh` is missing, fails or takes longer than the timeout, so every Review item is kept."""
+    ordered = tuple(sorted(refs))
+    query = " ".join(
+        f'pr{n}: repository(owner: "{owner}", name: "{name}") {{ pullRequest(number: {number}) {{ state }} }}'
+        for n, ref in enumerate(ordered)
+        for (owner, name), number in [(ref.split("#")[0].split("/"), ref.split("#")[1])]
+    )
+    try:
+        done = (
+            subprocess.run(
+                ["gh", "api", "graphql", "-f", f"query=query {{ {query} }}"],
+                capture_output=True,
+                text=True,
+                timeout=_GH_TIMEOUT,
+                check=False,
+            ).stdout
+            if ordered
+            else ""
+        )
+    except (OSError, subprocess.SubprocessError):
+        done = ""
+    # A GraphQL error, such as one pull request that doesn't exist, exits non-zero but still prints the others.
+    return merged_of_response(ordered, done)
+
+
+class _Elements(HTMLParser):
+    """Each element of a pseudo-XML text, as (tag, attributes, text), the text its own data with no child's. HTML's
+    parser is used because a report's text, unlike XML, may hold a bare `&` or `<`."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.found: list[tuple[str, dict[str, str], list[str]]] = []
+        self.open: list[int] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.found.append((tag, {k: v or "" for k, v in attrs}, []))
+        self.open.append(len(self.found) - 1)
+
+    def handle_endtag(self, tag: str) -> None:
+        match = next((n for n in reversed(range(len(self.open))) if self.found[self.open[n]][0] == tag), None)
+        del self.open[match if match is not None else len(self.open) :]
+
+    def handle_data(self, data: str) -> None:
+        self.found[self.open[-1]][2].append(data) if self.open else None
+
+
+def elements(text: str) -> tuple[tuple[str, dict[str, str], str], ...]:
+    parser = _Elements()
+    parser.feed(text)
+    parser.close()
+    return tuple((tag, attrs, "".join(parts).strip()) for tag, attrs, parts in parser.found)
+
+
+def report_names(prompt: str) -> tuple[str, ...] | None:
+    """The names a report goes by, where a turn's prompt is one: the sending session's name, the agent's id, or a
+    finished task's id and the quoted name in its summary. None where the prompt is no report, such as a task
+    notification for a task still running or a Monitor's event."""
+    found = elements(prompt) if "<" in prompt else ()
+    first = {tag: (attrs, text) for tag, attrs, text in reversed(found)}
+    task = first.get("task-notification")
+    status = first.get("status", ({}, ""))[1].lower()
+    summary = first.get("summary", ({}, ""))[1]
+    finished = (status in _DONE_STATUSES and _STILL_WAITING not in summary) or first.get("event", ({}, ""))[1].startswith(
+        _MONITOR_ENDED
+    )
+    return (
+        (first["cross-session-message"][0].get("from-name", ""),)
+        if "cross-session-message" in first
+        else (first["agent-message"][0].get("from", ""),)
+        if "agent-message" in first
+        else (first.get("task-id", ({}, ""))[1], *_QUOTED.findall(summary))
+        if task is not None and finished
+        else None
+    )
+
+
+def _names(name: str, text: str) -> bool:
+    """Whether `text` holds `name` as a whole word, ignoring case; a word may hold hyphens, as a branch name does."""
+    return bool(name.strip()) and re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text, re.IGNORECASE) is not None
+
+
+def report_names_item(summary: str, names: tuple[str, ...], report: str) -> bool:
+    """A report names a Waiting item where the item's summary holds one of the report's names, or the report holds
+    a code span of the summary shaped like a branch name."""
+    branches = tuple(span for span in _SPAN.findall(summary) if _BRANCH.match(span))
+    return any(_names(name, summary) for name in names) or any(_names(branch, report) for branch in branches)
+
+
+def unsettled(turns: tuple[rt.Turn, ...], items: tuple[Item, ...], merged: frozenset[str]) -> tuple[Item, ...]:
+    """The items no later turn, nor GitHub, settled:
+    - a Review item settles once every pull request it names with its repository has merged;
+    - a Decide item settles once a later prompt answers its latest restatement, as `decide` reads answers;
+    - a Waiting item settles once a report names it in a turn after the last that printed it in its own list. A
+      📌 roll-up's restatement is no reprint, so a roll-up copied from an earlier draft reopens nothing."""
+    position = {t.id: n for n, t in enumerate(turns)}
+    floor = reassess_start(turns)
+    last_own = {
+        (i.list_key, i.subject): position[i.turn_id]
+        for i in all_items(turns)
+        if not i.pinned and position[i.turn_id] >= floor
+    }
+    reports = tuple((n, names, t.prompt) for n, t in enumerate(turns) if (names := report_names(t.prompt)) is not None)
+    decided = answered_subjects(turns)
+
+    def settled(item: Item) -> bool:
+        refs = pull_requests_of(item.line)
+        return (
+            bool(refs) and refs <= merged
+            if item.list_key == "review"
+            else item.subject in decided
+            if item.list_key == "decide"
+            else any(
+                n > last_own.get((item.list_key, item.subject), -1) and report_names_item(item.summary, names, report)
+                for n, names, report in reports
+            )
+            if item.list_key == "waiting"
+            else False
+        )
+
+    return tuple(i for i in items if not settled(i))
+
+
+def review_pull_requests(items: tuple[Item, ...]) -> frozenset[str]:
+    return frozenset(ref for i in items if i.list_key == "review" for ref in pull_requests_of(i.line))
 
 
 # --- when the full roll-up is due ----------------------------------------------------------
@@ -478,7 +702,10 @@ _ANSWER_BARE = re.compile(
     rf"(?!(?:\.|:\s*|\s+){_LETTERS}\s+(?:of|from)\s+[0-9a-f]{{6,8}}\b)"
     rf"{_AFTER_REF}(?!\s+(?:of|from)\s)"
 )
-_ANSWER_NUMBER = re.compile(r"^\s*(\d+)[.:]\s*[A-Z](?:\s*,\s*[A-Z])*\s*$")
+# A line of numbered answers to the last final response, `2. B`, `2. A, C`, or several parted by `/`, `;` or `,`:
+# `1. A / 3. B`. The line must hold nothing else, so prose opening on a number answers nothing.
+_ANSWER_NUMBER = re.compile(rf"(\d+)[.:]\s*{_LETTERS}")
+_ANSWER_NUMBERS_LINE = re.compile(rf"\s*{_ANSWER_NUMBER.pattern}(?:\s*[/;,]\s*{_ANSWER_NUMBER.pattern})*\s*")
 
 
 @dataclass(frozen=True)
@@ -598,7 +825,10 @@ def _answers_of_line(line: str, previous_id: str) -> frozenset[tuple[str, int]]:
                 *((m.group(1), int(m.group(2))) for m in _ANSWER_WITH_ID.finditer(line)),
                 *((m.group(2), int(m.group(1))) for m in _ANSWER_ID_AFTER.finditer(line)),
                 *((previous_id, int(m.group(1))) for m in _ANSWER_BARE.finditer(line)),
-                *((previous_id, int(m.group(1))) for m in _ANSWER_NUMBER.finditer(line)),
+                *(
+                    (previous_id, int(m.group(1)))
+                    for m in (_ANSWER_NUMBER.finditer(line) if _ANSWER_NUMBERS_LINE.fullmatch(line) else ())
+                ),
             )
         )
     )
@@ -620,18 +850,26 @@ def _is_answered(item: DecideItem, answers: frozenset[tuple[str, int]]) -> bool:
     return any(item.turn_id.startswith(ident) and number == item.number for ident, number in answers)
 
 
-def open_decide_items(turns: tuple[rt.Turn, ...]) -> tuple[DecideItem, ...]:
-    """The open Decide items, oldest first: raised since the latest `reassess` turn, each subject's latest
-    restatement only, none a later prompt answered with an option."""
+def _latest_decide_items(turns: tuple[rt.Turn, ...]) -> tuple[DecideItem, ...]:
+    """The Decide items raised since the latest `reassess` turn, each subject's latest restatement only, oldest first."""
     kept = turns[reassess_start(turns) :]
     raised = tuple(item for t in kept for text in t.replies for item in decide_items_of_text(t.id, text))
     last = {subject_key(item.summary): n for n, item in enumerate(raised)}
+    return tuple(item for n, item in enumerate(raised) if last[subject_key(item.summary)] == n)
+
+
+def open_decide_items(turns: tuple[rt.Turn, ...]) -> tuple[DecideItem, ...]:
+    """The open Decide items, oldest first: raised since the latest `reassess` turn, each subject's latest
+    restatement only, none a later prompt answered with an option."""
     answers = answered(turns)
-    return tuple(
-        item
-        for n, item in enumerate(raised)
-        if last[subject_key(item.summary)] == n and not _is_answered(item, answers)
-    )
+    return tuple(item for item in _latest_decide_items(turns) if not _is_answered(item, answers))
+
+
+def answered_subjects(turns: tuple[rt.Turn, ...]) -> frozenset[str]:
+    """The subject keys of the Decide items whose latest restatement a later prompt answered, so a 📌 roll-up
+    that still carries one settles nothing."""
+    answers = answered(turns)
+    return frozenset(subject_key(item.summary) for item in _latest_decide_items(turns) if _is_answered(item, answers))
 
 
 def render_decide(items: tuple[DecideItem, ...], as_json: bool, width: int) -> str:
@@ -679,7 +917,12 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
-def run(args: argparse.Namespace, turns: tuple[rt.Turn, ...]) -> str:
+def run(
+    args: argparse.Namespace,
+    turns: tuple[rt.Turn, ...],
+    merged: Callable[[frozenset[str]], frozenset[str]] = merged_pull_requests,
+) -> str:
+    """The subcommand's output; `merged` says which of the pull requests it is given have merged, `render` alone asking."""
     if args.command == "index":
         out = render_index(turns, tuple(args.ids), args.last)
     elif args.command == "due":
@@ -697,8 +940,12 @@ def run(args: argparse.Namespace, turns: tuple[rt.Turn, ...]) -> str:
             getattr(args, "pattern", None),
             reassess_start(turns) if rendering else 0,
         )
+        grouped = with_origins(turns, found) if rendering else ()
+        refs = review_pull_requests(grouped)
         out = (
-            (render_counts if args.counts else lambda items: render_draft(items, args.width))(with_origins(turns, found))
+            (render_counts if args.counts else lambda items: render_draft(items, args.width))(
+                unsettled(turns, grouped, merged(refs) if refs else frozenset())
+            )
             if rendering
             else render_items(found, args.width)
         )
