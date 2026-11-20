@@ -18,7 +18,9 @@ button's `reassess`, read as the text the mod sent), not a sidechain and not a c
 summary: the user sees a usage line for each, so each counts as a turn. A `!` command's output is a
 `human` record too, opening on `<bash-stdout>` or `<bash-stderr>`, but it opens no turn. Only a typed
 prompt, `human` and carrying no `pluginPrompt`, or one the user sent with the `coding-agent-kanban-turns`
-pane's buttons, Submit or Reassess, its `pluginPrompt` named for that mod, is the user's own text. A turn's reply is the `text` blocks of the `assistant` records, not
+pane's buttons, Submit or Reassess, its `pluginPrompt` named for that mod, is the user's own text. A draft the
+pane's clicks started opens on a header line, `coding-agent-kanban-turns@<marketplace>:`, which
+`without_draft_header` leaves out. A turn's reply is the `text` blocks of the `assistant` records, not
 sidechain, up to the next such prompt; tool results belong to the turn under way, and so do the
 messages that reach the session while it runs, `queued_command` attachments: the user's own, of kind
 `human`, its asides, and a report, of kind `peer` or `task-notification`, one of its reports. The global
@@ -76,6 +78,9 @@ _ASIDE_KINDS = frozenset({"human"})
 _REPORT_KINDS = frozenset({"peer", "task-notification"})
 # The mod whose prompts the user sends, with its pane's Submit and Reassess buttons, so they are the user's own text.
 _OWN_PLUGIN = "coding-agent-kanban-turns"
+# The line a draft the pane's clicks started opens with: the mod's name, its marketplace after `@` where it has one,
+# and a colon, alone on the first line.
+_DRAFT_HEADER = re.compile(rf"\A{re.escape(_OWN_PLUGIN)}(?:@[\w.-]+)?:\r?\n")
 _ID_LENGTH = 8
 _PROMPT_WIDTH = 100
 
@@ -164,6 +169,12 @@ def _is_own(record: dict) -> bool:
         if _plugin_text(record) is not None
         else record.get("turnOrigin") == "human"
     )
+
+
+def without_draft_header(text: str) -> str:
+    """A message's text without the line naming the mod that a draft its pane's clicks started opens with, so that
+    line is read as neither an answer, a note nor a command."""
+    return _DRAFT_HEADER.sub("", text, count=1)
 
 
 def _queued(record: dict) -> tuple[str, str] | None:
