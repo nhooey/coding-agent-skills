@@ -159,6 +159,14 @@ class TurnsOfTest(unittest.TestCase):
         turns = reply_turns.turns_of((prompt(FIRST, "go"), submitted))
         self.assertEqual([(t.prompt, t.is_own) for t in turns], [("go", True), ("1. A", True)])
 
+    def test_the_pane_s_header_line_is_left_out_of_a_draft(self) -> None:
+        for header in ("coding-agent-kanban-turns@nix-pinned:", "coding-agent-kanban-turns:"):
+            with self.subTest(header=header):
+                self.assertEqual(reply_turns.without_draft_header(f"{header}\n1. A\nreassess"), "1. A\nreassess")
+        for kept in ("other-mod@market:\n1. A", "1. A\ncoding-agent-kanban-turns:\n2. B", "coding-agent-kanban-turns: 1. A"):
+            with self.subTest(kept=kept):
+                self.assertEqual(reply_turns.without_draft_header(kept), kept)
+
     def test_shell_output_opens_no_turn(self) -> None:
         records = (
             prompt(FIRST, "go"),

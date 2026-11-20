@@ -328,6 +328,34 @@ class OpenDecideItemsTest(unittest.TestCase):
                 refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), other, reply(later, 1))
                 self.assertEqual(refs, ["9efb08a1.Decide.2", "9efb08a1.Decide.3", "b2c3d4e5.Decide.1"])
 
+    def test_answers_then_a_trailing_reassess_answer_and_then_reassess(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0]
+        for send in (prompt, submitted):
+            with self.subTest(send=send.__name__):
+                records = (prompt(FIRST, "go"), reply(DECIDE_REPLY), send(SECOND, "1. A / 3. Y\nreassess", 1), reply(later, 1))
+                self.assertEqual(outstanding.answered(turns(*records)), frozenset({("9efb08a1", 1), ("9efb08a1", 3)}))
+                self.assertEqual(self.open_refs(*records), ["b2c3d4e5.Decide.1"])
+
+    def test_a_trailing_reassess_runs_only_after_the_user_s_own_answers(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0]
+        others = (
+            prompt(SECOND, "Look at the build again.\nreassess", 1),
+            prompt(SECOND, "The mod sent:\n1. A\nreassess", 1, origin="system", pluginPrompt={"name": "mod", "text": "1. A\nreassess"}),
+        )
+        for other in others:
+            with self.subTest(origin=other["turnOrigin"]):
+                refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), other, reply(later, 1))
+                self.assertEqual(refs, ["9efb08a1.Decide.2", "9efb08a1.Decide.3", "b2c3d4e5.Decide.1"])
+
+    def test_the_pane_s_header_line_is_neither_an_answer_nor_a_command(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0]
+        for header in ("coding-agent-kanban-turns@nix-pinned:", "coding-agent-kanban-turns:"):
+            with self.subTest(header=header):
+                answer = (prompt(FIRST, "go"), reply(DECIDE_REPLY), submitted(SECOND, f"{header}\n2. B", 1))
+                self.assertEqual(outstanding.answered(turns(*answer)), frozenset({("9efb08a1", 2)}))
+                command = (prompt(FIRST, "go"), reply(DECIDE_REPLY), submitted(SECOND, f"{header}\nreassess", 1), reply(later, 1))
+                self.assertEqual(self.open_refs(*command), ["b2c3d4e5.Decide.1"])
+
     def test_an_answer_sent_while_a_repeated_prompt_ran_settles_its_item(self) -> None:
         refs = self.open_refs(
             prompt(FIRST, "go"),
