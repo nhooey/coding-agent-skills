@@ -129,6 +129,41 @@ class TurnsOfTest(unittest.TestCase):
         turns = reply_turns.turns_of((prompt(FIRST, "go"), reply("one"), aside, peer))
         self.assertEqual(turns[0].asides, ("Decide.1.Y",))
 
+    def test_a_report_sent_while_a_turn_ran_is_one_of_its_reports(self) -> None:
+        def queued(text: str, kind: str | None) -> dict:
+            origin = {"origin": {"kind": kind}} if kind else {}
+            return {"type": "attachment", "attachment": {"type": "queued_command", "prompt": text, **origin}}
+
+        records = (
+            prompt(FIRST, "go"),
+            queued("<task-notification>done</task-notification>", "task-notification"),
+            queued("<agent-message>pushed</agent-message>", "peer"),
+            queued("Decide.1.Y", "human"),
+            queued("<task-notification>a hook was skipped</task-notification>", None),
+        )
+        turns = reply_turns.turns_of(records)
+        self.assertEqual(
+            turns[0].reports, ("<task-notification>done</task-notification>", "<agent-message>pushed</agent-message>")
+        )
+        self.assertEqual(turns[0].asides, ("Decide.1.Y",))
+
+    def test_only_a_prompt_the_user_typed_is_their_own(self) -> None:
+        submitted = prompt(SECOND, "reassess", origin="system", pluginPrompt={"name": "some-mod", "text": "reassess"})
+        turns = reply_turns.turns_of(RECORDS[:-1] + (submitted,))
+        self.assertEqual([(t.id, t.is_own) for t in turns], [("aaaa1111", True), ("bbbb2222", False), ("bbbb2222", False)])
+
+    def test_shell_output_opens_no_turn(self) -> None:
+        records = (
+            prompt(FIRST, "go"),
+            reply("one"),
+            {"type": "user", "message": {"content": "<bash-input>git log</bash-input>"}},
+            prompt(SECOND, "<bash-stdout>1234abc Fix</bash-stdout><bash-stderr></bash-stderr>"),
+            prompt(THIRD, "<bash-stderr>fatal: not a git repository</bash-stderr>"),
+        )
+        for human_only in (False, True):
+            with self.subTest(human_only=human_only):
+                self.assertEqual([t.id for t in reply_turns.turns_of(records, human_only)], ["aaaa1111"])
+
     def test_a_prompt_a_plugin_submitted_opens_a_turn_with_the_text_it_sent(self) -> None:
         submitted = prompt(
             SECOND,

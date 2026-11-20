@@ -30,9 +30,10 @@ Subcommands:
                              It leaves out what it can tell is settled: a Review item once every pull
                              request it names with its repository (a GitHub URL or `owner/repo#N`) has
                              merged, asked of `gh` in one call and kept when `gh` fails; a Decide item
-                             once a later prompt answers it, as `decide` reads answers; a Waiting item once
-                             a report (an agent's message or a finished task's notification) names it after
-                             the last turn that printed it in its own list. The rest is the session's call
+                             once the user answers it, as `decide` reads answers; a Waiting item once
+                             a report (an agent's message or a finished task's notification, as a turn's
+                             prompt or sent while a turn ran) names it after the last turn that printed it
+                             in its own list. The rest is the session's call
   due [--now ISO]            `full` or `counts <time left>`: full once min(30 min, 5 x the average gap
                              of the last 5 completed turns) has passed since the last reply text that
                              printed the 📌 header with its rule; a count line never resets the clock
@@ -43,7 +44,9 @@ Subcommands:
                              consequence, pros, cons and notes), for a tool to read.
                              Open: raised since the latest `reassess` turn, its latest restatement only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing); a bare line of answers, `1. A / 3. B`,
-                             answers the last final response
+                             answers the last final response. Only the user's own text answers: a prompt
+                             they typed or a message they sent while a turn ran, never a report, a
+                             notification or a mod's prompt
 A `reassess` turn is one whose prompt opens on `reassess`, `recheck`, `regenerate` or `recalculate`, or a
 prefix of one of them that is a prefix of no other command's name, such as `regen`, bare or after
 `/coding-agent-kanban-turn-responses`.
@@ -162,13 +165,14 @@ def subject_key(summary: str) -> str:
 
 
 def merge_repeats(turns: tuple[rt.Turn, ...]) -> tuple[rt.Turn, ...]:
-    """One turn per prompt id: a prompt record a continuation repeats folds its replies into the first."""
+    """One turn per prompt id: a prompt record a continuation repeats folds its replies and reports into the first."""
     first = {t.prompt_id: t for t in reversed(turns)}
     return tuple(
         replace(
             first[t.prompt_id],
             replies=tuple(r for u in turns if u.prompt_id == t.prompt_id for r in u.replies),
             reply_times=tuple(r for u in turns if u.prompt_id == t.prompt_id for r in u.reply_times),
+            reports=tuple(r for u in turns if u.prompt_id == t.prompt_id for r in u.reports),
         )
         for n, t in enumerate(turns)
         if turns.index(first[t.prompt_id]) == n
@@ -577,9 +581,10 @@ def report_names_item(summary: str, names: tuple[str, ...], report: str) -> bool
 def unsettled(turns: tuple[rt.Turn, ...], items: tuple[Item, ...], merged: frozenset[str]) -> tuple[Item, ...]:
     """The items no later turn, nor GitHub, settled:
     - a Review item settles once every pull request it names with its repository has merged;
-    - a Decide item settles once a later prompt answers its latest restatement, as `decide` reads answers;
-    - a Waiting item settles once a report names it in a turn after the last that printed it in its own list. A
-      📌 roll-up's restatement is no reprint, so a roll-up copied from an earlier draft reopens nothing."""
+    - a Decide item settles once the user answers its latest restatement, as `decide` reads answers;
+    - a Waiting item settles once a report names it in a turn after the last that printed it in its own list, the
+      report the turn's prompt or one that came while the turn ran. A 📌 roll-up's restatement is no reprint, so a
+      roll-up copied from an earlier draft reopens nothing."""
     position = {t.id: n for n, t in enumerate(turns)}
     floor = reassess_start(turns)
     last_own = {
@@ -587,7 +592,12 @@ def unsettled(turns: tuple[rt.Turn, ...], items: tuple[Item, ...], merged: froze
         for i in all_items(turns)
         if not i.pinned and position[i.turn_id] >= floor
     }
-    reports = tuple((n, names, t.prompt) for n, t in enumerate(turns) if (names := report_names(t.prompt)) is not None)
+    reports = tuple(
+        (n, names, report)
+        for n, t in enumerate(turns)
+        for report in (t.prompt, *t.reports)
+        if (names := report_names(report)) is not None
+    )
     decided = answered_subjects(turns)
 
     def settled(item: Item) -> bool:
@@ -835,12 +845,13 @@ def _answers_of_line(line: str, previous_id: str) -> frozenset[tuple[str, int]]:
 
 
 def answered(turns: tuple[rt.Turn, ...]) -> frozenset[tuple[str, int]]:
-    """Every (turn id or prefix, item number) a prompt, or a message sent while its turn ran, answers with an option
-    or in words; a bare answer means the turn before it."""
+    """Every (turn id or prefix, item number) the user answers with an option or in words, in a prompt they typed or
+    a message they sent while its turn ran; a bare answer means the turn before it. A report, a notification or a
+    mod's prompt answers nothing."""
     return frozenset(
         pair
         for previous, turn in zip(turns, turns[1:])
-        for text in (turn.prompt, *turn.asides)
+        for text in (*((turn.prompt,) if turn.is_own else ()), *turn.asides)
         for line in text.splitlines()
         for pair in _answers_of_line(line, previous.id)
     )

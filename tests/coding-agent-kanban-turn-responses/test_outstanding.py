@@ -91,15 +91,27 @@ GROUPED_REPLY = """Rechecked: 2 decisions open, in 2 topics.
 """
 
 
-def prompt(prompt_id: str, text: str, minute: int = 0) -> dict:
+def prompt(prompt_id: str, text: str, minute: int = 0, origin: str = "human", **extra: object) -> dict:
     return {
         "type": "user",
-        "turnOrigin": "human",
+        "turnOrigin": origin,
         "promptId": prompt_id,
         "uuid": f"uuid-{prompt_id}",
         "timestamp": f"2026-11-16T10:{minute:02d}:00Z",
         "message": {"content": text},
+        **extra,
     }
+
+
+def queued(text: str, kind: str) -> dict:
+    """A message that reached the session while a turn ran: the user's (`human`) or a report (`peer`, `task-notification`)."""
+    return {"type": "attachment", "attachment": {"type": "queued_command", "prompt": text, "origin": {"kind": kind}}}
+
+
+def shell_output(prompt_id: str, minute: int = 0) -> tuple[dict, dict]:
+    """A `!` command the user ran: its input record, and its output, which the transcript keeps as a human prompt."""
+    command = {"type": "user", "message": {"content": "<bash-input>git log</bash-input>"}}
+    return command, prompt(prompt_id, "<bash-stdout>1234abc Fix</bash-stdout><bash-stderr></bash-stderr>", minute)
 
 
 def reply(text: str, minute: int = 0) -> dict:
@@ -243,6 +255,22 @@ class OpenDecideItemsTest(unittest.TestCase):
             prompt(SECOND, "9efb08a1.Decide.1: A red one, please\n9efb08a1.Decide.3.N: not tonight", 1),
         )
         self.assertEqual(refs, ["9efb08a1.Decide.2"])
+
+    def test_only_the_user_s_own_text_answers(self) -> None:
+        answer = "9efb08a1.Decide.1.A"
+        others = (
+            prompt(SECOND, f'<agent-message from="a48bb">\n{answer}\n</agent-message>', 1, origin="peer"),
+            prompt(SECOND, f"<task-notification>\n<summary>{answer}</summary>\n</task-notification>", 1, origin="task_notification"),
+            prompt(SECOND, f"The mod sent:\n{answer}", 1, origin="system", pluginPrompt={"name": "mod", "text": answer}),
+        )
+        for other in others:
+            with self.subTest(origin=other["turnOrigin"]):
+                refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), other, queued(answer, "peer"))
+                self.assertIn("9efb08a1.Decide.1", refs)
+
+    def test_a_bare_answer_after_shell_output_settles_the_reply_before_it(self) -> None:
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), *shell_output(SECOND, 1), prompt(THIRD, "2. B", 2))
+        self.assertEqual(refs, ["9efb08a1.Decide.1", "9efb08a1.Decide.3"])
 
     def test_a_reference_alone_answers_nothing(self) -> None:
         refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, "see 9efb08a1.Decide.1 again", 1))
@@ -700,6 +728,22 @@ class SettledWaitingTest(unittest.TestCase):
         )
         records = (prompt(FIRST, "go"), reply(waiting("github-config: the two fixes")), prompt(SECOND, message, 1), reply("Prose.", 1))
         self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
+
+    def test_a_report_sent_while_a_turn_ran_settles_its_item(self) -> None:
+        reports = (
+            queued(task_notification("b8a83gfv0", "completed", 'Background command "watch" completed'), "task-notification"),
+            queued('<agent-message from="b8a83gfv0">\n  Pushed.\n</agent-message>', "peer"),
+        )
+        for report in reports:
+            with self.subTest(kind=report["attachment"]["origin"]["kind"]):
+                records = (
+                    prompt(FIRST, "go"),
+                    reply(waiting("Watcher on #143 (`b8a83gfv0`)")),
+                    prompt(SECOND, "more", 1),
+                    report,
+                    reply("Prose.", 1),
+                )
+                self.assertEqual(render_with(*records), "")
 
     def test_a_task_still_running_settles_nothing(self) -> None:
         for note in (
