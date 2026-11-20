@@ -92,6 +92,7 @@ class Turn:
     asides: tuple[str, ...] = ()  # what the user sent while the turn ran, each message whole
     reports: tuple[str, ...] = ()  # the agents' and tasks' reports that came while the turn ran
     is_own: bool = False  # whether the prompt is the user's own text, typed by them
+    is_plugin: bool = False  # whether a mod submitted the prompt, such as its Reassess button
 
     @property
     def id(self) -> str:
@@ -198,6 +199,7 @@ def _step(turns: tuple[Turn, ...], record: dict, origins: frozenset[str] = _ALL_
                 timestamp=record.get("timestamp", ""),
                 prompt=_prompt_of(record),
                 is_own=_is_own(record),
+                is_plugin=_plugin_text(record) is not None,
             ),
         )
         if _is_prompt(record, origins)
