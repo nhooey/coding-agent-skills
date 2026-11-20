@@ -17,7 +17,8 @@ report) or `task_notification`, or one carrying `pluginPrompt` (a prompt a mod s
 button's `reassess`, read as the text the mod sent), not a sidechain and not a compaction
 summary: the user sees a usage line for each, so each counts as a turn. A `!` command's output is a
 `human` record too, opening on `<bash-stdout>` or `<bash-stderr>`, but it opens no turn. Only a typed
-prompt, `human` and carrying no `pluginPrompt`, is the user's own text. A turn's reply is the `text` blocks of the `assistant` records, not
+prompt, `human` and carrying no `pluginPrompt`, or one the user sent with the `coding-agent-kanban-turns`
+pane's buttons, Submit or Reassess, its `pluginPrompt` named for that mod, is the user's own text. A turn's reply is the `text` blocks of the `assistant` records, not
 sidechain, up to the next such prompt; tool results belong to the turn under way, and so do the
 messages that reach the session while it runs, `queued_command` attachments: the user's own, of kind
 `human`, its asides, and a report, of kind `peer` or `task-notification`, one of its reports. The global
@@ -73,6 +74,8 @@ _COMMAND_OUTPUT = re.compile(r"\s*<bash-(?:stdout|stderr)>")
 # The kinds of a message that reaches the session while a turn runs: the user's own, and a report.
 _ASIDE_KINDS = frozenset({"human"})
 _REPORT_KINDS = frozenset({"peer", "task-notification"})
+# The mod whose prompts the user sends, with its pane's Submit and Reassess buttons, so they are the user's own text.
+_OWN_PLUGIN = "coding-agent-kanban-turns"
 _ID_LENGTH = 8
 _PROMPT_WIDTH = 100
 
@@ -91,8 +94,7 @@ class Turn:
     reply_times: tuple[str, ...] = ()  # each reply text's record timestamp, parallel to replies
     asides: tuple[str, ...] = ()  # what the user sent while the turn ran, each message whole
     reports: tuple[str, ...] = ()  # the agents' and tasks' reports that came while the turn ran
-    is_own: bool = False  # whether the prompt is the user's own text, typed by them
-    is_plugin: bool = False  # whether a mod submitted the prompt, such as its Reassess button
+    is_own: bool = False  # whether the prompt is the user's own text, typed or sent with the kanban pane's buttons
 
     @property
     def id(self) -> str:
@@ -154,8 +156,14 @@ def _is_prompt(record: dict, origins: frozenset[str] = _ALL_ORIGINS) -> bool:
 
 
 def _is_own(record: dict) -> bool:
-    """Whether a prompt is the user's own text: typed by them, not a report, a notification or a mod's prompt."""
-    return record.get("turnOrigin") == "human" and _plugin_text(record) is None
+    """Whether a prompt is the user's own text: typed by them, or sent with the kanban pane's buttons; not a
+    report, a notification or another mod's prompt."""
+    plugin = record.get("pluginPrompt") or {}
+    return (
+        plugin.get("name") == _OWN_PLUGIN
+        if _plugin_text(record) is not None
+        else record.get("turnOrigin") == "human"
+    )
 
 
 def _queued(record: dict) -> tuple[str, str] | None:
@@ -199,7 +207,6 @@ def _step(turns: tuple[Turn, ...], record: dict, origins: frozenset[str] = _ALL_
                 timestamp=record.get("timestamp", ""),
                 prompt=_prompt_of(record),
                 is_own=_is_own(record),
-                is_plugin=_plugin_text(record) is not None,
             ),
         )
         if _is_prompt(record, origins)

@@ -152,6 +152,13 @@ class TurnsOfTest(unittest.TestCase):
         turns = reply_turns.turns_of(RECORDS[:-1] + (submitted,))
         self.assertEqual([(t.id, t.is_own) for t in turns], [("aaaa1111", True), ("bbbb2222", False), ("bbbb2222", False)])
 
+    def test_a_prompt_the_kanban_pane_submits_is_the_user_s_own(self) -> None:
+        submitted = prompt(
+            SECOND, "1. A", origin="system", pluginPrompt={"name": "coding-agent-kanban-turns", "text": "1. A"}
+        )
+        turns = reply_turns.turns_of((prompt(FIRST, "go"), submitted))
+        self.assertEqual([(t.prompt, t.is_own) for t in turns], [("go", True), ("1. A", True)])
+
     def test_shell_output_opens_no_turn(self) -> None:
         records = (
             prompt(FIRST, "go"),

@@ -103,6 +103,12 @@ def prompt(prompt_id: str, text: str, minute: int = 0, origin: str = "human", **
     }
 
 
+def submitted(prompt_id: str, text: str, minute: int = 0) -> dict:
+    """A prompt the user sent with the kanban pane's Submit button, which the transcript keeps as the plugin's."""
+    plugin = {"name": "coding-agent-kanban-turns", "text": text}
+    return prompt(prompt_id, f"The coding-agent-kanban-turns plugin sent a message:\n{text}", minute, "system", pluginPrompt=plugin)
+
+
 def queued(text: str, kind: str) -> dict:
     """A message that reached the session while a turn ran: the user's (`human`) or a report (`peer`, `task-notification`)."""
     return {"type": "attachment", "attachment": {"type": "queued_command", "prompt": text, "origin": {"kind": kind}}}
@@ -268,6 +274,10 @@ class OpenDecideItemsTest(unittest.TestCase):
                 refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), other, queued(answer, "peer"))
                 self.assertIn("9efb08a1.Decide.1", refs)
 
+    def test_a_prompt_the_kanban_pane_submits_answers(self) -> None:
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), submitted(SECOND, "1. A / 3. Y", 1))
+        self.assertEqual(refs, ["9efb08a1.Decide.2"])
+
     def test_a_bare_answer_after_shell_output_settles_the_reply_before_it(self) -> None:
         refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), *shell_output(SECOND, 1), prompt(THIRD, "2. B", 2))
         self.assertEqual(refs, ["9efb08a1.Decide.1", "9efb08a1.Decide.3"])
@@ -304,13 +314,17 @@ class OpenDecideItemsTest(unittest.TestCase):
         )
         self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
 
-    def test_only_the_user_or_a_mod_s_button_runs_a_reassess(self) -> None:
+    def test_only_the_user_s_own_prompt_runs_a_reassess(self) -> None:
         later = DECIDE_REPLY.split("2. **")[0]
-        button = prompt(SECOND, "The mod sent:\nreassess", 1, origin="system", pluginPrompt={"name": "mod", "text": "reassess"})
-        self.assertEqual(self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), button, reply(later, 1)), ["b2c3d4e5.Decide.1"])
-        for origin in ("peer", "task_notification"):
-            with self.subTest(origin=origin):
-                other = prompt(SECOND, "Recheck the build after the merge.", 1, origin=origin)
+        refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), submitted(SECOND, "reassess", 1), reply(later, 1))
+        self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
+        others = (
+            prompt(SECOND, "Recheck the build after the merge.", 1, origin="peer"),
+            prompt(SECOND, "Recheck the build after the merge.", 1, origin="task_notification"),
+            prompt(SECOND, "The mod sent:\nreassess", 1, origin="system", pluginPrompt={"name": "mod", "text": "reassess"}),
+        )
+        for other in others:
+            with self.subTest(origin=other["turnOrigin"]):
                 refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), other, reply(later, 1))
                 self.assertEqual(refs, ["9efb08a1.Decide.2", "9efb08a1.Decide.3", "b2c3d4e5.Decide.1"])
 
@@ -776,9 +790,9 @@ class SettledWaitingTest(unittest.TestCase):
             '<agent-message from="b8a83gfv0">\n  Pushed.\n</agent-message>',
             task_notification("b8a83gfv0", "completed", 'Background command "watch" completed'),
         )
-        for text in pasted:
-            with self.subTest(text=text):
-                records = (prompt(FIRST, "go"), reply(waiting("Watcher (`b8a83gfv0`)")), prompt(SECOND, text, 1), reply("Prose.", 1))
+        for text, send in ((text, send) for text in pasted for send in (prompt, submitted)):
+            with self.subTest(text=text, send=send.__name__):
+                records = (prompt(FIRST, "go"), reply(waiting("Watcher (`b8a83gfv0`)")), send(SECOND, text, 1), reply("Prose.", 1))
                 self.assertEqual(render_with(*records, counts=True), "📌 Outstanding: ⏳ 1")
 
     def test_a_task_still_running_settles_nothing(self) -> None:
