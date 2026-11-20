@@ -50,9 +50,9 @@ Subcommands:
 A `reassess` turn is one whose prompt, the user's own, typed or sent with the kanban pane's buttons, opens on
 `reassess`, `recheck`, `regenerate` or `recalculate`, or a
 prefix of one of them that is a prefix of no other command's name, such as `regen`, bare or after
-`/coding-agent-kanban-turn-responses`; or one whose prompt holds answers and ends on a line that is such a name
-alone, as the pane's Reassess button leaves it: its answers count, and the command starts at that turn. The
-`coding-agent-kanban-turns@<marketplace>:` line a draft from the pane opens with is left out first.
+`/coding-agent-kanban-turn-responses`; or one whose prompt ends on a line that is such a name alone, as the
+pane's Reassess button leaves it: any answers before it count, and the command starts at that turn. `open` never
+trails. The `coding-agent-kanban-turns@<marketplace>:` line a draft from the pane opens with is left out first.
 `--latest` keeps each item's latest occurrence. `render` gives each item the turn that first printed it,
 or, where later replies restated it with changed substance (the text after its bold summary), the turn
 that restated it: the first turn of the latest run of identical texts. A restatement in a 📌 section is a
@@ -289,21 +289,18 @@ def _command_words(prompt: str) -> tuple[str, ...]:
 
 
 def _ends_on_reassess(text: str) -> bool:
-    """Whether a prompt holds answers and ends on a line naming `reassess` alone, as a draft the pane's Reassess
-    button ended does."""
+    """Whether a prompt's last non-blank line names `reassess` alone, as a draft the pane's Reassess button ended
+    does; whatever comes before it, answers or news, is read first."""
     lines = tuple(line for line in text.splitlines() if line.strip())
     last = lines[-1].strip().rstrip(_WORD_END) if lines else ""
-    return (
-        last.isalpha()
-        and command_named(last) == "reassess"
-        and any(_answers_of_line(line, "") for line in lines[:-1])
-    )
+    return last.isalpha() and command_named(last) == "reassess"
 
 
 def command_of(prompt: str) -> str | None:
     """The command a prompt runs, `reassess` or `open`: by its first word, bare or after the skill's slash command,
-    else `reassess` where the prompt holds answers and ends on a line naming it alone. The pane's header line is left
-    out first. None where the first word names no command or more than one, and the prompt doesn't end on `reassess`."""
+    else `reassess` where the prompt's last non-blank line names it alone; `open` never trails. The pane's header line
+    is left out first. None where the first word names no command or more than one, and the prompt doesn't end on
+    `reassess`."""
     text = rt.without_draft_header(prompt)
     first = next(iter(_command_words(text)), "").rstrip(_WORD_END)
     opening = command_named(first) if first.isalpha() else None

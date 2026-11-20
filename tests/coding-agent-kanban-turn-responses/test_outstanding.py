@@ -336,10 +336,17 @@ class OpenDecideItemsTest(unittest.TestCase):
                 self.assertEqual(outstanding.answered(turns(*records)), frozenset({("9efb08a1", 1), ("9efb08a1", 3)}))
                 self.assertEqual(self.open_refs(*records), ["b2c3d4e5.Decide.1"])
 
-    def test_a_trailing_reassess_runs_only_after_the_user_s_own_answers(self) -> None:
+    def test_a_trailing_reassess_runs_without_answers_too(self) -> None:
+        later = DECIDE_REPLY.split("2. **")[0]
+        for text in ("Look at the build again.\nreassess", "The agent reported.\n\nrecheck.\n"):
+            with self.subTest(text=text):
+                refs = self.open_refs(prompt(FIRST, "go"), reply(DECIDE_REPLY), prompt(SECOND, text, 1), reply(later, 1))
+                self.assertEqual(refs, ["b2c3d4e5.Decide.1"])
+
+    def test_a_trailing_open_or_another_mod_s_reassess_runs_nothing(self) -> None:
         later = DECIDE_REPLY.split("2. **")[0]
         others = (
-            prompt(SECOND, "Look at the build again.\nreassess", 1),
+            prompt(SECOND, "Look at the build again.\nopen", 1),
             prompt(SECOND, "The mod sent:\n1. A\nreassess", 1, origin="system", pluginPrompt={"name": "mod", "text": "1. A\nreassess"}),
         )
         for other in others:
