@@ -15,8 +15,12 @@ holding `<session>.jsonl` is used. The session is `CLAUDE_CODE_SESSION_ID`, over
 A turn starts at a `user` record with `turnOrigin` `human`, `peer` (an agent's `<agent-message`
 report) or `task_notification`, or one carrying `pluginPrompt` (a prompt a mod submitted, such as a
 button's `reassess`, read as the text the mod sent), not a sidechain and not a compaction
-summary: the user sees a usage line for each, so each counts as a turn. Its reply is the `text` blocks of the `assistant` records, not
-sidechain, up to the next such prompt; tool results belong to the turn under way. The global
+summary: the user sees a usage line for each, so each counts as a turn. A `!` command's output is a
+`human` record too, opening on `<bash-stdout>` or `<bash-stderr>`, but it opens no turn. Only a typed
+prompt, `human` and carrying no `pluginPrompt`, is the user's own text. A turn's reply is the `text` blocks of the `assistant` records, not
+sidechain, up to the next such prompt; tool results belong to the turn under way, and so do the
+messages that reach the session while it runs, `queued_command` attachments: the user's own, of kind
+`human`, its asides, and a report, of kind `peer` or `task-notification`, one of its reports. The global
 `--human-only` flag keeps the earlier reading, where only a `human` prompt opens a turn and a peer or
 task-notification record belongs to the turn under way. A turn id is the first 8
 characters of the prompt's `promptId`; `find` also takes the last 6 characters of the prompt
@@ -64,6 +68,11 @@ _STOP = "Still open from earlier"
 TOPIC_RULE = "═"  # U+2550, one per column under a topic header
 _ALL_ORIGINS = frozenset({"human", "peer", "task_notification"})
 _HUMAN_ORIGINS = frozenset({"human"})
+# A `!` command's output, which the transcript keeps as a human prompt.
+_COMMAND_OUTPUT = re.compile(r"\s*<bash-(?:stdout|stderr)>")
+# The kinds of a message that reaches the session while a turn runs: the user's own, and a report.
+_ASIDE_KINDS = frozenset({"human"})
+_REPORT_KINDS = frozenset({"peer", "task-notification"})
 _ID_LENGTH = 8
 _PROMPT_WIDTH = 100
 
@@ -81,6 +90,8 @@ class Turn:
     replies: tuple[str, ...] = ()
     reply_times: tuple[str, ...] = ()  # each reply text's record timestamp, parallel to replies
     asides: tuple[str, ...] = ()  # what the user sent while the turn ran, each message whole
+    reports: tuple[str, ...] = ()  # the agents' and tasks' reports that came while the turn ran
+    is_own: bool = False  # whether the prompt is the user's own text, typed by them
 
     @property
     def id(self) -> str:
@@ -125,30 +136,49 @@ def _plugin_text(record: dict) -> str | None:
     return text if isinstance(text, str) else None
 
 
-def _is_prompt(record: dict, origins: frozenset[str] = _ALL_ORIGINS) -> bool:
-    return (
-        record.get("type") == "user"
-        and (record.get("turnOrigin") in origins or _plugin_text(record) is not None)
-        and not record.get("isSidechain")
-        and not record.get("isCompactSummary")
-    )
-
-
 def _prompt_of(record: dict) -> str:
     """A plugin's prompt reads as the text it sent, not the wrapper Claude Code puts round it."""
     plugin = _plugin_text(record)
     return plugin if plugin is not None else _text_of(record.get("message", {}).get("content", ""))
 
 
-def _is_aside(record: dict) -> bool:
-    """A message the user sent while a turn ran: the transcript keeps it as a queued_command attachment."""
-    attachment = record.get("attachment") or {}
+def _is_prompt(record: dict, origins: frozenset[str] = _ALL_ORIGINS) -> bool:
     return (
-        record.get("type") == "attachment"
+        record.get("type") == "user"
+        and (record.get("turnOrigin") in origins or _plugin_text(record) is not None)
+        and not record.get("isSidechain")
+        and not record.get("isCompactSummary")
+        and not _COMMAND_OUTPUT.match(_prompt_of(record))
+    )
+
+
+def _is_own(record: dict) -> bool:
+    """Whether a prompt is the user's own text: typed by them, not a report, a notification or a mod's prompt."""
+    return record.get("turnOrigin") == "human" and _plugin_text(record) is None
+
+
+def _queued(record: dict) -> tuple[str, str] | None:
+    """A message that reached the session while a turn ran, a queued_command attachment: its origin's kind and text."""
+    attachment = record.get("attachment") or {}
+    text = attachment.get("prompt")
+    return (
+        ((attachment.get("origin") or {}).get("kind") or "", text)
+        if record.get("type") == "attachment"
         and not record.get("isSidechain")
         and attachment.get("type") == "queued_command"
-        and (attachment.get("origin") or {}).get("kind") == "human"
-        and isinstance(attachment.get("prompt"), str)
+        and isinstance(text, str)
+        else None
+    )
+
+
+def _with_queued(turn: Turn, kind: str, text: str) -> Turn:
+    """The turn with a message that came while it ran: the user's own an aside, an agent's or task's a report."""
+    return (
+        replace(turn, asides=(*turn.asides, text))
+        if kind in _ASIDE_KINDS
+        else replace(turn, reports=(*turn.reports, text))
+        if kind in _REPORT_KINDS
+        else turn
     )
 
 
@@ -158,6 +188,7 @@ def _is_reply(record: dict) -> bool:
 
 def _step(turns: tuple[Turn, ...], record: dict, origins: frozenset[str] = _ALL_ORIGINS) -> tuple[Turn, ...]:
     text = _text_of(record.get("message", {}).get("content", ""))
+    queued = _queued(record)
     return (
         (
             *turns,
@@ -166,6 +197,7 @@ def _step(turns: tuple[Turn, ...], record: dict, origins: frozenset[str] = _ALL_
                 uuid=record.get("uuid", ""),
                 timestamp=record.get("timestamp", ""),
                 prompt=_prompt_of(record),
+                is_own=_is_own(record),
             ),
         )
         if _is_prompt(record, origins)
@@ -179,11 +211,7 @@ def _step(turns: tuple[Turn, ...], record: dict, origins: frozenset[str] = _ALL_
                 ),
             )
             if _is_reply(record) and turns and text.strip()
-            else (
-                (*turns[:-1], replace(turns[-1], asides=(*turns[-1].asides, record["attachment"]["prompt"])))
-                if _is_aside(record) and turns
-                else turns
-            )
+            else ((*turns[:-1], _with_queued(turns[-1], *queued)) if queued is not None and turns else turns)
         )
     )
 
