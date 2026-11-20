@@ -45,10 +45,10 @@ Subcommands:
                              Open: raised since the latest `reassess` turn, its latest restatement only, and answered by no later prompt with an option letter (a line
                              holding a question mark answers nothing); a bare line of answers, `1. A / 3. B`,
                              answers the last final response. Only the user's own text answers: a prompt
-                             they typed or a message they sent while a turn ran, never a report, a
-                             notification or a mod's prompt
-A `reassess` turn is one whose prompt, typed by the user or sent by a mod, opens on `reassess`, `recheck`,
-`regenerate` or `recalculate`, or a
+                             they typed or sent with the kanban pane's Submit button, or a message they
+                             sent while a turn ran, never a report, a notification or another mod's prompt
+A `reassess` turn is one whose prompt, the user's own, typed or sent with the kanban pane's buttons, opens on
+`reassess`, `recheck`, `regenerate` or `recalculate`, or a
 prefix of one of them that is a prefix of no other command's name, such as `regen`, bare or after
 `/coding-agent-kanban-turn-responses`.
 `--latest` keeps each item's latest occurrence. `render` gives each item the turn that first printed it,
@@ -295,13 +295,10 @@ def command_of(prompt: str) -> str | None:
 
 def reassess_start(turns: tuple[rt.Turn, ...]) -> int:
     """The position of the latest `reassess` turn, whose lists replace every item before it; else 0. Only the user's
-    own prompt or a mod's, such as its Reassess button, runs the command; a report or a notification runs none."""
+    own prompt runs the command, typed or sent with the kanban pane's buttons; a report, a notification or another
+    mod's prompt runs none."""
     return next(
-        (
-            n
-            for n in reversed(range(len(turns)))
-            if (turns[n].is_own or turns[n].is_plugin) and command_of(turns[n].prompt) == "reassess"
-        ),
+        (n for n in reversed(range(len(turns))) if turns[n].is_own and command_of(turns[n].prompt) == "reassess"),
         0,
     )
 
@@ -857,8 +854,8 @@ def _answers_of_line(line: str, previous_id: str) -> frozenset[tuple[str, int]]:
 
 def answered(turns: tuple[rt.Turn, ...]) -> frozenset[tuple[str, int]]:
     """Every (turn id or prefix, item number) the user answers with an option or in words, in a prompt they typed or
-    a message they sent while its turn ran; a bare answer means the turn before it. A report, a notification or a
-    mod's prompt answers nothing."""
+    sent with the kanban pane's Submit button, or a message they sent while its turn ran; a bare answer means the
+    turn before it. A report, a notification or another mod's prompt answers nothing."""
     return frozenset(
         pair
         for previous, turn in zip(turns, turns[1:])
