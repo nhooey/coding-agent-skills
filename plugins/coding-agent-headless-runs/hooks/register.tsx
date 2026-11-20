@@ -10,16 +10,19 @@ import type { EngineInterface, Register, UiPressArgument } from "claude-code";
 import type { RunStatus } from "../types";
 import {
   FINISHED_WINDOW_MS,
+  alivePids,
   copyText,
   emptyRuns,
   groupHeader,
   groups,
   isLive,
+  livePids,
   newOwnLive,
   parseStatus,
   rowText,
   runKey,
   shown,
+  withKilled,
 } from "./runs";
 
 const PANE = "headless-runs";
@@ -33,7 +36,7 @@ const STATUS_SUFFIX = ".status.json";
 const runs = atom(
   { plugin: "coding-agent-headless-runs", key: "runs" } as const,
   emptyRuns,
-  { shape: "runs-1" },
+  { shape: "runs-2" },
 );
 
 /** Where `run_headless.py` keeps its jobs' log folders by default. */
@@ -94,6 +97,26 @@ const readRuns = async (
   };
 };
 
+/** Which of `pids` a process has, by one `ps`; null when it couldn't say, so no run is called killed on a failed check. */
+const alive = async (
+  $: EngineInterface,
+  pids: readonly number[],
+): Promise<ReadonlySet<number> | null> => {
+  if (pids.length === 0) {
+    return new Set();
+  }
+
+  try {
+    const ps = await $.process.run(["ps", "-o", "pid=", "-p", pids.join(",")], {
+      timeoutMs: 5000,
+    });
+
+    return alivePids(ps.exitCode, ps.stdout, ps.stderr);
+  } catch {
+    return null;
+  }
+};
+
 const open = ($: EngineInterface) => $.ui.open({ id: PANE, title: TITLE });
 
 const isOpen = async ($: EngineInterface): Promise<boolean> =>
@@ -111,7 +134,15 @@ const poll = async ($: EngineInterface): Promise<void> => {
 
   try {
     const now = await $.clock.now();
-    const found = await readRuns($, now);
+    const written = await readRuns($, now);
+    const found = {
+      ...written,
+      runs: withKilled(
+        written.runs,
+        now,
+        await alive($, livePids(written.runs)),
+      ),
+    };
     const session = await $.session.id();
     const before = await read($, runs);
     const fresh = newOwnLive(found.runs, session, before.openedFor);

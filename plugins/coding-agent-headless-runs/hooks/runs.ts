@@ -6,8 +6,13 @@ import type { Eta, RunState, RunStatus, Runs } from "../types";
 
 /** How long a finished run stays in the pane. */
 export const FINISHED_WINDOW_MS = 6 * 60 * 60 * 1000;
-/** A live run with no write for this long has lost its runner. */
+/** A live run with no write for this long has most likely lost its runner. */
 export const STALE_MS = 2 * 60 * 1000;
+/**
+ * A live run with no write for this long, and for 3 of its runner's write
+ * intervals, was killed, whatever its pid: the pid may be a later process's.
+ */
+export const KILLED_MS = 10 * 60 * 1000;
 
 const STATES: readonly RunState[] = [
   "waiting",
@@ -25,6 +30,7 @@ export const EMOJI: Record<RunState, string> = {
   failed: "❌",
   limit: "❌",
   skipped: "💤",
+  killed: "❌",
 };
 
 export const emptyRuns: Runs = {
@@ -56,6 +62,11 @@ const etaOf = (value: unknown): Eta | null => {
     ? { figure: v.figure, seconds: count(v.seconds) ?? 0, at: text(v.at) }
     : null;
 };
+
+const pidOf = (value: unknown): number | null =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : null;
 
 /** One status file's record, or undefined when it isn't one. */
 export const parseStatus = (value: unknown): RunStatus | undefined => {
@@ -95,6 +106,8 @@ export const parseStatus = (value: unknown): RunStatus | undefined => {
     toolCalls: count(v.tool_calls) ?? 0,
     lastTool: text(v.last_tool),
     eta: etaOf(v.eta),
+    pid: pidOf(v.pid),
+    statusEvery: count(v.status_every),
     parentSessionId:
       typeof parent === "object" && parent !== null
         ? text(parent.session_id)
@@ -111,6 +124,67 @@ export const isLive = (run: RunStatus): boolean =>
 
 export const isStale = (run: RunStatus, now: number): boolean =>
   isLive(run) && now - run.updated > STALE_MS;
+
+/** How long a live run may go unwritten before it counts as killed; forever when its runner writes only at the start and end. */
+export const silenceLimit = (run: RunStatus): number =>
+  run.statusEvery === 0
+    ? Infinity
+    : Math.max(KILLED_MS, 3 * (run.statusEvery ?? 0) * 1000);
+
+/** The pids of the live runs, each once: the ones to ask the system about. */
+export const livePids = (runs: readonly RunStatus[]): number[] => [
+  ...new Set(
+    runs
+      .filter(isLive)
+      .map((run) => run.pid)
+      .filter((pid) => pid !== null),
+  ),
+];
+
+/**
+ * The pids `ps -o pid= -p <pids>` found running, from its exit code and
+ * output, or null when it couldn't say. It exits 1 and says nothing when it
+ * found none.
+ */
+export const alivePids = (
+  exitCode: number,
+  stdout: string,
+  stderr: string,
+): ReadonlySet<number> | null =>
+  exitCode === 0 ||
+  (exitCode === 1 && stdout.trim() === "" && stderr.trim() === "")
+    ? new Set(
+        stdout
+          .split(/\s+/)
+          .filter((word) => /^\d+$/.test(word))
+          .map(Number),
+      )
+    : null;
+
+/**
+ * Whether a live run's runner is gone: no process has its pid, or it has gone
+ * unwritten past its silence limit. `alive` is null when the pids are unknown.
+ */
+export const isKilled = (
+  run: RunStatus,
+  now: number,
+  alive: ReadonlySet<number> | null,
+): boolean =>
+  isLive(run) &&
+  ((run.pid !== null && alive !== null && !alive.has(run.pid)) ||
+    now - run.updated > silenceLimit(run));
+
+/** The runs, each live one whose runner is gone made killed, ended at its last write. */
+export const withKilled = (
+  runs: readonly RunStatus[],
+  now: number,
+  alive: ReadonlySet<number> | null,
+): RunStatus[] =>
+  runs.map((run) =>
+    isKilled(run, now, alive)
+      ? { ...run, state: "killed", ended: run.updated }
+      : run,
+  );
 
 /** The runs the pane shows: every live one, and those that finished within the window. */
 export const shown = (
@@ -185,10 +259,11 @@ export const etaText = (run: RunStatus, now: number): string | undefined => {
 const plural = (n: number, one: string): string =>
   `${n} ${one}${n === 1 ? "" : "s"}`;
 
-/** One run's row: `🏃 alpha · 12m03s · ETA 4m10s · 23 turns · 87 tools · last Bash`. */
+/** One run's row: `🏃 alpha · 12m03s · ETA 4m10s · 23 turns · 87 tools · last Bash`; a killed run's says `killed` after its label. */
 export const rowText = (run: RunStatus, now: number): string =>
   [
     `${EMOJI[run.state]} ${run.label}`,
+    run.state === "killed" ? "killed" : undefined,
     duration(elapsedOf(run, now)),
     etaText(run, now),
     isStale(run, now)

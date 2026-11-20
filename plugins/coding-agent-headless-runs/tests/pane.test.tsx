@@ -57,15 +57,36 @@ const entry = (name: string, kind: "file" | "dir") => ({
 });
 
 /**
- * The engine beneath the plugin: a state folder holding `files`, the panes it
- * has open, and what it was asked to copy and open.
+ * The engine beneath the plugin: a state folder holding `files`, the
+ * processes `alive`, the panes it has open, and what it was asked to copy,
+ * open and run.
  */
-const engine = (on: On, files: Record<string, string>) => {
+const engine = (
+  on: On,
+  files: Record<string, string>,
+  alive: readonly number[] = [],
+) => {
   const state = {
     panes: [] as string[],
     opened: 0,
     copied: [] as string[],
+    ran: [] as string[][],
   };
+  on("process.run", (_, e) => {
+    state.ran.push([...e.argv]);
+    const pids = (e.argv.at(-1) ?? "").split(",").map(Number);
+    const found = pids.filter((pid) => alive.includes(pid));
+
+    return {
+      value: {
+        exitCode: found.length > 0 ? 0 : 1,
+        stdout: found.map((pid) => `${String(pid).padStart(5)}\n`).join(""),
+        stderr: "",
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    };
+  });
   const clock = mock.clock(on, { now: T0 + 5 * MIN });
   mock.env(on, { HOME: "/home/neil", XDG_STATE_HOME: "/state" });
   on("session.id", () => ({ value: "me" }));
@@ -202,6 +223,58 @@ test("the pane says when there are no runs", async ($, on) => {
   expect((await ui.find({ type: "Text" }))?.text).toBe(
     `No headless runs yet: ${ROOT} is not there.`,
   );
+  await ui.unmount();
+});
+
+test("a running record whose runner's pid is gone shows as killed, beside one whose runner lives", async ($, on) => {
+  const { state } = engine(
+    on,
+    {
+      [`${ROOT}/wave-1/alpha.status.json`]: status({ pid: 4242 }),
+      [`${ROOT}/wave-1/beta.status.json`]: status({ label: "beta", pid: 77 }),
+    },
+    [77],
+  );
+  await $.session.start(start as never);
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" });
+
+  expect(state.ran).toEqual([["ps", "-o", "pid=", "-p", "4242,77"]]);
+  expect(state.opened).toBe(1);
+  expect((await ui.find({ type: "Text", text: /wave-1/ }))?.text).toBe(
+    "wave-1 · 🏃 1 · ❌ 1",
+  );
+  expect(
+    (await ui.find({ type: "Button", key: "wave-1/alpha@" + T0 }))?.text,
+  ).toBe("  ❌ alpha · killed · 4m59s · 3 turns · 9 tools · last Bash");
+  expect(
+    (await ui.find({ type: "Button", key: "wave-1/beta@" + T0 }))?.text,
+  ).toContain("🏃 beta");
+  await ui.unmount();
+});
+
+test("a running record unwritten for over 10 minutes shows as killed, its pid alive or not", async ($, on) => {
+  const { state } = engine(
+    on,
+    {
+      [`${ROOT}/wave-1/alpha.status.json`]: status({
+        pid: 4242,
+        started: "2026-11-16T00:40:00+00:00",
+        updated: "2026-11-16T00:54:00+00:00",
+      }),
+    },
+    [4242],
+  );
+  await $.session.start(start as never);
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" });
+
+  expect(state.opened).toBe(0);
+  expect((await ui.find({ type: "Text", text: /wave-1/ }))?.text).toBe(
+    "wave-1 · ❌ 1",
+  );
+  expect(
+    (await ui.find({ type: "Button", key: "wave-1/alpha@" + (T0 - 20 * MIN) }))
+      ?.text,
+  ).toContain("❌ alpha · killed · 14m00s");
   await ui.unmount();
 });
 

@@ -1,16 +1,21 @@
 import { describe, expect, test } from "claude-code/testing";
 
 import {
+  alivePids,
   copyText,
   duration,
   etaText,
   groupHeader,
   groups,
+  isKilled,
+  livePids,
   newOwnLive,
   parseStatus,
   rowText,
   runKey,
   shown,
+  silenceLimit,
+  withKilled,
 } from "../hooks/runs";
 import type { RunStatus } from "../types";
 
@@ -72,6 +77,8 @@ describe("parseStatus", () => {
       toolCalls: 40,
       lastTool: "Bash",
       eta: { figure: "20m", seconds: 1200, at: "2026-11-16T01:05:00+00:00" },
+      pid: 10,
+      statusEvery: null,
       parentSessionId: "me",
     });
   });
@@ -133,6 +140,74 @@ describe("the rows", () => {
       "/state/wave-1/alpha.stream.jsonl",
     );
     expect(copyText(run({ workdir: "/a/it's" }))).toContain(`'/a/it'\\''s'`);
+  });
+});
+
+describe("a run whose runner is gone", () => {
+  const now = T0 + 11 * MIN;
+  const alive = new Set([10]);
+
+  test("ps's reply gives the pids it found, or null when it failed", () => {
+    expect(alivePids(0, "   10\n  412\n", "")).toEqual(new Set([10, 412]));
+    expect(alivePids(1, "", "")).toEqual(new Set());
+    expect(alivePids(1, "", "ps: illegal option")).toBeNull();
+    expect(alivePids(2, "", "")).toBeNull();
+  });
+
+  test("only live runs' pids are asked about, each once", () => {
+    const finished = run({ label: "beta", state: "ok", pid: 11 });
+    const twin = run({ label: "gamma", pid: 10 });
+    const noPid = run({ label: "delta", pid: null });
+    expect(livePids([run(), finished, twin, noPid])).toEqual([10]);
+  });
+
+  test("a live run whose pid is gone is killed, ended at its last write", () => {
+    const [killed] = withKilled([run()], now, new Set());
+    expect(killed?.state).toBe("killed");
+    expect(killed?.ended).toBe(T0 + 10 * MIN);
+    expect(
+      withKilled([run({ state: "waiting" })], now, new Set())[0]?.state,
+    ).toBe("killed");
+    expect(withKilled([run()], now, alive)[0]?.state).toBe("running");
+  });
+
+  test("a live pid that hasn't written for 10 minutes is a later process's", () => {
+    expect(isKilled(run(), T0 + 20 * MIN, alive)).toBe(false);
+    expect(isKilled(run(), T0 + 20 * MIN + 1, alive)).toBe(true);
+    expect(isKilled(run(), T0 + 20 * MIN + 1, null)).toBe(true);
+  });
+
+  test("the silence allowed grows with a slow runner, and is endless for one that writes only at the end", () => {
+    expect(silenceLimit(run({ status_every: 10 }))).toBe(10 * MIN);
+    expect(silenceLimit(run({ status_every: 600 }))).toBe(30 * MIN);
+    expect(isKilled(run({ status_every: 0 }), T0 + 600 * MIN, alive)).toBe(
+      false,
+    );
+  });
+
+  test("an unknown pid, or one ps couldn't check, leaves a writing run running", () => {
+    expect(isKilled(run({ pid: null }), now, new Set())).toBe(false);
+    expect(isKilled(run(), now, null)).toBe(false);
+  });
+
+  test("a finished run is never killed", () => {
+    expect(isKilled(run({ state: "ok" }), T0 + 600 * MIN, new Set())).toBe(
+      false,
+    );
+  });
+
+  test("a killed run's row says so, and counts with the failed", () => {
+    const [killed] = withKilled([run()], now, new Set());
+    if (killed === undefined) {
+      throw new Error("no run");
+    }
+    expect(rowText(killed, now)).toBe(
+      "❌ alpha · killed · 10m00s · 12 turns · 40 tools · last Bash",
+    );
+    expect(groupHeader({ job: "wave-1", runs: [killed] })).toBe(
+      "wave-1 · ❌ 1",
+    );
+    expect(newOwnLive([killed], "me", [])).toEqual([]);
   });
 });
 
