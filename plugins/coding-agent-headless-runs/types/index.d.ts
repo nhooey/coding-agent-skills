@@ -1,11 +1,15 @@
-/** A run's state, as `run_headless.py` writes it in `<label>.status.json`. */
+/**
+ * A run's state, as `run_headless.py` writes it in `<label>.status.json`, or
+ * `killed`, which the pane gives a waiting or running record whose runner is gone.
+ */
 export type RunState =
   | "waiting"
   | "running"
   | "ok"
   | "failed"
   | "limit"
-  | "skipped";
+  | "skipped"
+  | "killed";
 
 /** The last ETA line a run's session wrote. */
 export type Eta = {
@@ -33,6 +37,10 @@ export type RunStatus = {
   toolCalls: number;
   lastTool: string | null;
   eta: Eta | null;
+  /** The runner's process id. */
+  pid: number | null;
+  /** The runner's `--status-every` in seconds, 0 when it writes only at the start and end; null when the record doesn't say. */
+  statusEvery: number | null;
   /** The session that started the runner, when Claude Code named it. */
   parentSessionId: string | null;
 };

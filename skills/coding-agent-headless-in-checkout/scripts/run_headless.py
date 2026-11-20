@@ -118,8 +118,10 @@ Live status: while it runs, the script keeps <log-dir>/<label>.status.json up
 to date, rewritten every --status-every seconds (default 10) and once more
 when the run ends, each time through a temporary file and a rename: the run's
 state (waiting, running, ok, failed, limit or skipped), its times, session,
-turns, tool calls, last tool, its last ETA line and the session that started
-the runner. The coding-agent-headless-runs mod draws these files in a pane.
+turns, tool calls, last tool, its last ETA line, its pid and --status-every,
+and the session that started the runner. The coding-agent-headless-runs mod
+draws these files in a pane, showing a waiting or running record whose runner
+is gone as killed.
 
 Exit status:
   0    the session ended without an error
@@ -1359,6 +1361,7 @@ def main(
     base = {
         "job": args.job, "label": plan.label, "checkout": plan.checkout,
         "workdir": plan.workdir, "branch": branch, "log": str(log), "pid": os.getpid(),
+        "status_every": args.status_every,
         "parent": parent_of(dict(os.environ), os.getppid(), os.getcwd()),
     }
     status = status_writer(args.log_dir / f"{plan.label}.status.json", base,

@@ -29,12 +29,13 @@ tidy · ✅ 1
 
 - **Groups:** runs of one job sit under the job's name, with a count per state. Jobs with a run going come first, then the most recently written.
 - **Rows:** running and waiting runs come first, then those that finished in the last 6 hours, latest first. Each row has:
-  - the state: 🏃 running, ⏳ waiting on memory pressure, ✅ ok, ❌ failed or hit a usage limit, 💤 skipped;
+  - the state: 🏃 running, ⏳ waiting on memory pressure, ✅ ok, ❌ failed, hit a usage limit or killed, 💤 skipped;
   - the label, the checkout's name unless the run set `--label`;
   - the time it has run, or ran;
   - the ETA counting down from the session's last `coding-agent-usage-line-report-eta` line, or how far past it the run has gone;
   - turns, tool calls and the last tool.
 - **A stalled runner:** a running row whose status file hasn't changed for 2 minutes says `no update for <time>`, since its runner was most likely killed.
+- **A killed runner:** a running or waiting row reads `❌ <label> · killed`, ended at its last write, when no process has the status file's `pid`, which the pane asks `ps` at each read, or when the file hasn't changed for 10 minutes and 3 of the runner's `--status-every` intervals, since the pid may by then be a later process's. A runner given `--status-every 0` is judged by its pid alone.
 - **A row is a button:** clicking it copies `cd '<workdir>' && claude --resume <session id>`, to open the run's session by hand; before the session has an id, it copies the stream log's path.
 
 ## Opening it

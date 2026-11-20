@@ -928,7 +928,8 @@ class Runs(unittest.TestCase):
                          ("ok", "t1", "alpha", "headless/t1"))
         self.assertEqual((status["session_id"], status["turns"]), ("sess-1", 3))
         self.assertEqual(status["parent"]["session_id"], "parent-sess")
-        self.assertEqual(status["pid"], os.getpid())
+        self.assertEqual((status["pid"], status["status_every"]),
+                         (os.getpid(), run_headless.STATUS_EVERY_SECONDS))
         wt = run_headless.worktree_path(self.alpha, "t1")
         self.assertEqual(status["transcript"],
                          str(self.projects / run_headless.project_key(wt) / "sess-1.jsonl"))
