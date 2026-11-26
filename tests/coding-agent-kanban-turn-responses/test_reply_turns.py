@@ -264,6 +264,46 @@ class SectionsTest(unittest.TestCase):
             ),
         )
 
+    def test_a_header_inside_a_code_block_opens_no_section(self) -> None:
+        self.assertEqual(reply_turns.sections("Prose.\n\n```text\n🧠 **Decide:**  \n1. **x**\n```\n"), ())
+
+    def test_a_stop_line_or_topic_inside_a_code_block_closes_no_section(self) -> None:
+        text = "🧠 **Decide:**  \n1. **x**\n   ```\n   **Topic**\n   ═════\nStill open from earlier\n   ```\n   more\n"
+        self.assertEqual(reply_turns.sections(text), (("Decide", text.rstrip()),))
+
+    def test_the_stop_line_closes_a_section_only_alone_at_the_start_of_its_line(self) -> None:
+        for line, closes in (
+            ("Still open from earlier", True),
+            ("Still open from earlier:", True),
+            ("Still open from earlier  ", True),
+            ("Still open from earlier, the README.", False),
+            ("  Still open from earlier", False),
+        ):
+            with self.subTest(line=line):
+                found = reply_turns.sections(f"🧠 **Decide:**  \n1. **x**\n{line}\n   more\n")
+                self.assertEqual(found[0][1].endswith("more"), not closes)
+
+    def test_code_lines_follow_commonmark_fences(self) -> None:
+        lines = (
+            ("a", False),
+            ("````", True),  # opens, 4 backticks
+            ("```", True),  # shorter: no close
+            ("~~~", True),  # another character: no close
+            ("```` x", True),  # something after it: no close
+            ("`````", True),  # closes, at least as long
+            ("b", False),
+            ("~~~", True),
+            ("c", True),
+            ("  ~~~  ", True),  # closes, whitespace around it
+            ("- ```text", True),  # an item's text opens on a fence
+            ("d", True),
+            ("```", True),
+            ("e", False),
+            ("``` `x`", False),  # a backtick after a backtick run opens nothing
+            ("", False),
+        )
+        self.assertEqual(reply_turns.code_lines(tuple(line for line, _ in lines)), tuple(code for _, code in lines))
+
     def test_a_header_is_matched_by_name_not_glyph(self) -> None:
         self.assertEqual(reply_turns.sections("🙃 **Todo:**  \n1. **x**")[0][0], "Todo")
         self.assertEqual(reply_turns.sections("🙃 **Nothing:**  \n1. **x**"), ())
