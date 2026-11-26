@@ -33,8 +33,11 @@ naming the candidates.
 A reply section opens on a line `<glyph> **<Name>:**`, Name one of Answers, Done, Pending, Logged,
 Waiting, Authorizations, Review, Todo or Decide, or an alias older replies use (Questions for Answers, Unfinished or Open for
 Pending, To review for Review, To do for Todo, Decisions or Blocked for Decide), matched by name and not glyph; a line of `▔` or `¯` under it belongs to the
-header. A section ends at the next header, at a line starting `Still open from earlier`, or at a topic
-header, the line above a line of `═` that groups the lists of a `reassess` or `open` reply by topic.
+header. A section ends at the next header, at a bare `Still open from earlier`, alone on its line at its start,
+a colon after it or not, or at a topic header, the line above a line of `═` that groups the lists of a `reassess`
+or `open` reply by topic. A code block is code, fenced as CommonMark fences it: it opens on 3 or more backticks,
+with no backtick after them, or 3 or more tildes, its indent and an item's marker aside, and closes only on a line
+of the same character alone, at least as long. A line inside one opens and closes no section.
 
 Subcommands, each printing plain text:
   id                              the current turn's id, the last prompt's
@@ -69,6 +72,9 @@ OPEN_SECTIONS = ("Authorizations", "Review", "To review", "Todo", "To do", *DECI
 _HEADER = re.compile(r"^\s*\S+\s+\*\*(" + "|".join(SECTION_NAMES) + r"):\*\*")
 _STOP = "Still open from earlier"
 TOPIC_RULE = "═"  # U+2550, one per column under a topic header
+_FENCE_CHARS = "`~"
+# An item's own line, at most 2 spaces in, and its text, which may open on a fence.
+_ITEM_TEXT = re.compile(r"^ {0,2}(?:[-*]|\d+[.)])\s+(.*)$")
 _ALL_ORIGINS = frozenset({"human", "peer", "task_notification"})
 _HUMAN_ORIGINS = frozenset({"human"})
 # A `!` command's output, which the transcript keeps as a human prompt.
@@ -275,16 +281,79 @@ def is_topic_rule(line: str) -> bool:
     return bool(line.strip()) and set(line.strip()) == {TOPIC_RULE}
 
 
-def _fold(state: tuple[str | None, tuple[tuple[str, tuple[str, ...]], ...]], pair: tuple[str, str]):
+def is_stop(line: str) -> bool:
+    """An older roll-up header bare, `Still open from earlier`, alone on its line at its start, a colon after it or
+    not; prose opening on its words is no stop."""
+    return line.rstrip() in (_STOP, f"{_STOP}:")
+
+
+@dataclass(frozen=True)
+class Fence:
+    """A code block's fence: its character, a backtick or a tilde, and how many of it open the block."""
+
+    char: str
+    length: int
+
+
+def _run_of(char: str, text: str) -> int:
+    """How many of `char` the text opens with."""
+    return len(text) - len(text.lstrip(char))
+
+
+def fence_opening(line: str) -> Fence | None:
+    """The fence a line opens a code block with, its indent and an item's marker aside: 3 or more backticks with no
+    backtick after them, or 3 or more tildes; None where it opens none."""
+    item = _ITEM_TEXT.match(line)
+    body = item.group(1) if item else line.lstrip()
+    char = body[:1]
+    length = _run_of(char, body) if char and char in _FENCE_CHARS else 0
+    return Fence(char, length) if length >= 3 and not (char == "`" and "`" in body[length:]) else None
+
+
+def _closes(fence: Fence, line: str) -> bool:
+    """Whether a line closes the block `fence` opened: its character alone, at least as many, whitespace around it."""
+    body = line.strip()
+    return len(body) >= fence.length and _run_of(fence.char, body) == len(body)
+
+
+def _code_step(state: tuple[Fence | None, tuple[bool, ...]], line: str) -> tuple[Fence | None, tuple[bool, ...]]:
+    fence, done = state
+    opened = fence_opening(line) if fence is None else None
+    return (
+        (opened, (*done, opened is not None))
+        if fence is None
+        else (None if _closes(fence, line) else fence, (*done, True))
+    )
+
+
+def code_lines(lines: tuple[str, ...]) -> tuple[bool, ...]:
+    """Whether each line is code, as CommonMark fences it: a fence's own lines and every line between them. A block
+    closes only on a line of its fence's character alone, at least as long; one never closed runs to the end."""
+    return reduce(_code_step, lines, (None, ()))[1]
+
+
+def without_code(text: str) -> str:
+    """The text's lines that are no code, in order: what a reader of items and options reads."""
+    lines = tuple(text.splitlines())
+    return "\n".join(line for line, is_code in zip(lines, code_lines(lines)) if not is_code)
+
+
+def _fold(
+    state: tuple[str | None, tuple[tuple[str, tuple[str, ...]], ...]],
+    row: tuple[str, str, bool, bool],
+):
     open_name, done = state
-    line, following = pair
-    header = _HEADER.match(line)
+    line, following, is_code, following_is_code = row
+    header = None if is_code else _HEADER.match(line)
+    ends = not is_code and (
+        is_stop(line) or is_topic_rule(line) or (is_topic_rule(following) and not following_is_code)
+    )
     return (
         (header.group(1), (*done, (header.group(1), (line,))))
         if header
         else (
             (None, done)
-            if line.startswith(_STOP) or is_topic_rule(line) or is_topic_rule(following)
+            if ends
             else (
                 (open_name, (*done[:-1], (done[-1][0], (*done[-1][1], line))))
                 if open_name is not None
@@ -295,9 +364,12 @@ def _fold(state: tuple[str | None, tuple[tuple[str, tuple[str, ...]], ...]], pai
 
 
 def sections(text: str) -> tuple[tuple[str, str], ...]:
-    """Each (name, text) section of one reply text, in order, trailing blank lines trimmed."""
-    lines = text.splitlines()
-    _, found = reduce(_fold, zip(lines, (*lines[1:], "")), (None, ()))
+    """Each (name, text) section of one reply text, in order, trailing blank lines trimmed. A line inside a code
+    block is code: it opens no section and closes none, and stays in the section it is in."""
+    lines = tuple(text.splitlines())
+    codes = code_lines(lines)
+    rows = zip(lines, (*lines[1:], ""), codes, (*codes[1:], False))
+    _, found = reduce(_fold, rows, (None, ()))
     return tuple((name, "\n".join(lines).rstrip()) for name, lines in found)
 
 

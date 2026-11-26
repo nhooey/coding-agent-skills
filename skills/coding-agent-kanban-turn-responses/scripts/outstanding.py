@@ -707,7 +707,8 @@ def render_due(turns: tuple[rt.Turn, ...], now: datetime) -> str:
 
 # --- open Decide items with their options --------------------------------------------------
 
-_DECIDE_ITEM = re.compile(r"^ {0,3}(\d+)[.)]\s+\*\*(.+?)\*\*", re.MULTILINE)
+# A Decide item's own line, at most 2 spaces in; a numbered line 3 spaces in or more is under the item above it.
+_DECIDE_ITEM = re.compile(r"^ {0,2}(\d+)[.)]\s+\*\*(.+?)\*\*", re.MULTILINE)
 # 👍 and 👎 are read so an open yes-or-no item an earlier turn printed with them stays open; lint_reply.py
 # reports them in a new reply, where a yes-or-no question is a 🔘 radio item lettered A and B.
 _DECIDE_OPTION = re.compile(r"^\s*(🔘|🔲|👍|👎)\s+([A-Z])\.\s+\*\*(.+?)\*\*", re.MULTILINE)
@@ -838,8 +839,10 @@ def _decide_item(turn_id: str, chunk: str) -> DecideItem | None:
 
 
 def decide_items_of_text(turn_id: str, text: str) -> tuple[DecideItem, ...]:
-    """The Decide items of one reply text that carry options; a 📌 roll-up's bullets are not numbered and carry none."""
-    bodies = tuple(body for name, body in rt.sections(text) if name in rt.DECISIONS)
+    """The Decide items of one reply text that carry options; a 📌 roll-up's bullets are not numbered and carry none.
+    An item or an option inside a code block is none, and an item's options run on past a code block to the next
+    item."""
+    bodies = tuple(rt.without_code(body) for name, body in rt.sections(text) if name in rt.DECISIONS)
     starts = tuple((body, tuple(m.start() for m in _DECIDE_ITEM.finditer(body))) for body in bodies)
     chunks = tuple(
         body[start:end] for body, found in starts for start, end in zip(found, (*found[1:], len(body)))

@@ -208,6 +208,62 @@ class DecideItemsOfTextTest(unittest.TestCase):
         text = "🧠 **Decide:**  \n▔▔▔▔▔▔▔▔▔▔\n1. **Something to think about**  \n   No options here.\n"
         self.assertEqual(outstanding.decide_items_of_text("9efb08a1", text), ())
 
+    HEAD = "🧠 **Decide:**  \n▔▔▔▔▔▔▔▔▔▔\n"
+    OPTIONED = "1. **Which cache to keep**  \n   🔘 A. **Disk**: it survives restarts.\n"
+
+    def numbers(self, text: str) -> list[tuple[int, str]]:
+        return [(i.number, i.summary) for i in outstanding.decide_items_of_text("9efb08a1", text)]
+
+    def test_an_item_or_an_option_inside_a_code_block_is_none(self) -> None:
+        for body in (
+            "1. **Which cache to keep**  \n   ```\n   🔘 A. **Disk**\n   ```\n",
+            "1. **Which cache to keep**  \n\n```\n   🔘 A. **Disk**\n```\n",
+            "1. **Which cache to keep**  \n~~~~\n   🔘 A. **Disk**\n~~~~\n",
+            "```\n1. **Which cache to keep**  \n```\n   🔘 A. **Disk**\n",
+            f"```text\n{self.OPTIONED}```\n",
+        ):
+            with self.subTest(body=body):
+                self.assertEqual(self.numbers(self.HEAD + body), [])
+
+    def test_a_decide_list_inside_a_code_block_is_code(self) -> None:
+        self.assertEqual(self.numbers(f"```text\n{self.HEAD}{self.OPTIONED}```\n"), [])
+
+    def test_a_fence_closes_only_on_its_own_character_alone_and_at_least_as_long(self) -> None:
+        for inner in ("```", "~~~~", "```` and more", "``"):
+            with self.subTest(inner=inner):
+                text = f"{self.HEAD}1. **Which cache to keep**  \n````\n{inner}\n   🔘 A. **Disk**\n````\n"
+                self.assertEqual(self.numbers(text), [])
+
+    def test_a_backtick_run_with_a_backtick_after_it_opens_no_code_block(self) -> None:
+        text = f"{self.HEAD}1. **Which cache to keep**  \n   ``` `inline` ```\n   🔘 A. **Disk**\n"
+        self.assertEqual(self.numbers(text), [(1, "Which cache to keep")])
+
+    def test_an_option_after_a_closed_code_block_is_the_item_above_it(self) -> None:
+        text = f"{self.HEAD}1. **Which cache to keep**  \n```\nmake bench\n```\n   🔘 A. **Disk**\n"
+        self.assertEqual(self.numbers(text), [(1, "Which cache to keep")])
+
+    def test_an_item_3_spaces_in_is_none(self) -> None:
+        self.assertEqual(self.numbers(f"{self.HEAD}   1. **Nested**  \n      🔘 A. **Disk**\n"), [])
+        self.assertEqual(
+            self.numbers(f"{self.HEAD}{self.OPTIONED}   2. **Nested**  \n      🔘 A. **Disk**\n"),
+            [(1, "Which cache to keep")],
+        )
+
+    def test_an_item_2_spaces_in_counts(self) -> None:
+        self.assertEqual(self.numbers(f"{self.HEAD}  1. **Indented**  \n     🔘 A. **Disk**\n"), [(1, "Indented")])
+
+    def test_an_older_roll_up_header_bare_ends_the_list(self) -> None:
+        for older in ("Still open from earlier", "Still open from earlier:", "Still open from earlier  "):
+            with self.subTest(older=older):
+                text = f"{self.HEAD}1. **Which cache to keep**  \n{older}\n   🔘 A. **Disk**\n"
+                self.assertEqual(self.numbers(text), [])
+
+    def test_prose_opening_on_the_older_roll_up_words_ends_nothing(self) -> None:
+        for line in ("Still open from earlier, the README.", "   Still open from earlier"):
+            with self.subTest(line=line):
+                text = f"{self.HEAD}1. **Which cache to keep**  \n{line}\n   🔘 A. **Disk**\n"
+                self.assertEqual(self.numbers(text), [(1, "Which cache to keep")])
+
 
 class OpenDecideItemsTest(unittest.TestCase):
     def open_refs(self, *records: dict) -> list[str]:
