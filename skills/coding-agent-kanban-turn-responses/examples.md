@@ -69,6 +69,18 @@ Three grants only the user can give: a 1Password prompt that is open, an approva
    💻 ❯ `sudo darwin-rebuild switch`
 ```
 
+## A Todo item that frees a Decide item and a Review item
+
+The item ends on its `Frees:` line, at its summary's column, naming the 2 items by reference, each with its turn id.
+
+```text
+👉 **Todo:**  
+▔▔▔▔▔▔▔▔
+1. **Paste the release prompt into the deploy session**  
+   It is in `prompts/release.md`.
+   Frees: 0f311c94.Decide.2, 0f311c94.Review.1
+```
+
 ## A reassess grouped by topic
 
 A `reassess` with 7 open items in 2 topics of at least 3 items and 1 left over. Each topic header is underlined with `═`, its lists follow in the usual order under it, and each list numbers on from where the same list ended in the topics above: the second topic's Decide list starts at 3, so `Decide.3` names one item. The topic with the most to decide or do comes first, and `Miscellaneous` last.

@@ -91,6 +91,11 @@ class LintReplyTest(unittest.TestCase):
     def test_correct_decide_list(self) -> None:
         self.assertEqual(kinds(decide(f"   {S}")), [])
 
+    def test_a_frees_line_under_the_last_option(self) -> None:
+        frees = "      ➖ About 131 rows per product, roughly 10 million in all.\n   Frees: 0f311c94.Todo.1, 0f311c94.Review.1\n"
+        text = decide(f"   {S}").replace("      ➖ About 131 rows per product, roughly 10 million in all.\n", frees)
+        self.assertEqual(kinds(text), [])
+
     def test_a_thumbs_option_line(self) -> None:
         for glyph in ("👍 B.", "👎 B."):
             with self.subTest(glyph=glyph):
@@ -339,6 +344,7 @@ class LintReplyTest(unittest.TestCase):
             (examples, "## An Authorizations list"),
             (examples, "## A reassess grouped by topic"),
             (examples, "## The full roll-up"),
+            (examples, "## A Todo item that frees a Decide item and a Review item"),
             (skill / "README.md", "The final response:"),
         ]:
             with self.subTest(path=path.name, heading=heading):
