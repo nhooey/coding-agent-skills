@@ -5,6 +5,8 @@ description: "Load at the start of every turn, before the first response the use
 
 # Kanban turn responses
 
+> **Retired.** The [`coding-agent-kanban-turns`](https://github.com/nhooey/coding-agent-kanban-turns) Claude Code plugin replaces this skill, and bundles it as `coding-agent-kanban-turns:coding-agent-kanban-turn-responses`. A harness without Claude Code plugins installs the plugin flake's `packages.skill-standalone`. This skill's files stay until the plugin is the only copy in use.
+
 _Every response in a turn shows what is done, what is still open and what the user must do: a one-line progress update between tool calls, and in the final response up to 9 lists in a fixed order, then what earlier turns left open, under 📌 in full or as one count line._
 
 A project may extend this skill with a skill of its own, or with its preferences file ([Your preferences](#your-preferences)), adding its own backlog path or link rules; the project's wins where the two differ.
