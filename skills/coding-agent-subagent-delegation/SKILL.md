@@ -66,7 +66,10 @@ For a parent context of 120,000 tokens, a 4-turn task that needs most of it is a
 
 Every brief and every fork's prompt, at every depth, a coordinator's briefs to its own children included, opens with these sentences, word for word, in the prompt itself even when the rest of the brief is a file:
 
-> If Safety Net or the harness blocks a command, stop that item and report the exact command. Using any other command to reach the same result is forbidden, even if you check the result.
+> If Safety Net or the harness blocks a command, stop that item and report the exact command. Using any other command to reach the same result is forbidden, even if you check the result. A blocked shell read may be redone with Read, Grep or Glob. A blocked edit is never redone another way.
+
+The one way around a block is a dedicated read tool for a shell read of a file, such as `cat`, `sed -n`, `head` or `grep`, since those tools only read.
+Any other rewrite of a blocked command is forbidden, whatever the denial message suggests.
 
 Every agent changes files only with the Edit or Write tool, never a script or shell command, and every brief says so.
 
@@ -97,6 +100,8 @@ A report longer than a screen goes in a file, and the final message gives its pa
 ## A worktree per parallel implementer
 
 Each implementer that edits files works in its own git worktree, on its own branch, made with the Agent tool's worktree isolation or by the coordinator beside the checkout; read-only agents, such as lookups and reviewers reading a diff file, share the checkout.
+A subagent doesn't reliably start in the parent session's worktree, so the brief gives the worktree's absolute path and its branch, and the agent runs `pwd` and `git branch --show-current` before it changes anything, stopping if either doesn't match.
+After a child reports a commit, check it with `git -C <worktree> log --oneline -1` before it is pushed or merged.
 The coordinator merges each branch once its review passes, then removes the worktree and the branch by name, as `shell-hygiene-delete-named-paths` and `git-workflow-tidy-branches` say.
 
 ## Behaviour changes and ambiguities
