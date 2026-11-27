@@ -1,6 +1,6 @@
 ---
 name: coding-agent-questions-as-first-class-prompts
-description: Ask the user every question through the agent's structured-question tool, such as Claude Code's AskUserQuestion, an IDE's multiple-choice prompt or a CLI option picker, never as a prose question in the reply that waits for a typed answer. Covers clarifications, choices between approaches, yes-or-no confirmations and any decision the context can't settle; a multi-select question that opens on `All` then `None`; splitting a question that has more options than the tool allows; and an open question asked as best guesses plus the tool's free-text escape. Use whenever about to write "Should I…?", "Do you want…?", "Which of these…?" or "Let me know whether…", or otherwise pause for the user's input; not for status updates or for decisions the agent can make itself.
+description: Ask the user every question through the agent's structured-question tool, such as Claude Code's AskUserQuestion, an IDE's multiple-choice prompt or a CLI option picker, never as a prose question in the reply that waits for a typed answer. Covers clarifications, choices between approaches, yes-or-no confirmations and any decision the context can't settle; a multi-select question that opens on `All` then `None`; splitting a question that has more options than the tool allows; option previews of 3 or 4 lines; and an open question asked as best guesses plus the tool's free-text escape. Use whenever about to write "Should I…?", "Do you want…?", "Which of these…?" or "Let me know whether…", or otherwise pause for the user's input; not for status updates or for decisions the agent can make itself.
 ---
 
 # Questions as first-class prompts
@@ -45,6 +45,14 @@ Which checks should I run before pushing?  [multi-select]
 A single-select question gets neither.
 
 **Option caps:** `AskUserQuestion` takes at most 4 options a question and adds an "Other" escape itself, so `All` and `None` leave room for 2 specific options. When the options don't fit, split them across several questions, grouping related ones, rather than dropping `All` and `None` or overflowing the cap.
+
+## Option previews
+
+Keep each option's preview to 3 or 4 lines.
+Claude Code shows `AskUserQuestion` previews beside the options and hides the lines past what fits, however tall the terminal, and the user can't scroll or expand them.
+
+- **Use the width:** write wide lines, and list several examples on one line joined by `·`, never one to a line.
+- **Drop the preview** when what it shows needs more than 4 lines; say it in the option's description or before the question instead.
 
 ## Open questions
 
